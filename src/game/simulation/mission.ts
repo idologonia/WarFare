@@ -7,7 +7,7 @@ import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
 import { consume, createItem, findItem, findMedical, findReloadMagazine, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
-import { applyTreatment, tickInjuries } from '@/game/injuries/injuries';
+import { applyTreatment, canSelfApply, tickInjuries } from '@/game/injuries/injuries';
 import { canThrowTo, resolveFire, resolveGrenade } from '@/game/combat/fire';
 import { fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/movement';
@@ -289,7 +289,7 @@ export class Mission {
         if (!p.pos && p.carriedBy !== u.id) return 'Пацієнт недоступний';
         if (p.id !== u.id && p.carriedBy !== u.id && !adjacent(u.pos!, p.pos!)) return 'Пацієнт має бути поруч';
         if (p.side !== u.side) return 'Можна лікувати лише своїх';
-        if (cmd.effect === 'chestSeal' && p.id === u.id) return 'Оклюзійну наліпку не можна накласти самому собі — потрібен інший боєць';
+        if (p.id === u.id && !canSelfApply(cmd.effect)) return 'Цей засіб не можна застосувати самому собі — потрібен інший боєць';
         const loc = findMedical(u, cmd.effect);
         if (!loc) return 'Немає потрібного засобу';
         const md = itemDef<MedicalDefinition>(loc.item.defId);

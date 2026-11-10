@@ -8,6 +8,7 @@ import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import type { FireMode, GrenadeDefinition, Material, Unit } from '@/game/types';
 import { coverAgainst, estimateHit, type HitFactor } from './hit';
+import { modEffects } from '@/game/equipment/mods';
 
 const BULLET_MATERIAL: Record<Material, number> = {
   wood: 1,
@@ -139,7 +140,8 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
     const aimPoint = tUnit?.pos
       ? targetPoints(s, tUnit.pos, tUnit.stance)[0]
       : cellCenter(aimCell, groundHeight(s.map, aimCell) + 0.5);
-    const chance = est ? Math.max(R.hit.min, est.chance - i * R.fire.burstShotPenalty) : 0;
+    const perShot = Math.max(2, R.fire.burstShotPenalty + (w.recoil ?? 0) + modEffects(wi).recoil);
+    const chance = est ? Math.max(R.hit.min, est.chance - i * perShot) : 0;
     if (tUnit && onField(tUnit) && est && ctx.rng.chance(chance)) {
       // Влучання: якщо лінія вогню перекрита (наосліп), куля б'є в перешкоду.
       const tr = trace(s.map, from, aimPoint, { skipStart: origin, skipEnd: tUnit.pos! });

@@ -86,9 +86,36 @@ export interface WeaponDefinition extends ItemDefinitionBase {
   modes: FireMode[];
   /** Модифікатори вартості пострілу в AP (додаються до базових). */
   apMod?: Partial<Record<FireMode, number>>;
-  /** Слоти для модифікацій (на майбутнє). */
+  /** Застарілий опис слотів (умовна зброя першої версії). */
   modSlots?: string[];
+  /** Вбудована планка Пікатінні. */
+  rail?: boolean;
+  /** Сумісні модифікації (id з mods.json). */
+  mods?: string[];
+  /** Віддача: додається до штрафу кожної наступної кулі черги. */
+  recoil?: number;
   suppression: number;
+}
+
+export interface WeaponModEffects {
+  snap?: number;
+  burst?: number;
+  aimed?: number;
+  /** Бонус прицільного пострілу на дальній дистанції. */
+  aimedFar?: number;
+  cqb?: number;
+  range?: number;
+  recoil?: number;
+}
+
+export interface WeaponModDefinition {
+  id: string;
+  name: string;
+  slot: 'rail' | 'optic' | 'magnifier' | 'grip' | 'underbarrel';
+  weight: number;
+  requires: string[];
+  planned?: boolean;
+  effects: WeaponModEffects;
 }
 
 export interface MagazineDefinition extends ItemDefinitionBase {

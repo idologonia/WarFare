@@ -4,7 +4,7 @@ import { coverAgainst, effectiveCover, estimateHit } from '@/game/combat/hit';
 import { resolveFire, damageObject } from '@/game/combat/fire';
 import { swapMagazine } from '@/game/inventory/inventory';
 import { objAt } from '@/game/maps/map';
-import { applyHit, applyTreatment, tickInjuries } from '@/game/injuries/injuries';
+import { applyHit, applyTreatment, tickInjuries, treatmentOptions } from '@/game/injuries/injuries';
 import { computeApMax } from '@/game/units/derived';
 
 describe('укриття і шанс влучання', () => {
@@ -80,19 +80,33 @@ describe('магазини', () => {
     expect(u.inventory.pouches).toContain(oldMag);
     expect(oldMag.rounds).toBe(7);
   });
-  it('часткова сумісність: кулемет приймає магазин автомата', () => {
+  it('несумісний магазин не підходить: ПКМ не бере магазин автомата', () => {
     const m = freshMission();
     const mg = m.state.units.find((x) => x.classId === 'mg1')!;
-    const rifleMag = { id: 'x1', defId: 'mag_a1_30', rounds: 30 };
-    mg.inventory.pouches = [rifleMag];
+    mg.inventory.pouches = [{ id: 'x1', defId: 'mag_ak545_30', rounds: 30 }];
     mg.inventory.backpackItems = [];
     mg.inventory.primary!.magazine!.rounds = 0;
-    expect(swapMagazine(mg).ok).toBe(true);
-    expect(mg.inventory.primary!.magazine).toBe(rifleMag);
+    expect(swapMagazine(mg).ok).toBe(false);
   });
 });
 
 describe('поранення і медицина', () => {
+  it('MARCH: тампонада лише кінцівок, голку — лише інший боєць, турнікет — можна собі', () => {
+    const m = freshMission(4);
+    m.dispatch({ type: 'startBattle' });
+    const u = m.state.units.find((x) => x.side === 'blue' && x.classId === 'rifleman')!;
+    u.ap = 200;
+    u.injuries.push({ id: 'torsoBleed', part: 'torso', type: 'gunshotHeavy', bleeding: 'massive', turn: 1 });
+    u.injuries.push({ id: 'legBleed', part: 'leftLeg', type: 'gunshotHeavy', bleeding: 'massive', turn: 1 });
+    u.injuries.push({ id: 'pt', part: 'torso', type: 'pneumothorax', bleeding: 'none', turn: 1 });
+    const opts = treatmentOptions(u);
+    expect(opts.some((o) => o.effect === 'packing' && o.injuryId === 'torsoBleed')).toBe(false);
+    expect(opts[0].march).toBe('M');
+    expect(m.dispatch({ type: 'treat', unitId: u.id, patientId: u.id, effect: 'packing', injuryId: 'torsoBleed' }).ok).toBe(false);
+    expect(m.dispatch({ type: 'treat', unitId: u.id, patientId: u.id, effect: 'tourniquet', injuryId: 'legBleed' }).ok).toBe(true);
+    expect(m.dispatch({ type: 'treat', unitId: u.id, patientId: u.id, effect: 'needle', injuryId: 'pt' }).ok).toBe(false);
+  });
+
   it('оклюзійну наліпку не можна накласти самому собі, а товаришу — можна', () => {
     const m = freshMission(3);
     m.dispatch({ type: 'startBattle' });

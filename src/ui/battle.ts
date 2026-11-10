@@ -5,6 +5,7 @@ import { blindOrigin, canThrowTo, grenadeRange } from '@/game/combat/fire';
 import { estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, planPath, unitReachable } from '@/game/combat/movement';
 import { ammoSummary, countItems, primaryDef } from '@/game/inventory/inventory';
+import { modEffects, modNames } from '@/game/equipment/mods';
 import { INJURY_NAMES, PART_NAMES, bleedingRate } from '@/game/injuries/injuries';
 import { cellAt, cellsInZone, inZone, isIndoor } from '@/game/maps/map';
 import { computeApMax } from '@/game/units/derived';
@@ -746,7 +747,7 @@ export class Battle {
         ...row('Витривалість', h('span', {}, `${u.stamina}/${u.stats.stamina}`, bar(u.stamina, u.stats.stamina, '#5aa0d8'))),
         ...row('Мораль', h('span', {}, `${u.morale}/${u.stats.morale}`, bar(u.morale, u.stats.morale, '#b07ad8'))),
         ...row('AP', h('span', { title: apInfo.parts.map((p) => `${p.label}: ${p.value > 0 ? '+' : ''}${p.value}`).join('\n') }, `${fmtAp(u.ap)} / ${fmtAp(u.apMax || apInfo.total)}${u.overwatch ? ` (резерв ${fmtAp(u.overwatch)})` : ''}`)),
-        ...row('Зброя', wd ? wd.name : '—'),
+        ...row('Зброя', wd ? `${wd.name}${u.inventory.primary?.mods.length ? ` (${modNames(u.inventory.primary)})` : ''}` : '—'),
         ...row('БК', `${ammo.loaded}/${ammo.capacity} · запас ${ammo.spareMags} маг. (${ammo.spareRounds})`),
         ...row('Позиція', `${STANCE[u.stance]} · ${WSTATE[u.weaponState]}`),
         ...row('Медицина / гранати', `${meds} / ${nades}`),
@@ -777,7 +778,7 @@ export class Battle {
           h('div', { class: 'muted' }, `${FIRE[mode]} · ${fmtAp(cost)} AP · ${known ? `${t.callsign}` : 'невідома ціль'}${t.side === u.side ? ' (СВІЙ!)' : ''}`),
           h('div', { class: 'big' }, est.lineOfFire || mode === 'blind' ? `${est.chance}%` : 'Немає лінії вогню'),
           h('div', { class: 'factors' }, ...est.factors.flatMap((f) => [h('span', {}, f.label), h('span', { class: f.value >= 0 ? 'pos' : 'neg' }, `${f.value > 0 ? '+' : ''}${f.value}`)])),
-          mode === 'burst' ? h('div', { class: 'muted' }, `Кожна наступна куля черги: −${content().rules.fire.burstShotPenalty}%`) : null,
+          mode === 'burst' ? h('div', { class: 'muted' }, `Кожна наступна куля черги: −${Math.max(2, content().rules.fire.burstShotPenalty + (primaryDef(u)?.recoil ?? 0) + modEffects(u.inventory.primary).recoil)}%`) : null,
         );
       } else if (p.cell) {
         content2 = h('div', {}, h('div', { class: 'muted' }, `${FIRE[mode]} · ${fmtAp(cost)} AP`), h('div', { class: 'big' }, 'Вільний вогонь'), h('div', { class: 'muted' }, 'Куля летить у точку й уражає все на шляху.'));

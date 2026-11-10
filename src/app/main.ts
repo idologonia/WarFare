@@ -12,6 +12,8 @@ import { deleteSave, exportToFile, importFromFile, listSaves, loadGame, saveGame
 import { Renderer } from '@/rendering/renderer';
 import { Music } from '@/ui/audio';
 import { Battle, type BattleMode } from '@/ui/battle';
+import { loadoutModal, loadoutSummary } from '@/ui/loadout';
+import type { MissionState } from '@/game/simulation/state';
 import { btn, h, modal } from '@/ui/dom';
 import { resultsBody, statusName } from '@/ui/panels';
 import { applySettings, loadSettings, saveSettings, type Settings } from '@/ui/settings';
@@ -125,30 +127,37 @@ class App {
       if (controllers.blue === 'human' && controllers.red === 'human') controllers.red = 'ai';
     }
     const state = createMission(scenarioId, { seed, difficulty, controllers, revealAll: mode === 'test' });
-    const blue = state.units.filter((u) => u.side === 'blue');
+    this.renderPrep(state, scenarioId, difficulty, mode);
+  }
+
+  /** Підготовка й управління підрозділом: характеристики, зброя, модифікації (лише до місії). */
+  private renderPrep(state: MissionState, scenarioId: string, difficulty: Difficulty, mode: BattleMode): void {
+    this.clear();
+    const mine = state.units.filter((u) => state.controllers[u.side] === 'human');
     const cls = (id: string) => content().classes.get(id)?.name ?? id;
-    const rows = blue.map((u) =>
+    const rerender = () => this.renderPrep(state, scenarioId, difficulty, mode);
+    const rows = mine.map((u) =>
       h(
         'tr',
-        {},
+        { style: `border-left:3px solid var(--${u.side})` },
         h('td', {}, h('b', {}, u.callsign), h('div', { class: 'muted' }, u.name)),
         h('td', {}, cls(u.classId)),
         h('td', {}, `${u.stats.health}`),
-        h('td', {}, `${u.stats.stamina}`),
         h('td', {}, `${u.stats.training}`),
-        h('td', {}, `${u.stats.morale}`),
         h('td', {}, `${u.stats.reaction}`),
         h('td', {}, `${u.stats.perception}`),
         h('td', {}, `${u.stats.strength}`),
+        h('td', {}, loadoutSummary(u)),
+        h('td', {}, btn('Спорядження', () => this.ui.append(loadoutModal(state, u, rerender)))),
       ),
     );
     const box = h(
       'div',
-      { class: 'panel', style: 'width:min(900px,100%);padding:16px' },
+      { class: 'panel', style: 'width:min(1100px,100%);padding:16px;overflow-x:auto' },
       h('h2', {}, `Підготовка: ${state.scenario.name}`),
       h('p', { class: 'muted' }, state.scenario.description),
-      h('table', {}, h('tr', {}, ...['Боєць', 'Клас', 'Здоров’я', 'Витрив.', 'Навчен.', 'Мораль', 'Реакція', 'Сприйн.', 'Сила'].map((t) => h('th', {}, t))), ...rows),
-      h('p', { class: 'muted' }, `Противник: ${state.units.filter((u) => u.side === 'red').length} бійців. Карту видно перед місією. Модифікації зброї — у наступних етапах.`),
+      h('table', {}, h('tr', {}, ...['Боєць', 'Клас', 'Здоров’я', 'Навчен.', 'Реакція', 'Сприйн.', 'Сила', 'Зброя і вага', ''].map((t) => h('th', {}, t))), ...rows),
+      h('p', { class: 'muted' }, `Противник: ${state.units.filter((u) => state.controllers[u.side] === 'ai').length || '—'} бійців. Зброю, модифікації й магазини можна змінити лише зараз, до місії.`),
       h(
         'div',
         { class: 'row' },

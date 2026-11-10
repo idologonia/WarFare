@@ -185,22 +185,33 @@ export interface TreatmentOption {
   effect: MedicalEffect;
   injuryId: string | null;
   label: string;
+  /** Етап протоколу MARCH: M — масивна кровотеча, R — дихання, C — кровообіг, H — стан/біль. */
+  march: 'M' | 'R' | 'C' | 'H';
 }
 
-/** Які дії медицини доречні для пацієнта (комбіноване лікування — кілька засобів на одну травму). */
+/** Засоби, які боєць не може застосувати сам собі — потрібен інший боєць. */
+export const OTHERS_ONLY: MedicalEffect[] = ['chestSeal', 'needle'];
+export const canSelfApply = (e: MedicalEffect) => !OTHERS_ONLY.includes(e);
+
+const MARCH_ORDER = { M: 0, R: 1, C: 2, H: 3 } as const;
+
+/**
+ * Доречна допомога пацієнту за протоколом MARCH (комбіноване лікування — кілька засобів на одну травму).
+ * Тампонада — лише рани кінцівок (м'язи); тулуб і голову не тампонують.
+ */
 export function treatmentOptions(patient: Unit): TreatmentOption[] {
   const out: TreatmentOption[] = [];
   for (const i of patient.injuries) {
     const where = PART_NAMES[i.part];
-    if (i.bleeding === 'massive' && isLimb(i.part) && !i.tourniquet) out.push({ effect: 'tourniquet', injuryId: i.id, label: `Турнікет: ${where}` });
-    if (i.bleeding === 'massive') out.push({ effect: 'packing', injuryId: i.id, label: `Тампонада: ${where}` });
-    if (i.bleeding === 'light') out.push({ effect: 'bandage', injuryId: i.id, label: `Бинт: ${where}` });
+    if (i.bleeding === 'massive' && isLimb(i.part) && !i.tourniquet) out.push({ effect: 'tourniquet', injuryId: i.id, label: `Турнікет: ${where}`, march: 'M' });
+    if (i.bleeding === 'massive' && isLimb(i.part)) out.push({ effect: 'packing', injuryId: i.id, label: `Тампонада: ${where}`, march: 'M' });
     if (i.part === 'torso' && i.type !== 'pneumothorax' && !i.sealed && i.type !== 'shrapnelLight')
-      out.push({ effect: 'chestSeal', injuryId: i.id, label: `Оклюзійна наліпка: ${where}` });
-    if (i.type === 'pneumothorax' && !i.sealed) out.push({ effect: 'needle', injuryId: i.id, label: 'Декомпресійна голка' });
+      out.push({ effect: 'chestSeal', injuryId: i.id, label: `Оклюзійна наліпка: ${where}`, march: 'R' });
+    if (i.type === 'pneumothorax' && !i.sealed) out.push({ effect: 'needle', injuryId: i.id, label: 'Декомпресійна голка', march: 'R' });
+    if (i.bleeding === 'light') out.push({ effect: 'bandage', injuryId: i.id, label: `Бинт: ${where}`, march: 'C' });
   }
-  if (patient.injuries.length) out.push({ effect: 'pills', injuryId: null, label: 'Пілпак (знеболення)' });
-  return out;
+  if (patient.injuries.length) out.push({ effect: 'pills', injuryId: null, label: 'Пілпак (знеболення)', march: 'H' });
+  return out.sort((a, b) => MARCH_ORDER[a.march] - MARCH_ORDER[b.march]);
 }
 
 /** Застосувати медичний засіб (вартість AP і наявність предмета перевіряє команда). */
@@ -214,6 +225,7 @@ export function applyTreatment(ctx: Ctx, patient: Unit, effect: MedicalEffect, i
       break;
     case 'packing':
       if (!i || i.bleeding !== 'massive') return 'Тампонада потрібна при масивній кровотечі';
+      if (!isLimb(i.part)) return 'Тампонувати можна лише рани кінцівок (м’язи), не тулуб і не голову';
       i.bleeding = 'light';
       break;
     case 'bandage':

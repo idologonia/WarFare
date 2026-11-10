@@ -1,34 +1,680 @@
 {
-  "_comment": "Умовний обмежений арсенал першої версії. Назви умовні; реальні моделі з GDD додаються пізніше.",
-  "items": [
-    { "id": "rifle_a1", "kind": "weapon", "category": "rifle", "name": "Автомат А-1", "weight": 3.4, "size": [4, 1],
-      "caliber": "r545", "magazines": ["mag_a1_30"], "accuracy": 0, "damage": 25, "penetration": 3, "range": 14,
-      "burst": 3, "cqb": 10, "modes": ["snap", "burst", "aimed", "blind"], "modSlots": ["rail", "optic", "underbarrel"], "suppression": 1 },
-    { "id": "dmr_m1", "kind": "weapon", "category": "marksman", "name": "Гвинтівка М-1", "weight": 4.3, "size": [5, 1],
-      "caliber": "r762", "magazines": ["mag_m1_10"], "accuracy": 14, "damage": 36, "penetration": 4, "range": 22,
-      "burst": 1, "cqb": -10, "modes": ["snap", "aimed", "blind"], "apMod": { "aimed": 1 }, "modSlots": ["rail", "optic"], "suppression": 1 },
-    { "id": "lmg_k1", "kind": "weapon", "category": "lmg", "name": "Кулемет К-1", "weight": 7.5, "size": [5, 2],
-      "caliber": "r545", "magazines": ["box_k1_100", "mag_k1_45", "mag_a1_30"], "accuracy": -6, "damage": 25, "penetration": 3, "range": 18,
-      "burst": 6, "cqb": -5, "modes": ["snap", "burst", "blind"], "apMod": { "snap": 1, "burst": 1 }, "modSlots": ["rail", "optic"], "suppression": 2 },
-
-    { "id": "mag_a1_30", "kind": "magazine", "name": "Магазин А-1 (30)", "weight": 0.5, "size": [1, 2], "caliber": "r545", "capacity": 30 },
-    { "id": "mag_k1_45", "kind": "magazine", "name": "Магазин К-1 (45)", "weight": 0.7, "size": [1, 2], "caliber": "r545", "capacity": 45 },
-    { "id": "box_k1_100", "kind": "magazine", "name": "Короб К-1 (100)", "weight": 2.2, "size": [2, 2], "caliber": "r545", "capacity": 100 },
-    { "id": "mag_m1_10", "kind": "magazine", "name": "Магазин М-1 (10)", "weight": 0.4, "size": [1, 1], "caliber": "r762", "capacity": 10 },
-
-    { "id": "frag_g1", "kind": "grenade", "name": "Осколкова граната Г-1", "weight": 0.5, "size": [1, 1], "radius": 2.5, "damage": 40, "fragments": 3 },
-
-    { "id": "med_tourniquet", "kind": "medical", "name": "Турнікет", "weight": 0.1, "size": [1, 1], "effect": "tourniquet", "ap": 2, "uses": 1 },
-    { "id": "med_packing", "kind": "medical", "name": "Засіб для тампонади", "weight": 0.1, "size": [1, 1], "effect": "packing", "ap": 3, "uses": 1 },
-    { "id": "med_bandage", "kind": "medical", "name": "Бинт", "weight": 0.1, "size": [1, 1], "effect": "bandage", "ap": 2, "uses": 2 },
-    { "id": "med_seal", "kind": "medical", "name": "Оклюзійна наліпка", "weight": 0.05, "size": [1, 1], "effect": "chestSeal", "ap": 2, "uses": 1 },
-    { "id": "med_needle", "kind": "medical", "name": "Декомпресійна голка", "weight": 0.05, "size": [1, 1], "effect": "needle", "ap": 3, "uses": 1 },
-    { "id": "med_pills", "kind": "medical", "name": "Пілпак", "weight": 0.05, "size": [1, 1], "effect": "pills", "ap": 1, "uses": 1 },
-
-    { "id": "helmet_basic", "kind": "helmet", "name": "Каска", "weight": 1.4, "size": [2, 2], "covers": { "head": 0.6 }, "protection": 2, "durability": 60 },
-    { "id": "plate_carrier", "kind": "armor", "name": "Плитоноска", "weight": 8, "size": [3, 3], "covers": { "torso": 0.75 }, "protection": 4, "durability": 120, "pouches": 4 },
-    { "id": "rig_ballistic", "kind": "armor", "name": "РПС з балістичним захистом", "weight": 6, "size": [3, 3], "covers": { "torso": 0.55 }, "protection": 3, "durability": 90, "pouches": 6 },
-    { "id": "belt_ranger", "kind": "rig", "name": "Пояс рейнджера", "weight": 1, "size": [3, 1], "pouches": 2 },
-    { "id": "pack_small", "kind": "backpack", "name": "Штурмовий рюкзак", "weight": 1.2, "size": [3, 3], "grid": [5, 4] }
-  ]
+ "_comment": "Арсенал. Характеристики — умовні ігрові числа для балансу, не реальні ТТХ. Старі умовні предмети лишено для сумісності збережень.",
+ "items": [
+  {
+   "id": "rifle_a1",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "Автомат А-1 (умовний)",
+   "weight": 3.4,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "r545",
+   "magazines": [
+    "mag_a1_30"
+   ],
+   "accuracy": 0,
+   "damage": 25,
+   "penetration": 3,
+   "range": 14,
+   "burst": 3,
+   "cqb": 10,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "modSlots": [
+    "rail",
+    "optic",
+    "underbarrel"
+   ],
+   "suppression": 1
+  },
+  {
+   "id": "dmr_m1",
+   "kind": "weapon",
+   "category": "marksman",
+   "name": "Гвинтівка М-1 (умовний)",
+   "weight": 4.3,
+   "size": [
+    5,
+    1
+   ],
+   "caliber": "r762",
+   "magazines": [
+    "mag_m1_10"
+   ],
+   "accuracy": 14,
+   "damage": 36,
+   "penetration": 4,
+   "range": 22,
+   "burst": 1,
+   "cqb": -10,
+   "modes": [
+    "snap",
+    "aimed",
+    "blind"
+   ],
+   "apMod": {
+    "aimed": 1
+   },
+   "modSlots": [
+    "rail",
+    "optic"
+   ],
+   "suppression": 1
+  },
+  {
+   "id": "lmg_k1",
+   "kind": "weapon",
+   "category": "lmg",
+   "name": "Кулемет К-1 (умовний)",
+   "weight": 7.5,
+   "size": [
+    5,
+    2
+   ],
+   "caliber": "r545",
+   "magazines": [
+    "box_k1_100",
+    "mag_k1_45",
+    "mag_a1_30"
+   ],
+   "accuracy": -6,
+   "damage": 25,
+   "penetration": 3,
+   "range": 18,
+   "burst": 6,
+   "cqb": -5,
+   "modes": [
+    "snap",
+    "burst",
+    "blind"
+   ],
+   "apMod": {
+    "snap": 1,
+    "burst": 1
+   },
+   "modSlots": [
+    "rail",
+    "optic"
+   ],
+   "suppression": 2
+  },
+  {
+   "id": "mag_a1_30",
+   "kind": "magazine",
+   "name": "Магазин А-1 (30)",
+   "weight": 0.5,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "r545",
+   "capacity": 30
+  },
+  {
+   "id": "mag_k1_45",
+   "kind": "magazine",
+   "name": "Магазин К-1 (45)",
+   "weight": 0.7,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "r545",
+   "capacity": 45
+  },
+  {
+   "id": "box_k1_100",
+   "kind": "magazine",
+   "name": "Короб К-1 (100)",
+   "weight": 2.2,
+   "size": [
+    2,
+    2
+   ],
+   "caliber": "r545",
+   "capacity": 100
+  },
+  {
+   "id": "mag_m1_10",
+   "kind": "magazine",
+   "name": "Магазин М-1 (10)",
+   "weight": 0.4,
+   "size": [
+    1,
+    1
+   ],
+   "caliber": "r762",
+   "capacity": 10
+  },
+  {
+   "id": "frag_g1",
+   "kind": "grenade",
+   "name": "Осколкова граната Г-1 (умовний)",
+   "weight": 0.5,
+   "size": [
+    1,
+    1
+   ],
+   "radius": 2.5,
+   "damage": 40,
+   "fragments": 3
+  },
+  {
+   "id": "med_tourniquet",
+   "kind": "medical",
+   "name": "Турнікет",
+   "weight": 0.1,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "tourniquet",
+   "ap": 2,
+   "uses": 1
+  },
+  {
+   "id": "med_packing",
+   "kind": "medical",
+   "name": "Засіб для тампонади",
+   "weight": 0.1,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "packing",
+   "ap": 3,
+   "uses": 1
+  },
+  {
+   "id": "med_bandage",
+   "kind": "medical",
+   "name": "Бинт",
+   "weight": 0.1,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "bandage",
+   "ap": 2,
+   "uses": 2
+  },
+  {
+   "id": "med_seal",
+   "kind": "medical",
+   "name": "Оклюзійна наліпка",
+   "weight": 0.05,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "chestSeal",
+   "ap": 2,
+   "uses": 1
+  },
+  {
+   "id": "med_needle",
+   "kind": "medical",
+   "name": "Декомпресійна голка",
+   "weight": 0.05,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "needle",
+   "ap": 3,
+   "uses": 1
+  },
+  {
+   "id": "med_pills",
+   "kind": "medical",
+   "name": "Пілпак",
+   "weight": 0.05,
+   "size": [
+    1,
+    1
+   ],
+   "effect": "pills",
+   "ap": 1,
+   "uses": 1
+  },
+  {
+   "id": "helmet_basic",
+   "kind": "helmet",
+   "name": "Каска",
+   "weight": 1.4,
+   "size": [
+    2,
+    2
+   ],
+   "covers": {
+    "head": 0.6
+   },
+   "protection": 2,
+   "durability": 60
+  },
+  {
+   "id": "plate_carrier",
+   "kind": "armor",
+   "name": "Плитоноска",
+   "weight": 8,
+   "size": [
+    3,
+    3
+   ],
+   "covers": {
+    "torso": 0.75
+   },
+   "protection": 4,
+   "durability": 120,
+   "pouches": 4
+  },
+  {
+   "id": "rig_ballistic",
+   "kind": "armor",
+   "name": "РПС з балістичним захистом",
+   "weight": 6,
+   "size": [
+    3,
+    3
+   ],
+   "covers": {
+    "torso": 0.55
+   },
+   "protection": 3,
+   "durability": 90,
+   "pouches": 6
+  },
+  {
+   "id": "belt_ranger",
+   "kind": "rig",
+   "name": "Пояс рейнджера",
+   "weight": 1,
+   "size": [
+    3,
+    1
+   ],
+   "pouches": 2
+  },
+  {
+   "id": "pack_small",
+   "kind": "backpack",
+   "name": "Штурмовий рюкзак",
+   "weight": 1.2,
+   "size": [
+    3,
+    3
+   ],
+   "grid": [
+    5,
+    4
+   ]
+  },
+  {
+   "id": "ak74",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "АК-74",
+   "weight": 3.3,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "545",
+   "magazines": [
+    "mag_ak545_30",
+    "mag_rpk545_45"
+   ],
+   "accuracy": 0,
+   "damage": 25,
+   "penetration": 3,
+   "range": 14,
+   "burst": 3,
+   "cqb": 8,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "rail": false,
+   "mods": [
+    "rail",
+    "reddot",
+    "magnifier",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": 0,
+   "suppression": 1
+  },
+  {
+   "id": "akm",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "АКМ",
+   "weight": 3.6,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "762x39",
+   "magazines": [
+    "mag_akm762_30"
+   ],
+   "accuracy": -3,
+   "damage": 30,
+   "penetration": 3,
+   "range": 13,
+   "burst": 3,
+   "cqb": 8,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "rail": false,
+   "mods": [
+    "rail",
+    "reddot",
+    "magnifier",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": 3,
+   "suppression": 1.2
+  },
+  {
+   "id": "ak200",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "АК-200",
+   "weight": 3.5,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "545",
+   "magazines": [
+    "mag_ak545_30",
+    "mag_rpk545_45"
+   ],
+   "accuracy": 2,
+   "damage": 25,
+   "penetration": 3,
+   "range": 14,
+   "burst": 3,
+   "cqb": 8,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "rail": true,
+   "mods": [
+    "reddot",
+    "magnifier",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": -1,
+   "suppression": 1
+  },
+  {
+   "id": "ak12",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "АК-12",
+   "weight": 3.5,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "545",
+   "magazines": [
+    "mag_ak545_30",
+    "mag_rpk545_45"
+   ],
+   "accuracy": 3,
+   "damage": 25,
+   "penetration": 3,
+   "range": 15,
+   "burst": 3,
+   "cqb": 8,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "rail": true,
+   "mods": [
+    "reddot",
+    "magnifier",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": -1,
+   "suppression": 1
+  },
+  {
+   "id": "ar15",
+   "kind": "weapon",
+   "category": "rifle",
+   "name": "AR-15",
+   "weight": 3.2,
+   "size": [
+    4,
+    1
+   ],
+   "caliber": "556",
+   "magazines": [
+    "stanag_30"
+   ],
+   "accuracy": 4,
+   "damage": 23,
+   "penetration": 3,
+   "range": 15,
+   "burst": 3,
+   "cqb": 10,
+   "modes": [
+    "snap",
+    "burst",
+    "aimed",
+    "blind"
+   ],
+   "rail": true,
+   "mods": [
+    "reddot",
+    "magnifier",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": -2,
+   "suppression": 1
+  },
+  {
+   "id": "pkm",
+   "kind": "weapon",
+   "category": "lmg",
+   "name": "ПКМ",
+   "weight": 7.5,
+   "size": [
+    5,
+    2
+   ],
+   "caliber": "762x54",
+   "magazines": [
+    "belt_pkm_100"
+   ],
+   "accuracy": -5,
+   "damage": 34,
+   "penetration": 4,
+   "range": 20,
+   "burst": 6,
+   "cqb": -5,
+   "modes": [
+    "snap",
+    "burst",
+    "blind"
+   ],
+   "apMod": {
+    "snap": 1,
+    "burst": 1
+   },
+   "rail": false,
+   "mods": [
+    "rail",
+    "reddot",
+    "scope4"
+   ],
+   "recoil": 1,
+   "suppression": 2.5
+  },
+  {
+   "id": "minimi",
+   "kind": "weapon",
+   "category": "lmg",
+   "name": "Minimi",
+   "weight": 7.1,
+   "size": [
+    5,
+    2
+   ],
+   "caliber": "556",
+   "magazines": [
+    "belt_minimi_200",
+    "stanag_30"
+   ],
+   "accuracy": -3,
+   "damage": 23,
+   "penetration": 3,
+   "range": 18,
+   "burst": 6,
+   "cqb": -3,
+   "modes": [
+    "snap",
+    "burst",
+    "blind"
+   ],
+   "apMod": {
+    "snap": 1,
+    "burst": 1
+   },
+   "rail": true,
+   "mods": [
+    "reddot",
+    "scope4",
+    "foregrip"
+   ],
+   "recoil": 0,
+   "suppression": 2
+  },
+  {
+   "id": "mag_ak545_30",
+   "kind": "magazine",
+   "name": "Магазин 5,45 (30)",
+   "weight": 0.5,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "545",
+   "capacity": 30
+  },
+  {
+   "id": "mag_rpk545_45",
+   "kind": "magazine",
+   "name": "Магазин РПК 5,45 (45)",
+   "weight": 0.65,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "545",
+   "capacity": 45
+  },
+  {
+   "id": "mag_akm762_30",
+   "kind": "magazine",
+   "name": "Магазин 7,62 (30)",
+   "weight": 0.7,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "762x39",
+   "capacity": 30
+  },
+  {
+   "id": "stanag_30",
+   "kind": "magazine",
+   "name": "Магазин STANAG (30)",
+   "weight": 0.45,
+   "size": [
+    1,
+    2
+   ],
+   "caliber": "556",
+   "capacity": 30
+  },
+  {
+   "id": "belt_pkm_100",
+   "kind": "magazine",
+   "name": "Короб ПКМ (100)",
+   "weight": 3.9,
+   "size": [
+    2,
+    2
+   ],
+   "caliber": "762x54",
+   "capacity": 100
+  },
+  {
+   "id": "belt_minimi_200",
+   "kind": "magazine",
+   "name": "Короб Minimi (200)",
+   "weight": 3.0,
+   "size": [
+    2,
+    2
+   ],
+   "caliber": "556",
+   "capacity": 200
+  },
+  {
+   "id": "rgd5",
+   "kind": "grenade",
+   "name": "РГД-5",
+   "weight": 0.31,
+   "size": [
+    1,
+    1
+   ],
+   "radius": 2.2,
+   "damage": 34,
+   "fragments": 3
+  },
+  {
+   "id": "f1",
+   "kind": "grenade",
+   "name": "Ф-1",
+   "weight": 0.6,
+   "size": [
+    1,
+    1
+   ],
+   "radius": 3.5,
+   "damage": 40,
+   "fragments": 5
+  }
+ ]
 }

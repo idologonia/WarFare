@@ -1,0 +1,77 @@
+{
+ "_comment": "Модифікації зброї: змінюються лише перед місією. Сумісність задає список mods у зброї; requires — що має бути встановлено (rail задовольняється й вбудованою планкою).",
+ "mods": [
+  {
+   "id": "rail",
+   "name": "Планка Пікатінні",
+   "slot": "rail",
+   "weight": 0.15,
+   "requires": [],
+   "effects": {}
+  },
+  {
+   "id": "reddot",
+   "name": "Коліматор",
+   "slot": "optic",
+   "weight": 0.25,
+   "requires": [
+    "rail"
+   ],
+   "effects": {
+    "snap": 6,
+    "burst": 3,
+    "cqb": 4
+   }
+  },
+  {
+   "id": "magnifier",
+   "name": "Магніфер",
+   "slot": "magnifier",
+   "weight": 0.3,
+   "requires": [
+    "reddot"
+   ],
+   "effects": {
+    "aimedFar": 6,
+    "snap": -2
+   }
+  },
+  {
+   "id": "scope4",
+   "name": "Приціл 4х",
+   "slot": "optic",
+   "weight": 0.5,
+   "requires": [
+    "rail"
+   ],
+   "effects": {
+    "aimedFar": 12,
+    "range": 4,
+    "snap": -6,
+    "cqb": -10
+   }
+  },
+  {
+   "id": "foregrip",
+   "name": "Ручка перенесення вогню",
+   "slot": "grip",
+   "weight": 0.12,
+   "requires": [
+    "rail"
+   ],
+   "effects": {
+    "recoil": -3,
+    "snap": 2
+   }
+  },
+  {
+   "id": "underbarrel",
+   "name": "Підствольний модуль",
+   "slot": "underbarrel",
+   "weight": 1.5,
+   "requires": [],
+   "planned": true,
+   "effects": {}
+  }
+ ]
+}

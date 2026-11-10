@@ -1,4 +1,5 @@
 import { itemDef } from '@/content';
+import { modsWeight } from '@/game/equipment/mods';
 import type { ClassKit } from '@/content';
 import type {
   AnyItem,
@@ -83,6 +84,7 @@ export function buildInventory(kit: ClassKit, id: IdGen): Inventory {
   const w = createItem(kit.primary, id) as WeaponInstance;
   const wd = itemDef<WeaponDefinition>(kit.primary);
   w.magazine = createItem(kit.primaryMag ?? wd.magazines[0], id) as MagazineInstance;
+  w.mods = [...(kit.primaryMods ?? [])];
   inv.primary = w;
   const cap = pouchCapacity(inv);
   for (const m of kit.pouches) {
@@ -100,6 +102,7 @@ function itemWeight(item: AnyItem | { defId: string } | null): number {
   const d = itemDef(item.defId);
   let w = d.weight;
   if ('magazine' in item && item.magazine) w += itemDef(item.magazine.defId).weight;
+  if ('mods' in item) w += modsWeight(item);
   return w;
 }
 

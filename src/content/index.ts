@@ -7,6 +7,7 @@ import namesJson from './names.json';
 import factionsJson from './factions.json';
 import villageMap from './maps/village.json';
 import firstMission from './scenarios/first_mission.json';
+import modsJson from './mods.json';
 import type {
   ItemDefinition,
   MapDefinition,
@@ -14,6 +15,7 @@ import type {
   Scenario,
   TerrainDefinition,
   UnitStats,
+  WeaponModDefinition,
 } from '@/game/types';
 
 export type Rules = typeof rulesJson;
@@ -21,6 +23,7 @@ export type Rules = typeof rulesJson;
 export interface ClassKit {
   primary: string;
   primaryMag?: string;
+  primaryMods?: string[];
   armor?: string;
   helmet?: string;
   rig?: string;
@@ -48,6 +51,7 @@ export interface ContentDb {
   maps: Map<string, MapDefinition>;
   scenarios: Map<string, Scenario>;
   factions: { id: string; name: string; classes: string[] }[];
+  mods: Map<string, WeaponModDefinition>;
 }
 
 function byId<T extends { id: string }>(list: T[]): Map<string, T> {
@@ -65,6 +69,7 @@ export function loadContent(): ContentDb {
     maps: byId([villageMap as unknown as MapDefinition]),
     scenarios: byId([firstMission as unknown as Scenario]),
     factions: factionsJson.factions,
+    mods: byId(modsJson.mods as WeaponModDefinition[]),
   };
 }
 
@@ -105,4 +110,10 @@ export function unregister(kind: 'map' | 'scenario', id: string): void {
   if (BUILTIN_IDS.has(id)) return;
   if (kind === 'map') content().maps.delete(id);
   else content().scenarios.delete(id);
+}
+
+export function modDef(id: string): WeaponModDefinition {
+  const d = content().mods.get(id);
+  if (!d) throw new Error(`Невідома модифікація: ${id}`);
+  return d;
 }

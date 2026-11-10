@@ -2,6 +2,7 @@ import { dist2d, type Cell } from '@/core/grid';
 import { content, itemDef } from '@/content';
 import { groundHeight, objAt } from '@/game/maps/map';
 import { primaryDef } from '@/game/inventory/inventory';
+import { modEffects } from '@/game/equipment/mods';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import { trace } from '@/game/visibility/los';
 import type { MissionState } from '@/game/simulation/state';
@@ -89,8 +90,12 @@ export function estimateHit(
   add('Навченість', shooter.stats.training * R.trainingFactor);
   add('Зброя', w.accuracy);
   add('Режим вогню', content().rules.fire.accuracyMod[mode]);
-  if (distance > w.range) add('Дальність', -(distance - w.range) * R.rangePenaltyPerCell);
-  if (distance <= R.closeRange) add('Ближній бій (CQB)', w.cqb);
+  const me = modEffects(shooter.inventory.primary);
+  const range = w.range + me.range;
+  if (distance > range) add('Дальність', -(distance - range) * R.rangePenaltyPerCell);
+  if (distance <= R.closeRange) add('Ближній бій (CQB)', w.cqb + me.cqb);
+  const optic = (mode === 'snap' ? me.snap : mode === 'burst' ? me.burst : mode === 'aimed' ? me.aimed + (distance > R.farRange ? me.aimedFar : 0) : 0);
+  if (optic) add('Приціл і обвіс', optic);
 
   const cover = mode === 'blind' ? coverAgainst(s, to, from) : effectiveCover(coverAgainst(s, to, from), target.stance);
   if (cover) add(cover === 2 ? 'Повне укриття' : 'Половинне укриття', R.cover[String(cover) as '1' | '2']);

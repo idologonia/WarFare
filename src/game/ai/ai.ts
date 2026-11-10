@@ -3,10 +3,10 @@ import { dist2d, sameCell, toTenths, type Cell } from '@/core/grid';
 import { content, itemDef } from '@/content';
 import { cellsInZone, groundHeight } from '@/game/maps/map';
 import { findItem, findMedical, findReloadMagazine, primaryDef } from '@/game/inventory/inventory';
-import { treatmentOptions } from '@/game/injuries/injuries';
+import { canSelfApply, treatmentOptions } from '@/game/injuries/injuries';
 import { canThrowTo } from '@/game/combat/fire';
 import { coverAgainst, effectiveCover, estimateHit, fireApCost } from '@/game/combat/hit';
-import { unitReachable } from '@/game/combat/movement';
+import { adjacent, unitReachable } from '@/game/combat/movement';
 import { canSeeFrom } from '@/game/visibility/visibility';
 import { isActive, other, sideUnits, type MissionState } from '@/game/simulation/state';
 import type { Command } from '@/game/simulation/commands';
@@ -104,14 +104,19 @@ export class AiPlanner {
       if (u.ap >= toTenths(f.where === 'pouch' ? R.actions.reloadPouch : R.actions.reloadBackpack)) return { type: 'reload', unitId: u.id };
     }
 
-    // 2. Самодопомога при кровотечі.
-    for (const opt of treatmentOptions(u)) {
-      if (opt.effect === 'pills' || opt.effect === 'chestSeal') continue; // наліпку собі не накласти
-      const loc = findMedical(u, opt.effect);
-      if (!loc) continue;
-      const cost = itemDef<MedicalDefinition>(loc.item.defId).ap + (loc.where === 'backpack' ? 2 : 0);
-      if (u.ap >= toTenths(cost) && (opt.effect !== 'bandage' || visible.length === 0 || u.health < u.stats.health * 0.6))
-        return { type: 'treat', unitId: u.id, patientId: u.id, effect: opt.effect, injuryId: opt.injuryId };
+    // 2. Допомога за MARCH: собі — лише дозволене самому, товаришу поруч — наліпка, голка та інше.
+    const patients = [u, ...sideUnits(s, u.side).filter((p) => p !== u && p.pos && u.pos && adjacent(p.pos, u.pos) && (p.status === 'active' || p.status === 'down'))];
+    for (const p of patients) {
+      for (const opt of treatmentOptions(p)) {
+        if (opt.effect === 'pills') continue;
+        if (p === u && !canSelfApply(opt.effect)) continue;
+        if (p !== u && opt.march === 'C' && visible.length > 0) continue; // під вогнем бинтувати товариша не зупиняємось
+        const loc = findMedical(u, opt.effect);
+        if (!loc) continue;
+        const cost = itemDef<MedicalDefinition>(loc.item.defId).ap + (loc.where === 'backpack' ? 2 : 0);
+        if (u.ap >= toTenths(cost) && (opt.effect !== 'bandage' || visible.length === 0 || p.health < p.stats.health * 0.6))
+          return { type: 'treat', unitId: u.id, patientId: p.id, effect: opt.effect, injuryId: opt.injuryId };
+      }
     }
 
     const snapCost = fireApCost(u, 'snap');

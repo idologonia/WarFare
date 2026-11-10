@@ -2,8 +2,9 @@ import { content, itemDef } from '@/content';
 import { fmtAp } from '@/core/grid';
 import { adjacent } from '@/game/combat/movement';
 import { findMedical, pouchCapacity, totalWeight } from '@/game/inventory/inventory';
-import { INJURY_NAMES, PART_NAMES, bleedingRate, treatmentOptions } from '@/game/injuries/injuries';
+import { INJURY_NAMES, PART_NAMES, bleedingRate, canSelfApply, treatmentOptions } from '@/game/injuries/injuries';
 import { freeWeight } from '@/game/units/derived';
+import { modNames } from '@/game/equipment/mods';
 import type { Command } from '@/game/simulation/commands';
 import type { MissionState } from '@/game/simulation/state';
 import type { ArmorDefinition, BackpackDefinition, BodyPart, MagazineInstance, MedicalDefinition, MissionResult, StackItem, Unit } from '@/game/types';
@@ -73,13 +74,12 @@ export function medicalBody(s: MissionState, medic: Unit, dispatch: (c: Command)
     const loc = findMedical(medic, o.effect);
     const def = [...content().items.values()].find((d) => d.kind === 'medical' && (d as MedicalDefinition).effect === o.effect) as MedicalDefinition;
     const cost = def.ap + (loc?.where === 'backpack' ? 2 : 0);
-    const selfSeal = o.effect === 'chestSeal' && patient.id === medic.id;
-    if (selfSeal) {
-      actions.append(btn(`${o.label} — потрібен інший боєць`, () => {}, { disabled: true, title: 'Оклюзійну наліпку не можна накласти самому собі' }));
+    if (patient.id === medic.id && !canSelfApply(o.effect)) {
+      actions.append(btn(`${o.march} · ${o.label} — потрібен інший боєць`, () => {}, { disabled: true, title: 'Цей засіб не можна застосувати самому собі' }));
       continue;
     }
     actions.append(
-      btn(`${o.label} — ${cost} AP${loc ? '' : ' (немає)'}`, () => {
+      btn(`${o.march} · ${o.label} — ${cost} AP${loc ? '' : ' (немає)'}`, () => {
         if (dispatch({ type: 'treat', unitId: medic.id, patientId: patient.id, effect: o.effect, injuryId: o.injuryId })) rerender(patient.id);
       }, { disabled: !loc || medic.ap < cost * 10 || s.turn.side !== medic.side }),
     );
@@ -92,7 +92,7 @@ export function medicalBody(s: MissionState, medic: Unit, dispatch: (c: Command)
       'div',
       { class: 'med', style: 'margin-top:8px' },
       h('div', { class: 'col' }, silhouette(patient), h('div', {}, `Здоров’я: ${patient.health}/${patient.stats.health}`), h('div', { class: bleedingRate(patient) ? 'neg' : 'muted' }, `Втрата за хід: ${bleedingRate(patient)}`), h('div', { class: 'muted' }, statusName(patient.status))),
-      h('div', {}, h('h3', {}, `${patient.name} «${patient.callsign}»`), list, h('h3', { style: 'margin-top:10px' }, `Допомога (AP медика: ${fmtAp(medic.ap)})`), actions),
+      h('div', {}, h('h3', {}, `${patient.name} «${patient.callsign}»`), list, h('h3', { style: 'margin-top:10px' }, `Допомога за MARCH (AP медика: ${fmtAp(medic.ap)})`), actions),
     ),
   );
 }
@@ -107,7 +107,7 @@ export function inventoryBody(u: Unit): HTMLElement {
   const table = h(
     'table',
     {},
-    slot('Основна зброя', w ? `${name(w.defId)}${w.magazine ? ` · ${name(w.magazine.defId)}: ${w.magazine.rounds} наб.` : ' · без магазина'}` : '—'),
+    slot('Основна зброя', w ? `${name(w.defId)}${w.mods.length ? ` [${modNames(w)}]` : ''}${w.magazine ? ` · ${name(w.magazine.defId)}: ${w.magazine.rounds} наб.` : ' · без магазина'}` : '—'),
     slot('Каска', armor(inv.helmet)),
     slot('Бронезахист', armor(inv.armor)),
     slot('Розвантаження', inv.rig ? name(inv.rig.defId) : '—'),
@@ -139,7 +139,7 @@ export function inventoryBody(u: Unit): HTMLElement {
     {},
     table,
     grid,
-    h('p', { class: wt > fw ? 'neg' : 'muted' }, `Вага: ${wt} кг (без штрафу до ${fw.toFixed(1)} кг). Модифікації змінюються лише перед місією; передача предметів у бою — у наступних етапах.`),
+    h('p', { class: wt > fw ? 'neg' : 'muted' }, `Вага: ${wt} кг (без штрафу до ${fw.toFixed(1)} кг). Модифікації змінюються лише перед місією (екран підготовки); передача предметів у бою — у наступних етапах.`),
   );
 }
 
