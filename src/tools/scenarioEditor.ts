@@ -1,6 +1,6 @@
 import { BUILTIN_IDS, content, objectDef, terrainDef } from '@/content';
 import { Rng } from '@/core/rng';
-import { buildMap, cellsInZone } from '@/game/maps/map';
+import { buildMap, cellsInZone, forEachEdge } from '@/game/maps/map';
 import type { AiStyle, ControllerKind, MapDefinition, Scenario, SideId, SideSetup } from '@/game/types';
 import { downloadJson, packScenario, pickJsonFile, saveMap, saveScenario, unpackShared } from '@/persistence/library';
 import { btn, h } from '@/ui/dom';
@@ -250,6 +250,15 @@ export class ScenarioEditor {
           ctx.fillStyle = col;
           ctx.fillRect(x * cell, y * cell, cell, cell);
         }
+      // Тонкі стіни й паркани — лінії на межах клітинок.
+      forEachEdge(map, (c, side, e) => {
+        ctx.fillStyle = objectDef(e.defId).color;
+        const t = Math.max(2, cell / 5);
+        if (side === 'n') ctx.fillRect(c.x * cell, c.y * cell - t / 2, cell, t);
+        else if (side === 's') ctx.fillRect(c.x * cell, (c.y + 1) * cell - t / 2, cell, t);
+        else if (side === 'w') ctx.fillRect(c.x * cell - t / 2, c.y * cell, t, cell);
+        else ctx.fillRect((c.x + 1) * cell - t / 2, c.y * cell, t, cell);
+      });
       const zones: [ZoneKey, Rect | null][] = [['blue', sc.sides.blue.deployZone], ['red', sc.sides.red.deployZone], ['evac', sc.evacZone]];
       for (const [k, z] of zones) {
         const r = k === this.zone && preview ? preview : z;

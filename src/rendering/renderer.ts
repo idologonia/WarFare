@@ -356,6 +356,24 @@ export class Renderer {
     this.overlays.set('cursor', mesh);
   }
 
+  /** Підсвічування межі клітинки (редактор тонких об'єктів). */
+  setEdgeHint(cell: Cell | null, side: 'n' | 's' | 'w' | 'e'): void {
+    this.overlays.get('edgehint')?.dispose();
+    this.overlays.delete('edgehint');
+    if (!cell) return;
+    const p = cellWorld(cell, groundHeight(this.state.map, cell));
+    const g = new GeoBuilder();
+    const y = p.y + 0.3;
+    if (side === 'n') g.box(p.x, y, p.z + 0.5, 1, 0.6, 0.08, [1, 0.6, 0.15], 0.8);
+    else if (side === 's') g.box(p.x, y, p.z - 0.5, 1, 0.6, 0.08, [1, 0.6, 0.15], 0.8);
+    else if (side === 'w') g.box(p.x - 0.5, y, p.z, 0.08, 0.6, 1, [1, 0.6, 0.15], 0.8);
+    else g.box(p.x + 0.5, y, p.z, 0.08, 0.6, 1, [1, 0.6, 0.15], 0.8);
+    const mesh = g.build('ov_edgehint', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('edgehint', mesh);
+  }
+
   /** Маркери останніх відомих позицій противника. */
   setGhosts(cells: Cell[]): void {
     this.overlays.get('ghosts')?.dispose();

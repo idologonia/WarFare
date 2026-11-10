@@ -1,5 +1,6 @@
 import { objectDef, terrainDef } from '@/content';
-import type { MapCell, MapDefinition, MapState } from '@/game/types';
+import type { EdgeSide, MapCell, MapDefinition, MapState } from '@/game/types';
+import { setEdge } from '@/game/maps/map';
 
 /** Клітинка в редакторі: як у грі, плюс процедурна варіація (випадковий об'єкт при старті місії). */
 export interface EditCell extends MapCell {
@@ -50,6 +51,11 @@ export function fromDefinition(def: MapDefinition): EditMap {
     ),
   );
   const m: EditMap = { id: def.id, name: def.name, width: def.width, height: def.height, levels: def.layers.length, cells };
+  for (const [x, y, z, side, id] of def.edges ?? []) setEdge(m as unknown as MapState, { x, y, z }, side, { defId: id, hp: objectDef(id).hp });
+  for (const [x, y, z, rot] of def.rotations ?? []) {
+    const o = cells[z]?.[y]?.[x]?.object;
+    if (o) o.rot = rot;
+  }
   assignBuildings(m);
   return m;
 }
@@ -88,10 +94,21 @@ export function toDefinition(m: EditMap): MapDefinition {
         .join(''),
     ),
   );
-  return { id: m.id, name: m.name, width: m.width, height: m.height, legend, layers, buildings: detectBuildings(m) };
+  const edges: NonNullable<MapDefinition['edges']> = [];
+  const rotations: NonNullable<MapDefinition['rotations']> = [];
+  m.cells.forEach((lvl, z) =>
+    lvl.forEach((row, y) =>
+      row.forEach((c, x) => {
+        for (const side of Object.keys(c.edges ?? {}) as EdgeSide[]) edges.push([x, y, z, side, c.edges![side]!.defId]);
+        if (c.object?.rot) rotations.push([x, y, z, c.object.rot]);
+      }),
+    ),
+  );
+  return { id: m.id, name: m.name, width: m.width, height: m.height, legend, layers, buildings: detectBuildings(m), edges, rotations };
 }
 
-const isBuildingCell = (c: EditCell) => terrainDef(c.terrain).indoor === true || (!!c.object && !!objectDef(c.object.defId).wall);
+const isBuildingCell = (c: EditCell) =>
+  terrainDef(c.terrain).indoor === true || (!!c.object && !!objectDef(c.object.defId).wall);
 
 /** Будівлі = зв'язні області приміщень і стін (на будь-якому поверсі), як прямокутники. */
 export function detectBuildings(m: EditMap): [number, number, number, number][] {

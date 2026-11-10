@@ -1,6 +1,6 @@
 import { content, objectDef, terrainDef } from '@/content';
 import { cellKey, type Cell } from '@/core/grid';
-import type { MapObjectDefinition, MapState } from '@/game/types';
+import type { EdgeSide, MapObjectDefinition, MapState } from '@/game/types';
 import { Color3, StandardMaterial, Vector3, type Mesh, type Scene } from './babylon';
 import { GeoBuilder, hash2, hex, shade, type RGB } from './geo';
 
@@ -125,6 +125,7 @@ export interface ObjectMeshInfo {
   level: number;
   buildingId?: number;
   wall: boolean;
+  glass: boolean;
 }
 
 /** Відображення карти: плитки по поверхах і окремі сітки об'єктів (для руйнування й прозорості). */
@@ -198,20 +199,49 @@ export class MapView {
 
   rebuildObject(c: Cell): void {
     const key = cellKey(c);
-    const old = this.objects.get(key);
-    if (old) {
-      old.mesh.dispose();
-      this.objects.delete(key);
+    for (const k of [key, `e:${key}`]) {
+      const old = this.objects.get(k);
+      if (old) {
+        old.mesh.dispose();
+        this.objects.delete(k);
+      }
     }
     const cell = this.map.cells[c.z][c.y][c.x];
-    if (!cell.object) return;
-    const o = objectDef(cell.object.defId);
-    const g = new GeoBuilder();
-    buildObject(g, o, c.x, c.y, c.z, c.z + (c.z === 0 ? cell.elevation : 0));
-    const mesh = g.build(`obj_${key}`, this.scene, o.window ? this.glass : this.solid);
-    mesh.isPickable = false;
-    this.onMesh(mesh, false);
-    this.objects.set(key, { mesh, level: c.z, buildingId: cell.buildingId, wall: !!o.wall || o.id === 'parapet' });
+    const base = c.z + (c.z === 0 ? cell.elevation : 0);
+    if (cell.object) {
+      const o = objectDef(cell.object.defId);
+      const g = new GeoBuilder();
+      buildObject(g, o, c.x, c.y, c.z, base);
+      const mesh = g.build(`obj_${key}`, this.scene, o.window ? this.glass : this.solid);
+      if (cell.object.rot) {
+        mesh.setPivotPoint(new Vector3(c.x + 0.5, 0, -(c.y + 0.5)));
+        mesh.rotation.y = (cell.object.rot * Math.PI) / 2;
+      }
+      mesh.isPickable = false;
+      this.onMesh(mesh, false);
+      this.objects.set(key, { mesh, level: c.z, buildingId: cell.buildingId, wall: !!o.wall || o.id === 'parapet', glass: !!o.window });
+    }
+    if (cell.edges && Object.keys(cell.edges).length) {
+      const g = new GeoBuilder();
+      let wall = false;
+      let glass = false;
+      let building = cell.buildingId;
+      for (const side of Object.keys(cell.edges) as EdgeSide[]) {
+        const e = cell.edges[side]!;
+        const o = objectDef(e.defId);
+        buildEdge(g, o, c.x, c.y, c.z, side, c.z);
+        if (o.wall || o.id === 'parapet') wall = true;
+        if (o.window) glass = true;
+        if (building === undefined) {
+          const n = side === 'n' ? { x: c.x, y: c.y - 1 } : side === 'w' ? { x: c.x - 1, y: c.y } : null;
+          if (n && n.x >= 0 && n.y >= 0) building = this.map.cells[c.z][n.y][n.x].buildingId;
+        }
+      }
+      const mesh = g.build(`edge_${key}`, this.scene, glass ? this.glass : this.solid);
+      mesh.isPickable = false;
+      this.onMesh(mesh, false);
+      this.objects.set(`e:${key}`, { mesh, level: c.z, buildingId: building, wall, glass });
+    }
   }
 
   /** Приховати поверхи вище viewLevel; стіни будівель з «нашими» бійцями — прозорі. */
@@ -221,16 +251,73 @@ export class MapView {
       info.mesh.setEnabled(info.level <= viewLevel);
       if (info.wall && info.buildingId !== undefined) {
         const ghost = transparentBuildings.has(info.buildingId);
-        const isGlass = info.mesh.material === this.glass;
-        if (!isGlass || ghost) info.mesh.material = ghost ? this.ghost : this.solid;
-        if (!ghost && info.mesh.name && objectIsWindow(this.map, info.mesh.name)) info.mesh.material = this.glass;
+        info.mesh.material = ghost ? this.ghost : info.glass ? this.glass : this.solid;
       }
     }
   }
 }
 
-function objectIsWindow(map: MapState, meshName: string): boolean {
-  const [x, y, z] = meshName.slice(4).split(',').map(Number);
-  const o = map.cells[z]?.[y]?.[x]?.object;
-  return !!o && !!objectDef(o.defId).window;
+/**
+ * Тонкий об'єкт уздовж межі клітинки. Будується в локальних координатах:
+ * a — уздовж межі (−0.5..0.5), b — поперек (товщина), y — висота.
+ */
+function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, _z: number, side: EdgeSide, base: number): void {
+  const L = LH();
+  const b0 = base * L;
+  const col = hex(o.color);
+  const h = o.height * L;
+  const horizontal = side === 'n' || side === 's';
+  const ex = side === 'w' ? x : side === 'e' ? x + 1 : x + 0.5;
+  const ez = side === 'n' ? -y : side === 's' ? -(y + 1) : -(y + 0.5);
+  const put = (a: number, yy: number, b: number, sa: number, sy: number, sb: number, c: RGB, alpha = 1) => {
+    if (horizontal) g.box(ex + a, b0 + yy, ez + b, sa, sy, sb, c, alpha);
+    else g.box(ex + b, b0 + yy, ez - a, sb, sy, sa, c, alpha);
+  };
+  const T = 0.16;
+  const n = hash2(x * 3 + (horizontal ? 1 : 2), y, _z);
+  switch (o.id) {
+    case 'fence':
+      for (const a of [-0.45, 0, 0.45]) put(a, h / 2 + 0.05, 0, 0.08, h + 0.1, 0.08, shade(col, 0.8));
+      put(0, h * 0.35, 0, 1, 0.1, 0.05, col);
+      put(0, h * 0.8, 0, 1, 0.1, 0.05, col);
+      break;
+    case 'sandbags':
+    case 'sandbags_damaged': {
+      const rows = o.id === 'sandbags' ? 3 : 2;
+      for (let r = 0; r < rows; r++)
+        for (let i = 0; i < 3; i++)
+          put(-0.33 + i * 0.33 + (r % 2) * 0.08 - 0.04, 0.08 + r * (h / rows), (hash2(x + i, y + r) - 0.5) * 0.04, 0.32, h / rows - 0.02, 0.3, shade(col, 0.92 + hash2(i, r, x) * 0.18));
+      break;
+    }
+    case 'parapet':
+      put(0, h / 2, 0, 1 + T, h, 0.22, col);
+      break;
+    case 'door':
+      put(0, L * 0.94, 0, 1 + T, L * 0.12, T, hex('#a4553a'));
+      put(-0.46, L * 0.45, 0, 0.08 + T / 2, L * 0.9, T, col);
+      put(0.46, L * 0.45, 0, 0.08 + T / 2, L * 0.9, T, col);
+      put(-0.2, L * 0.44, 0.3, 0.5, L * 0.86, 0.04, shade(col, 0.85)); // прочинене полотно
+      break;
+    case 'brick_rubble':
+    case 'concrete_rubble':
+      for (let i = 0; i < 4; i++) {
+        const a = hash2(x, y, i + 1);
+        put(-0.4 + a * 0.8, 0.07 + (i % 2) * 0.1, (hash2(y, x, i) - 0.5) * 0.3, 0.22, 0.14, 0.2, shade(col, 0.85 + a * 0.3));
+      }
+      break;
+    default:
+      if (o.window) {
+        const sill = (o.sill ?? 0.4) * L;
+        put(0, sill / 2, 0, 1 + T, sill, T, col);
+        put(0, L * 0.97, 0, 1 + T, L * 0.06, T, col);
+        put(-0.47, L * 0.6, 0, 0.06 + T / 2, L * 0.8, T, col);
+        put(0.47, L * 0.6, 0, 0.06 + T / 2, L * 0.8, T, col);
+        put(0, sill + (L * 0.94 - sill) / 2, 0, 0.06, L * 0.94 - sill, 0.06, shade(col, 0.7));
+        put(0, sill + (L * 0.94 - sill) / 2, 0, 0.9, L * 0.94 - sill, 0.04, [0.55, 0.75, 0.9], 0.35);
+      } else {
+        put(0, h / 2, 0, 1 + T, h, T, shade(col, 0.95 + n * 0.1));
+        if (o.material === 'brick') for (let r = 1; r < 5; r++) put(0, (h * r) / 5, 0, 1 + T + 0.01, 0.025, T + 0.01, shade(col, 0.75));
+        put(0, h + 0.02, 0, 1 + T + 0.02, 0.04, T + 0.03, shade(col, 1.15));
+      }
+  }
 }

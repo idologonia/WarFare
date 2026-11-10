@@ -1,12 +1,12 @@
 import { DIRS4, dist2d, sameCell, type Cell } from '@/core/grid';
 import { content, itemDef, objectDef } from '@/content';
-import { cellAt, groundHeight, isStandable } from '@/game/maps/map';
+import { cellAt, edgeBlocksMove, getEdge, groundHeight, isStandable, setEdge } from '@/game/maps/map';
 import { primaryDef } from '@/game/inventory/inventory';
 import { applyHit } from '@/game/injuries/injuries';
 import { activeUnitAt, float, onField, type Ctx } from '@/game/simulation/state';
 import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
-import type { FireMode, GrenadeDefinition, Material, Unit } from '@/game/types';
+import type { EdgeObject, EdgeSide, FireMode, GrenadeDefinition, Material, Unit } from '@/game/types';
 import { coverAgainst, estimateHit, type HitFactor } from './hit';
 import { modEffects } from '@/game/equipment/mods';
 
@@ -48,6 +48,25 @@ export function damageObject(ctx: Ctx, cell: Cell, amount: number, explosive = f
   if (changed) ctx.ev.push({ t: 'object', cell, defId: c.object?.defId ?? null });
 }
 
+/** Пошкодження тонкого об'єкта на межі клітинок. */
+export function damageEdge(ctx: Ctx, cell: Cell, side: EdgeSide, amount: number, explosive = false): void {
+  const e = getEdge(ctx.s.map, cell, side);
+  if (!e) return;
+  const def = objectDef(e.defId);
+  const dmg = Math.round(amount * BULLET_MATERIAL[def.material] * (explosive ? 2 : 1));
+  if (dmg <= 0) return;
+  e.hp -= dmg;
+  let next: EdgeObject | null = e;
+  if (e.hp <= 0) {
+    const to = def.destroyedTo ?? null;
+    next = to ? { defId: to, hp: objectDef(to).hp } : null;
+  } else if (def.damagedTo && e.hp <= def.hp / 2) next = { defId: def.damagedTo, hp: Math.min(e.hp, objectDef(def.damagedTo).hp) };
+  if (next !== e) {
+    setEdge(ctx.s.map, cell, side, next);
+    ctx.ev.push({ t: 'object', cell, defId: next?.defId ?? null });
+  }
+}
+
 /** Придушення бійців поруч із точкою (промахи й влучання). */
 function suppressAround(ctx: Ctx, p: Point, shooter: Unit, amount: number): void {
   const S = content().rules.suppression;
@@ -67,7 +86,7 @@ export function blindOrigin(ctx: Pick<Ctx, 's'>, shooter: Unit, target: Cell): C
   let best = from;
   let bestScore = -1;
   for (const c of [from, ...DIRS4.map(([dx, dy]) => ({ x: from.x + dx, y: from.y + dy, z: from.z }))]) {
-    if (!sameCell(c, from) && (!isStandable(s.map, c) || activeUnitAt(s, c))) continue;
+    if (!sameCell(c, from) && (!isStandable(s.map, c) || activeUnitAt(s, c) || edgeBlocksMove(s.map, from, c))) continue;
     const eye = eyePoint(s, c, 'standing');
     let score = 0;
     for (const p of targetPoints(s, target, 'standing')) if (!trace(s.map, eye, p, { skipStart: c, skipEnd: target }).blocked) score++;
@@ -103,6 +122,7 @@ function flyBullet(ctx: Ctx, shooter: Unit, from: Point, to: Point, exclude: Set
     }
   }
   if (tr.blocked && tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, damage);
+  if (tr.blocked && tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, damage);
   return { end: tr.end, hitUnit: null };
 }
 
@@ -147,6 +167,7 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
       const tr = trace(s.map, from, aimPoint, { skipStart: origin, skipEnd: tUnit.pos! });
       if (tr.blocked && est.lineOfFire === false) {
         if (tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, w.damage);
+        if (tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, w.damage);
         shots.push({ to: tr.end, hitUnit: null });
         continue;
       }
@@ -235,7 +256,10 @@ export function resolveGrenade(ctx: Ctx, u: Unit, defId: string, target: Cell): 
     for (let x = land.x - rad; x <= land.x + rad; x++) {
       const c = { x, y, z: land.z };
       const dd = dist2d(c, land);
-      if (dd > g.radius || !cellAt(s.map, c)?.object) continue;
-      damageObject(ctx, c, g.damage * (1 - dd / (g.radius + 0.5)), true);
+      const cl = cellAt(s.map, c);
+      if (dd > g.radius || !cl) continue;
+      const amount = g.damage * (1 - dd / (g.radius + 0.5));
+      for (const side of Object.keys(cl.edges ?? {}) as EdgeSide[]) damageEdge(ctx, c, side, amount, true);
+      if (cl.object) damageObject(ctx, c, amount, true);
     }
 }

@@ -1,6 +1,6 @@
 import { dist2d, type Cell } from '@/core/grid';
-import { content, itemDef } from '@/content';
-import { groundHeight, objAt } from '@/game/maps/map';
+import { content, itemDef, objectDef } from '@/content';
+import { edgeBetween, groundHeight, objAt } from '@/game/maps/map';
 import { primaryDef } from '@/game/inventory/inventory';
 import { modEffects } from '@/game/equipment/mods';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
@@ -23,6 +23,14 @@ export function coverAgainst(s: MissionState, target: Cell, from: Cell): 0 | 1 |
   if (ay >= ax * 0.5 && ay > 0) cand.push({ x: target.x, y: target.y + Math.sign(dy), z: target.z });
   if (ax > 0 && ay > 0) cand.push({ x: target.x + Math.sign(dx), y: target.y + Math.sign(dy), z: target.z });
   let best: 0 | 1 | 2 = 0;
+  // Тонкі об'єкти на межі клітинки цілі з боку стрільця (стіна, вікно, мішки, паркан).
+  for (const c of cand) {
+    if (c.x !== target.x && c.y !== target.y) continue;
+    const e = edgeBetween(s.map, target, c);
+    if (!e) continue;
+    const o = objectDef(e.obj.defId);
+    if (!o.door && o.cover > best) best = o.cover as 0 | 1 | 2;
+  }
   for (const c of cand) {
     // Стрілець упритул з того ж боку, що й укриття, — укриття не діє.
     if (c.x === from.x && c.y === from.y && c.z === from.z) continue;

@@ -50,6 +50,8 @@ export interface MapObjectDefinition {
   destroyedTo?: string | null;
   /** Стіни будівель (для прозорості та визначення приміщень). */
   wall?: boolean;
+  /** Тонкий об'єкт: ставиться на межу клітинок (редактор пропонує саме так). */
+  thin?: boolean;
   door?: boolean;
   color: string;
 }
@@ -314,13 +316,24 @@ export interface Unit {
 
 // ---------- Карта ----------
 
+export type EdgeSide = 'n' | 'w' | 's' | 'e';
+
+/** Тонкий об'єкт на межі клітинок (стіна, вікно, двері, паркан, мішки, парапет). */
+export interface EdgeObject {
+  defId: string;
+  hp: number;
+}
+
 export interface MapCell {
+  /** Межі клітинки: n (північ) і w (захід); s/e — лише на краю карти. */
+  edges?: Partial<Record<EdgeSide, EdgeObject>>;
   terrain: string;
   /** Чи є підлога (на поверсі 0 завжди true). */
   floor: boolean;
   /** Пагорб: підйом у частках поверху (0..0.5). */
   elevation: number;
-  object: { defId: string; hp: number } | null;
+  /** rot — поворот моделі об'єкта на 90° (лише вигляд). */
+  object: { defId: string; hp: number; rot?: number } | null;
   /** Сходи з цього поверху на наступний. */
   stairsUp?: boolean;
   buildingId?: number;
@@ -347,6 +360,10 @@ export interface MapDefinition {
   layers: string[][];
   /** Прямокутники будівель [x0,y0,x1,y1] для прозорості стін. */
   buildings: [number, number, number, number][];
+  /** Тонкі об'єкти на межах клітинок: [x, y, поверх, бік, id об'єкта]. */
+  edges?: [number, number, number, EdgeSide, string][];
+  /** Повороти об'єктів у клітинках: [x, y, поверх, 0..3]. */
+  rotations?: [number, number, number, number][];
 }
 
 // ---------- Сценарій ----------

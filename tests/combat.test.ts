@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { freshMission, ctxOf, place, isolate } from './helpers';
 import { coverAgainst, effectiveCover, estimateHit } from '@/game/combat/hit';
-import { resolveFire, damageObject } from '@/game/combat/fire';
+import { resolveFire, damageEdge } from '@/game/combat/fire';
+import { getEdge, moveNeighbors } from '@/game/maps/map';
 import { swapMagazine } from '@/game/inventory/inventory';
-import { objAt } from '@/game/maps/map';
 import { applyHit, applyTreatment, tickInjuries, treatmentOptions } from '@/game/injuries/injuries';
 import { computeApMax } from '@/game/units/derived';
 
@@ -11,11 +11,13 @@ describe('укриття і шанс влучання', () => {
   it('мішки з піском дають половинне укриття, сидячи — повне', () => {
     const m = freshMission();
     const s = m.state;
-    // мішки (10..12,14); ціль у (11,15) за ними, стрілець на півночі (11,10)? — стрілець (11,12)
-    expect(coverAgainst(s, { x: 11, y: 15, z: 0 }, { x: 11, y: 11, z: 0 })).toBe(1);
+    // мішки — тонкі, на північній межі клітинок (10..12,14); ціль стоїть просто за ними
+    expect(coverAgainst(s, { x: 11, y: 14, z: 0 }, { x: 11, y: 11, z: 0 })).toBe(1);
     expect(effectiveCover(1, 'crouched')).toBe(2);
     // з півдня укриття немає
-    expect(coverAgainst(s, { x: 11, y: 15, z: 0 }, { x: 11, y: 20, z: 0 })).toBe(0);
+    expect(coverAgainst(s, { x: 11, y: 14, z: 0 }, { x: 11, y: 20, z: 0 })).toBe(0);
+    // біля тонкої стіни будинку — повне укриття
+    expect(coverAgainst(s, { x: 12, y: 11, z: 0 }, { x: 12, y: 6, z: 0 })).toBe(2);
   });
 
   it('укриття і дальність зменшують шанс; межі 5..95', () => {
@@ -26,7 +28,7 @@ describe('укриття і шанс влучання', () => {
     isolate(s, [a, b, t]);
     t.status = 'active';
     place(a, { x: 11, y: 11, z: 0 });
-    place(t, { x: 11, y: 15, z: 0 });
+    place(t, { x: 11, y: 14, z: 0 });
     const covered = estimateHit(s, a, t, 'snap');
     place(t, { x: 11, y: 13, z: 0 });
     const open = estimateHit(s, a, t, 'snap');
@@ -53,17 +55,17 @@ describe('стрільба', () => {
     expect(ctx.ev.some((e) => e.t === 'fired')).toBe(true);
   });
 
-  it('руйнування: стіна → пошкоджена → пролом (прохідний)', () => {
+  it('руйнування тонкої стіни: стіна → пошкоджена → пролом (прохідний)', () => {
     const m = freshMission();
     const s = m.state;
     const ctx = ctxOf(s);
     const c = { x: 12, y: 10, z: 0 };
-    expect(objAt(s.map, c)!.id).toBe('brick_wall');
-    damageObject(ctx, c, 300);
-    expect(objAt(s.map, c)!.id).toBe('brick_wall_damaged');
-    damageObject(ctx, c, 400);
-    expect(objAt(s.map, c)!.id).toBe('brick_rubble');
-    expect(objAt(s.map, c)!.blocksMove).toBe(false);
+    expect(getEdge(s.map, c, 's')!.defId).toBe('brick_wall');
+    damageEdge(ctx, c, 's', 300);
+    expect(getEdge(s.map, c, 's')!.defId).toBe('brick_wall_damaged');
+    damageEdge(ctx, c, 's', 400);
+    expect(getEdge(s.map, c, 's')!.defId).toBe('brick_rubble');
+    expect(moveNeighbors(s.map, { x: 12, y: 11, z: 0 }).some((st) => st.to.x === 12 && st.to.y === 10)).toBe(true);
   });
 });
 

@@ -1,7 +1,8 @@
 import { content, objectDef, BUILTIN_IDS } from '@/content';
 import { cellKey, type Cell } from '@/core/grid';
 import type { MissionState } from '@/game/simulation/state';
-import type { MapState } from '@/game/types';
+import type { EdgeSide, MapState } from '@/game/types';
+import { getEdge, setEdge } from '@/game/maps/map';
 import { downloadJson, pickJsonFile, saveMap, unpackShared } from '@/persistence/library';
 import type { Renderer } from '@/rendering/renderer';
 import { btn, h, modal } from '@/ui/dom';
@@ -105,7 +106,7 @@ export class MapEditor {
     this.reload();
   }
 
-  private applyTool(c: Cell, touched: { levels: Set<number>; objects: Set<string> }): void {
+  private applyTool(c: Cell & { side?: EdgeSide }, touched: { levels: Set<number>; objects: Set<string> }): void {
     const cell = this.map.cells[c.z]?.[c.y]?.[c.x];
     if (!cell) return;
     const t = this.tool;
@@ -118,6 +119,14 @@ export class MapEditor {
         lvlChanged();
         break;
       case 'object':
+        if (objectDef(t.id).thin) {
+          const side = c.side ?? this.side;
+          setEdge(this.map as unknown as MapState, c, side, { defId: t.id, hp: objectDef(t.id).hp });
+          if (c.z > 0) cell.floor = true;
+          touched.objects.add(cellKey(this.edgeOwner(c, side)));
+          objChanged();
+          break;
+        }
         cell.object = { defId: t.id, hp: objectDef(t.id).hp };
         delete cell.variation;
         if (c.z > 0) cell.floor = true;
@@ -127,11 +136,19 @@ export class MapEditor {
         }
         objChanged();
         break;
-      case 'erase':
-        cell.object = null;
-        delete cell.variation;
+      case 'erase': {
+        // Біля межі — прибрати тонкий об'єкт, інакше — об'єкт у клітинці.
+        const side = c.side ?? this.side;
+        if ((c.side || this.sideDist < 0.25) && getEdge(this.map as unknown as MapState, c, side)) {
+          setEdge(this.map as unknown as MapState, c, side, null);
+          touched.objects.add(cellKey(this.edgeOwner(c, side)));
+        } else {
+          cell.object = null;
+          delete cell.variation;
+        }
         objChanged();
         break;
+      }
       case 'floor':
         if (c.z === 0) return;
         cell.floor = true;
@@ -165,7 +182,7 @@ export class MapEditor {
     }
   }
 
-  private paint(cells: Cell[]): void {
+  private paint(cells: (Cell & { side?: EdgeSide })[]): void {
     const touched = { levels: new Set<number>(), objects: new Set<string>() };
     for (const c of cells) this.applyTool(c, touched);
     assignBuildings(this.map);
@@ -195,7 +212,28 @@ export class MapEditor {
     const t = (planeY - ray.origin.y) / ray.direction.y;
     const p = ray.origin.add(ray.direction.scale(t));
     const c = { x: Math.floor(p.x), y: Math.floor(-p.z), z };
+    // Найближча межа клітинки до курсора — туди ставляться тонкі об'єкти.
+    const fx = p.x - c.x;
+    const fy = -p.z - c.y;
+    const d: [EdgeSide, number][] = [['n', fy], ['s', 1 - fy], ['w', fx], ['e', 1 - fx]];
+    d.sort((a, b) => a[1] - b[1]);
+    this.side = d[0][0];
+    this.sideDist = d[0][1];
     return c.x >= 0 && c.y >= 0 && c.x < this.map.width && c.y < this.map.height ? c : null;
+  }
+
+  private side: EdgeSide = 'n';
+  private sideDist = 0.5;
+
+  private isThinTool(): boolean {
+    return this.tool.kind === 'object' && !!objectDef(this.tool.id).thin;
+  }
+
+  /** Клітинка, у якій фактично зберігається межа (для перебудови сітки). */
+  private edgeOwner(c: Cell, side: EdgeSide): Cell {
+    if (side === 's' && c.y + 1 < this.map.height) return { x: c.x, y: c.y + 1, z: c.z };
+    if (side === 'e' && c.x + 1 < this.map.width) return { x: c.x + 1, y: c.y, z: c.z };
+    return c;
   }
 
   private bindInput(): void {
@@ -225,7 +263,9 @@ export class MapEditor {
       if (this.disposed) return;
       const p = pos(e);
       const c = this.pick(p.x, p.y);
+      this.hover = c;
       this.r.setCursor(c && this.map.cells[c.z][c.y][c.x].floor ? c : null, [1, 0.9, 0.3]);
+      this.r.setEdgeHint(c && (this.isThinTool() || (this.tool.kind === 'erase' && this.sideDist < 0.25)) ? c : null, this.side);
       this.showStatus(c);
       if (!down) return;
       const dx = p.x - down.x;
@@ -265,7 +305,19 @@ export class MapEditor {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  private rectCells(a: Cell, b: Cell): Cell[] {
+  private rectCells(a: Cell, b: Cell): (Cell & { side?: EdgeSide })[] {
+    if (this.isThinTool() || (this.tool.kind === 'erase' && this.sideDist < 0.25)) {
+      // Тонкі об'єкти прямокутником — по периметру (кімната).
+      const out: (Cell & { side: EdgeSide })[] = [];
+      const [x0, x1, y0, y1] = [Math.min(a.x, b.x), Math.max(a.x, b.x), Math.min(a.y, b.y), Math.max(a.y, b.y)];
+      for (let x = x0; x <= x1; x++) {
+        out.push({ x, y: y0, z: a.z, side: 'n' }, { x, y: y1, z: a.z, side: 's' });
+      }
+      for (let y = y0; y <= y1; y++) {
+        out.push({ x: x0, y, z: a.z, side: 'w' }, { x: x1, y, z: a.z, side: 'e' });
+      }
+      return out;
+    }
     const out: Cell[] = [];
     for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) out.push({ x, y, z: a.z });
     return out;
@@ -283,6 +335,10 @@ export class MapEditor {
       this.doUndo();
       return;
     }
+    if (e.type === 'keydown' && k === 'r' && this.hover) {
+      this.rotateAt(this.hover);
+      return;
+    }
     if (!['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) return;
     e.preventDefault();
     if (e.type === 'keydown') this.keys.add(k);
@@ -293,6 +349,18 @@ export class MapEditor {
     this.r.keyMove.rot = (has('e') ? 1 : 0) - (has('q') ? 1 : 0);
   }
 
+  private hover: Cell | null = null;
+
+  /** Повернути модель об'єкта в клітинці на 90° (R). */
+  private rotateAt(c: Cell): void {
+    const o = this.map.cells[c.z][c.y][c.x].object;
+    if (!o) return;
+    this.snapshot();
+    o.rot = ((o.rot ?? 0) + 1) % 4;
+    this.r.map.rebuildObject(c);
+    this.r.refreshVisibility();
+  }
+
   private showStatus(c: Cell | null): void {
     if (!c) {
       this.status.textContent = '';
@@ -301,7 +369,11 @@ export class MapEditor {
     const cell = this.map.cells[c.z][c.y][c.x];
     const parts = [`(${c.x}, ${c.y}) поверх ${c.z + 1}`, content().terrain.get(cell.terrain)?.name ?? cell.terrain];
     if (!cell.floor) parts.push('без підлоги');
-    if (cell.object) parts.push(objectDef(cell.object.defId).name);
+    if (cell.object) parts.push(objectDef(cell.object.defId).name + (cell.object.rot ? ` (поворот ${cell.object.rot * 90}°)` : ''));
+    for (const sd of ['n', 'w', 's', 'e'] as EdgeSide[]) {
+      const e = getEdge(this.map as unknown as MapState, c, sd);
+      if (e) parts.push(`${{ n: 'пн', s: 'пд', w: 'зх', e: 'сх' }[sd]}: ${objectDef(e.defId).name}`);
+    }
     if (cell.variation) parts.push('випадковий об’єкт');
     if (cell.stairsUp) parts.push('сходи вгору');
     if (cell.elevation) parts.push('пагорб');
@@ -381,7 +453,7 @@ export class MapEditor {
         toolBtn('Рівна земля', { kind: 'hill', value: 0 }),
         toolBtn('Випадковий об’єкт', { kind: 'variation' }, '#d070e0'),
       ),
-      h('div', { class: 'muted', style: 'font-size:0.85em' }, 'Ліва кнопка — малювати; права — зсув; WASD — рух; Q/E — обертання; Ctrl+Z — скасувати. «Випадковий об’єкт» щоразу інший при старті місії.'),
+      h('div', { class: 'muted', style: 'font-size:0.85em' }, 'Ліва кнопка — малювати; права — зсув; WASD — рух; Q/E — обертання камери; Ctrl+Z — скасувати. Стіни, вікна, двері, паркани, мішки й парапети ставляться на найближчу до курсора межу клітинки; «Прямокутник» з ними будує кімнату по периметру. R — повернути об’єкт у клітинці. «Випадковий об’єкт» щоразу інший при старті місії.'),
     );
     this.ui.append(top, pal, this.status);
   }

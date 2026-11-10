@@ -1,6 +1,7 @@
 import type { Cell } from '@/core/grid';
 import { objectDef } from '@/content';
-import type { MapState } from '@/game/types';
+import type { EdgeSide, MapState } from '@/game/types';
+import { edgeBetween } from '@/game/maps/map';
 
 /** Точка у світі: x, y — у клітинках (центр клітинки = +0.5), h — висота в одиницях поверху. */
 export interface Point {
@@ -15,7 +16,9 @@ export interface TraceResult {
   blocked: boolean;
   /** Клітинка, що зупинила лінію (об'єкт, перекриття або ґрунт). */
   blockCell: Cell | null;
-  blockKind: 'object' | 'floor' | 'ground' | 'bounds' | null;
+  blockKind: 'object' | 'edge' | 'floor' | 'ground' | 'bounds' | null;
+  /** Межа клітинки, що зупинила лінію (тонка стіна, паркан тощо). */
+  blockEdge?: { cell: Cell; side: EdgeSide };
   /** Точка зупинки (або кінцева точка). */
   end: Point;
   /** Сума маскування рослинністю на шляху. */
@@ -57,6 +60,19 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
   let concealment = 0;
   let lastKey = '';
   let prevZ = Math.floor(from.h);
+  let pcx = Math.floor(from.x);
+  let pcy = Math.floor(from.y);
+  /** Чи перекриває межа між сусідніми клітинками лінію на локальній висоті. */
+  const edgeBlocks = (a: Cell, b: Cell, local: number): { cell: Cell; side: EdgeSide } | null => {
+    if (b.x < 0 || b.y < 0 || b.x >= map.width || b.y >= map.height) return null;
+    const e = edgeBetween(map, a, b);
+    if (!e) return null;
+    const o = objectDef(e.obj.defId);
+    if (o.door) return null;
+    if (o.window) return local < (o.sill ?? 0.4) || local > 0.95 ? { cell: e.cell, side: e.side } : null;
+    if (opt.ignoreBelow !== undefined && o.height < opt.ignoreBelow) return null;
+    return local < o.height ? { cell: e.cell, side: e.side } : null;
+  };
   const sameCell = (c: Cell, s?: Cell) => !!s && s.x === c.x && s.y === c.y;
 
   for (let i = 1; i <= steps; i++) {
@@ -82,6 +98,21 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
       }
       prevZ = z;
     }
+    // Перетин межі клітинок на тому ж поверсі.
+    if ((cx !== pcx || cy !== pcy) && z === prevZ) {
+      const p0 = { x: pcx, y: pcy, z };
+      let hit: { cell: Cell; side: EdgeSide } | null = null;
+      if (cx !== pcx && cy !== pcy) {
+        const viaX = { x: cx, y: pcy, z };
+        const viaY = { x: pcx, y: cy, z };
+        const a = edgeBlocks(p0, viaX, local) ?? edgeBlocks(viaX, c, local);
+        const b = edgeBlocks(p0, viaY, local) ?? edgeBlocks(viaY, c, local);
+        if (a && b) hit = a;
+      } else hit = edgeBlocks(p0, c, local);
+      if (hit) return { blocked: true, blockCell: hit.cell, blockKind: 'edge', blockEdge: hit, end: p, concealment, cells };
+    }
+    pcx = cx;
+    pcy = cy;
     if (key !== lastKey) {
       lastKey = key;
       cells.push(c);
