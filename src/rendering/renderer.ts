@@ -1,0 +1,613 @@
+import { cellKey, type Cell } from '@/core/grid';
+import { cellAt, groundHeight } from '@/game/maps/map';
+import type { MissionState, SimEvent } from '@/game/simulation/state';
+import { sideSees } from '@/game/visibility/visibility';
+import type { Point } from '@/game/visibility/los';
+import type { SideId, Unit } from '@/game/types';
+import {
+  ArcRotateCamera,
+  Camera,
+  Color3,
+  Color4,
+  CreateSphere,
+  CreateTorus,
+  DirectionalLight,
+  Engine,
+  HemisphericLight,
+  Matrix,
+  Scene,
+  ShadowGenerator,
+  Vector3,
+  type AbstractEngine,
+  type Mesh,
+  type StandardMaterial,
+} from './babylon';
+import { Animator, ease, lerp } from './anim';
+import { GeoBuilder, hex, type RGB } from './geo';
+import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
+import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
+
+export interface GraphicsSettings {
+  shadows: boolean;
+  renderScale: number;
+  engine: 'webgl' | 'webgpu';
+  animSpeed: number;
+}
+
+export interface OverlayCell {
+  cell: Cell;
+  color: RGB;
+}
+
+const pointWorld = (p: Point) => world(p.x, p.y, p.h);
+
+/** Графічний адаптер: лише відображає стан і події симуляції. */
+export class Renderer {
+  engine!: AbstractEngine;
+  scene!: Scene;
+  camera!: ArcRotateCamera;
+  anim!: Animator;
+  map!: MapView;
+  private shadowGen: ShadowGenerator | null = null;
+  private light!: DirectionalLight;
+  private units = new Map<string, UnitModel>();
+  private unitMat!: StandardMaterial;
+  private silhouetteMat!: StandardMaterial;
+  private overlayMat!: StandardMaterial;
+  private fxMat!: StandardMaterial;
+  private overlays = new Map<string, Mesh>();
+  private selRing!: Mesh;
+  private rot = 0;
+  private zoom = 7.5;
+  viewLevel = 0;
+  viewSide: SideId = 'blue';
+  private state!: MissionState;
+  onFrame: (() => void) | null = null;
+
+  constructor(private canvas: HTMLCanvasElement, private gfx: GraphicsSettings) {}
+
+  async init(): Promise<void> {
+    if (this.gfx.engine === 'webgpu' && 'gpu' in navigator) {
+      try {
+        const { WebGPUEngine } = await import('@babylonjs/core/Engines/webgpuEngine');
+        const e = new WebGPUEngine(this.canvas, { antialias: true, adaptToDeviceRatio: true });
+        await e.initAsync();
+        this.engine = e;
+      } catch (err) {
+        console.warn('WebGPU недоступний, використовуємо WebGL2', err);
+      }
+    }
+    if (!this.engine) this.engine = new Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true }, true);
+    this.engine.setHardwareScalingLevel(this.gfx.renderScale / Math.min(2, window.devicePixelRatio || 1));
+    const scene = (this.scene = new Scene(this.engine));
+    scene.clearColor = new Color4(0.07, 0.08, 0.1, 1);
+    scene.ambientColor = new Color3(0.3, 0.3, 0.3);
+    this.anim = new Animator(scene);
+    this.anim.speed = this.gfx.animSpeed;
+
+    const cam = (this.camera = new ArcRotateCamera('cam', this.alphaFor(0), 0.92, 60, Vector3.Zero(), scene));
+    cam.mode = Camera.ORTHOGRAPHIC_CAMERA;
+    cam.minZ = 0.1;
+    cam.maxZ = 400;
+
+    const hemi = new HemisphericLight('hemi', new Vector3(0.2, 1, -0.3), scene);
+    hemi.intensity = 0.62;
+    hemi.groundColor = new Color3(0.32, 0.3, 0.36);
+    this.light = new DirectionalLight('sun', new Vector3(-0.55, -1, 0.4), scene);
+    this.light.intensity = 0.85;
+    this.light.position = new Vector3(30, 40, -10);
+    this.setShadows(this.gfx.shadows);
+
+    this.unitMat = makeMaterial(scene, 'unit');
+    this.silhouetteMat = makeMaterial(scene, 'silhouette');
+    this.silhouetteMat.diffuseColor = new Color3(0.15, 0.15, 0.17);
+    this.silhouetteMat.emissiveColor = new Color3(0.12, 0.12, 0.14);
+    this.overlayMat = makeMaterial(scene, 'overlay', 0.5, true);
+    this.fxMat = makeMaterial(scene, 'fx', 1, true);
+
+    this.selRing = CreateTorus('sel', { diameter: 0.8, thickness: 0.05, tessellation: 24 }, scene);
+    const ringMat = makeMaterial(scene, 'ring', 1, true);
+    ringMat.emissiveColor = new Color3(1, 0.85, 0.2);
+    this.selRing.material = ringMat;
+    this.selRing.isPickable = false;
+    this.selRing.setEnabled(false);
+
+    scene.onBeforeRenderObservable.add(() => {
+      this.updateOrtho();
+      if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
+    });
+    this.engine.runRenderLoop(() => {
+      scene.render();
+      this.onFrame?.();
+    });
+    window.addEventListener('resize', () => this.engine.resize());
+  }
+
+  setShadows(on: boolean): void {
+    this.gfx.shadows = on;
+    if (on && !this.shadowGen) {
+      this.shadowGen = new ShadowGenerator(2048, this.light);
+      this.shadowGen.usePercentageCloserFiltering = true;
+      this.shadowGen.bias = 0.002;
+      this.shadowGen.darkness = 0.35;
+      for (const m of this.scene.meshes) if (m.metadata?.caster) this.shadowGen.addShadowCaster(m);
+      for (const m of this.scene.meshes) if (m.metadata?.receiver) m.receiveShadows = true;
+    } else if (!on && this.shadowGen) {
+      this.shadowGen.dispose();
+      this.shadowGen = null;
+    }
+  }
+
+  setRenderScale(scale: number): void {
+    this.gfx.renderScale = scale;
+    this.engine.setHardwareScalingLevel(scale / Math.min(2, window.devicePixelRatio || 1));
+  }
+
+  private registerMesh = (m: Mesh, receive: boolean) => {
+    m.metadata = { ...(m.metadata ?? {}), caster: !receive, receiver: true };
+    m.receiveShadows = true;
+    if (!receive && this.shadowGen) this.shadowGen.addShadowCaster(m);
+  };
+
+  // ---------- Камера ----------
+
+  private alphaFor(rot: number): number {
+    return -Math.PI / 4 - (rot * Math.PI) / 2 - Math.PI / 2;
+  }
+
+  private updateOrtho(): void {
+    const c = this.camera;
+    const aspect = this.engine.getRenderWidth() / Math.max(1, this.engine.getRenderHeight());
+    c.orthoTop = this.zoom;
+    c.orthoBottom = -this.zoom;
+    c.orthoLeft = -this.zoom * aspect;
+    c.orthoRight = this.zoom * aspect;
+  }
+
+  rotate(dir: 1 | -1): void {
+    this.rot = (this.rot + dir + 4) % 4;
+    const from = this.camera.alpha;
+    let to = this.alphaFor(this.rot);
+    while (to - from > Math.PI) to -= Math.PI * 2;
+    while (from - to > Math.PI) to += Math.PI * 2;
+    void this.anim.tween(260, (t) => (this.camera.alpha = lerp(from, to, ease(t))));
+  }
+
+  zoomBy(k: number): void {
+    this.zoom = Math.max(3.5, Math.min(18, this.zoom * k));
+  }
+
+  /** Зсув камери в екранних пікселях. */
+  pan(dx: number, dy: number): void {
+    const c = this.camera;
+    const scale = (2 * this.zoom) / this.engine.getRenderHeight() * this.engine.getHardwareScalingLevel();
+    const fwd = c.target.subtract(c.position);
+    fwd.y = 0;
+    fwd.normalize();
+    const right = Vector3.Cross(Vector3.Up(), fwd).normalize();
+    const t = c.target.add(right.scale(-dx * scale)).add(fwd.scale((dy * scale) / Math.sin(c.beta)));
+    const m = this.state.map;
+    t.x = Math.max(0, Math.min(m.width, t.x));
+    t.z = Math.max(-m.height, Math.min(0, t.z));
+    c.target = t;
+  }
+
+  focus(c: Cell, animate = true): void {
+    const to = cellWorld(c, c.z);
+    const from = this.camera.target.clone();
+    if (!animate) {
+      this.camera.target = to;
+      return;
+    }
+    void this.anim.tween(300, (t) => (this.camera.target = Vector3.Lerp(from, to, ease(t))));
+  }
+
+  setViewLevel(z: number): void {
+    this.viewLevel = Math.max(0, Math.min(this.state.map.levels - 1, z));
+    this.refreshVisibility();
+  }
+
+  // ---------- Стан ----------
+
+  /** Повна побудова сцени для стану місії. */
+  load(state: MissionState, viewSide: SideId): void {
+    this.state = state;
+    this.viewSide = viewSide;
+    for (const u of this.units.values()) u.root.dispose();
+    this.units.clear();
+    this.map?.dispose();
+    for (const o of this.overlays.values()) o.dispose();
+    this.overlays.clear();
+    this.map = new MapView(this.scene, state.map, this.registerMesh);
+    this.camera.target = world(state.map.width / 2, state.map.height * 0.7, 0);
+    for (const u of state.units) this.ensureUnit(u);
+    this.sync();
+  }
+
+  setState(state: MissionState): void {
+    this.state = state;
+  }
+
+  private ensureUnit(u: Unit): UnitModel {
+    let m = this.units.get(u.id);
+    if (!m) {
+      m = buildUnitModel(this.scene, this.unitMat, u);
+      for (const mesh of m.meshes) {
+        mesh.receiveShadows = true;
+        this.shadowGen?.addShadowCaster(mesh);
+        mesh.metadata = { ...mesh.metadata, caster: true };
+      }
+      if (u.side === 'red') m.root.rotation.y = Math.PI;
+      this.units.set(u.id, m);
+    }
+    return m;
+  }
+
+  /** Розміщення моделей за станом (без анімації), видимість противника. */
+  sync(): void {
+    const s = this.state;
+    for (const u of s.units) {
+      const m = this.ensureUnit(u);
+      const visible = u.pos !== null && (u.side === this.viewSide || sideSees(s, this.viewSide, u.id) || u.status === 'dead') && u.pos.z <= this.viewLevel;
+      const seenEnemyDead = u.side !== this.viewSide && u.status !== 'active' && !!s.contacts[this.viewSide][u.id];
+      m.root.setEnabled(visible || (seenEnemyDead && u.pos !== null && u.pos.z <= this.viewLevel));
+      if (!u.pos) continue;
+      m.root.position = cellWorld(u.pos, groundHeight(s.map, u.pos));
+      applyPose(m, u.stance, u.weaponState, u.status);
+      const identified = u.side === this.viewSide || s.revealAll || s.contacts[this.viewSide][u.id]?.identified;
+      for (const mesh of m.meshes) mesh.material = identified ? this.unitMat : this.silhouetteMat;
+    }
+    this.refreshVisibility();
+  }
+
+  refreshVisibility(): void {
+    const s = this.state;
+    const inside = new Set<number>();
+    for (const u of s.units) {
+      if (u.side !== this.viewSide || !u.pos || u.status === 'evacuated') continue;
+      const b = cellAt(s.map, u.pos)?.buildingId;
+      if (b !== undefined && cellAt(s.map, u.pos)!.terrain === 'floor') inside.add(b);
+    }
+    this.map.applyVisibility(this.viewLevel, inside);
+    for (const u of s.units) {
+      const m = this.units.get(u.id);
+      if (m && u.pos && u.pos.z > this.viewLevel) m.root.setEnabled(false);
+    }
+  }
+
+  select(u: Unit | null): void {
+    if (!u?.pos) {
+      this.selRing.setEnabled(false);
+      return;
+    }
+    this.selRing.setEnabled(true);
+    this.selRing.position = cellWorld(u.pos, groundHeight(this.state.map, u.pos)).add(new Vector3(0, 0.04, 0));
+  }
+
+  // ---------- Підсвітки ----------
+
+  setOverlay(name: string, cells: OverlayCell[], opts: { height?: number; size?: number; alpha?: number } = {}): void {
+    this.overlays.get(name)?.dispose();
+    this.overlays.delete(name);
+    if (!cells.length) return;
+    const g = new GeoBuilder();
+    const s = this.state;
+    for (const { cell, color } of cells) {
+      const p = cellWorld(cell, groundHeight(s.map, cell));
+      g.box(p.x, p.y + (opts.height ?? 0.035), p.z, opts.size ?? 0.86, 0.02, opts.size ?? 0.86, color, opts.alpha ?? 0.45);
+    }
+    const mesh = g.build(`ov_${name}`, this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set(name, mesh);
+  }
+
+  setPath(path: Cell[], color: RGB): void {
+    this.overlays.get('path')?.dispose();
+    this.overlays.delete('path');
+    if (path.length < 2) return;
+    const g = new GeoBuilder();
+    const s = this.state;
+    for (let i = 1; i < path.length; i++) {
+      const a = cellWorld(path[i - 1], groundHeight(s.map, path[i - 1]));
+      const b = cellWorld(path[i], groundHeight(s.map, path[i]));
+      const mid = Vector3.Lerp(a, b, 0.5);
+      const len = Vector3.Distance(a, b);
+      const ang = Math.atan2(b.x - a.x, b.z - a.z);
+      g.box(mid.x, mid.y + 0.08, mid.z, 0.08, 0.04, len, color, 0.9, ang);
+    }
+    const end = path[path.length - 1];
+    const e = cellWorld(end, groundHeight(s.map, end));
+    g.box(e.x, e.y + 0.08, e.z, 0.3, 0.05, 0.3, color, 0.95);
+    const mesh = g.build('ov_path', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('path', mesh);
+  }
+
+  setCursor(cell: Cell | null, color: RGB = [1, 1, 1]): void {
+    this.overlays.get('cursor')?.dispose();
+    this.overlays.delete('cursor');
+    if (!cell) return;
+    const p = cellWorld(cell, groundHeight(this.state.map, cell));
+    const g = new GeoBuilder();
+    const y = p.y + 0.06;
+    g.box(p.x, y, p.z - 0.47, 1, 0.04, 0.06, color);
+    g.box(p.x, y, p.z + 0.47, 1, 0.04, 0.06, color);
+    g.box(p.x - 0.47, y, p.z, 0.06, 0.04, 1, color);
+    g.box(p.x + 0.47, y, p.z, 0.06, 0.04, 1, color);
+    const mesh = g.build('ov_cursor', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('cursor', mesh);
+  }
+
+  /** Маркери останніх відомих позицій противника. */
+  setGhosts(cells: Cell[]): void {
+    this.overlays.get('ghosts')?.dispose();
+    this.overlays.delete('ghosts');
+    const vis = cells.filter((c) => c.z <= this.viewLevel);
+    if (!vis.length) return;
+    const g = new GeoBuilder();
+    for (const c of vis) {
+      const p = cellWorld(c, groundHeight(this.state.map, c));
+      g.box(p.x, p.y + 0.45, p.z, 0.3, 0.9, 0.3, hex(SIDE_COLOR.red), 0.35);
+      g.box(p.x, p.y + 1.05, p.z, 0.22, 0.22, 0.22, hex(SIDE_COLOR.red), 0.5);
+    }
+    const mesh = g.build('ov_ghosts', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('ghosts', mesh);
+  }
+
+  // ---------- Вибір ----------
+
+  pickUnit(x: number, y: number): string | null {
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.unitId && m.isEnabled() && m.isVisible);
+    return r?.hit ? (r.pickedMesh!.metadata.unitId as string) : null;
+  }
+
+  pickCell(x: number, y: number): Cell | null {
+    const ray = this.scene.createPickingRay(x, y, Matrix.Identity(), this.camera);
+    const s = this.state;
+    for (let z = this.viewLevel; z >= 0; z--) {
+      let planeY = z * LH();
+      for (let iter = 0; iter < 2; iter++) {
+        if (Math.abs(ray.direction.y) < 1e-6) return null;
+        const t = (planeY - ray.origin.y) / ray.direction.y;
+        const p = ray.origin.add(ray.direction.scale(t));
+        const c = { x: Math.floor(p.x), y: Math.floor(-p.z), z };
+        const cell = cellAt(s.map, c);
+        if (!cell) break;
+        if (z === 0 && cell.elevation > 0 && iter === 0) {
+          planeY = cell.elevation * LH();
+          continue;
+        }
+        if (cell.floor) return c;
+        break;
+      }
+    }
+    return null;
+  }
+
+  /** Проекція точки світу на екран (CSS-пікселі) — для спливаючих написів. */
+  project(c: Cell, h: number): { x: number; y: number } | null {
+    const v = Vector3.Project(
+      cellWorld(c, h),
+      Matrix.Identity(),
+      this.scene.getTransformMatrix(),
+      this.camera.viewport.toGlobal(this.engine.getRenderWidth(), this.engine.getRenderHeight()),
+    );
+    const k = this.engine.getHardwareScalingLevel();
+    return { x: v.x * k, y: v.y * k };
+  }
+
+  unitScreenPos(unitId: string): { x: number; y: number } | null {
+    const u = this.state.units.find((x) => x.id === unitId);
+    if (!u?.pos) return null;
+    return this.project(u.pos, groundHeight(this.state.map, u.pos) + 1.0);
+  }
+
+  // ---------- Відтворення подій ----------
+
+  async play(events: SimEvent[], onFloat: (e: Extract<SimEvent, { t: 'float' }>) => void): Promise<void> {
+    for (const e of events) {
+      switch (e.t) {
+        case 'moved':
+          if (this.isShown(e.unitId) || this.viewSide === this.unitSide(e.unitId)) await this.animateMove(e.unitId, e.path, e.mode);
+          break;
+        case 'fired':
+          await this.animateFire(e);
+          break;
+        case 'grenade':
+          await this.animateGrenade(e.from, e.to);
+          break;
+        case 'explosion':
+          await this.animateExplosion(e.at, e.radius);
+          break;
+        case 'object':
+          this.map.rebuildObject(e.cell);
+          this.refreshVisibility();
+          break;
+        case 'status':
+        case 'pose':
+        case 'deployed':
+        case 'reinforcement':
+        case 'evacuated':
+        case 'carry':
+          this.syncUnit(e.unitId);
+          if (e.t === 'status') await this.anim.wait(150);
+          break;
+        case 'float':
+          onFloat(e);
+          break;
+        case 'reload':
+          await this.animateReload(e.unitId);
+          break;
+        case 'reaction':
+        case 'panic':
+          await this.anim.wait(120);
+          break;
+        default:
+          break;
+      }
+    }
+    this.sync();
+  }
+
+  private unitSide(id: string): SideId | undefined {
+    return this.state.units.find((u) => u.id === id)?.side;
+  }
+
+  private isShown(id: string): boolean {
+    return this.units.get(id)?.root.isEnabled() ?? false;
+  }
+
+  private syncUnit(id: string): void {
+    const u = this.state.units.find((x) => x.id === id);
+    const m = this.units.get(id) ?? (u ? this.ensureUnit(u) : undefined);
+    if (!u || !m) return;
+    if (!u.pos) {
+      m.root.setEnabled(false);
+      return;
+    }
+    m.root.position = cellWorld(u.pos, groundHeight(this.state.map, u.pos));
+    applyPose(m, u.stance, u.weaponState, u.status);
+  }
+
+  private face(m: UnitModel, from: Vector3, to: Vector3): void {
+    if (Math.abs(to.x - from.x) + Math.abs(to.z - from.z) > 1e-3) m.root.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+  }
+
+  private async animateMove(id: string, path: Cell[], mode: string): Promise<void> {
+    const m = this.units.get(id);
+    const u = this.state.units.find((x) => x.id === id);
+    if (!m || !u) return;
+    const per = mode === 'fast' ? 110 : mode === 'careful' ? 230 : 160;
+    const enemyVisibleNow = u.side !== this.viewSide;
+    for (let i = 1; i < path.length; i++) {
+      const a = cellWorld(path[i - 1], groundHeight(this.state.map, path[i - 1]));
+      const b = cellWorld(path[i], groundHeight(this.state.map, path[i]));
+      this.face(m, a, b);
+      if (enemyVisibleNow) m.root.setEnabled(path[i].z <= this.viewLevel && this.visibleCellForViewer(path[i]));
+      const legL = m.legL.parent!;
+      const legR = m.legR.parent!;
+      await this.anim.tween(per, (t) => {
+        m.root.position = Vector3.Lerp(a, b, t);
+        if (u.stance === 'standing') {
+          const sw = Math.sin(t * Math.PI * 2) * 0.5;
+          (legL as any).rotation.x = sw;
+          (legR as any).rotation.x = -sw;
+        }
+      });
+    }
+    applyPose(m, u.stance, u.weaponState, u.status);
+    if (u.side === this.viewSide) this.select(u);
+  }
+
+  /** Чи видно клітинку глядачу (для показу руху противника). */
+  private visibleCellForViewer(c: Cell): boolean {
+    const contact = Object.values(this.state.contacts[this.viewSide]).find((k) => k.pos.x === c.x && k.pos.y === c.y && k.pos.z === c.z && k.visible);
+    return !!contact || this.state.revealAll;
+  }
+
+  private async animateFire(e: Extract<SimEvent, { t: 'fired' }>): Promise<void> {
+    const m = this.units.get(e.unitId);
+    const from = pointWorld(e.from);
+    if (m && e.shots.length) this.face(m, m.root.position, pointWorld(e.shots[0].to));
+    const shooterShown = this.isShown(e.unitId);
+    for (const sh of e.shots) {
+      const to = pointWorld(sh.to);
+      const flash = CreateSphere('flash', { diameter: 0.22, segments: 4 }, this.scene);
+      flash.material = this.fxMat;
+      flash.position = from;
+      flash.isPickable = false;
+      flash.setEnabled(shooterShown);
+      const len = Vector3.Distance(from, to);
+      const g = new GeoBuilder().box(0, 0, len / 2, 0.035, 0.035, len, [1, 0.9, 0.4]);
+      const tracer = g.build('tracer', this.scene, this.fxMat);
+      tracer.isPickable = false;
+      tracer.position = from;
+      tracer.lookAt(to);
+      const impact = new GeoBuilder();
+      for (let i = 0; i < 4; i++) impact.box((Math.random() - 0.5) * 0.2, Math.random() * 0.15, (Math.random() - 0.5) * 0.2, 0.06, 0.06, 0.06, sh.hitUnit ? [0.8, 0.1, 0.1] : [0.75, 0.7, 0.6]);
+      const puff = impact.build('impact', this.scene, this.fxMat);
+      puff.position = to;
+      puff.isPickable = false;
+      await this.anim.tween(70, (t) => {
+        tracer.scaling.z = t;
+      });
+      flash.dispose();
+      await this.anim.tween(70, (t) => {
+        tracer.scaling.z = 1 - t;
+        tracer.position = Vector3.Lerp(from, to, t);
+        puff.scaling.setAll(1 + t);
+      });
+      tracer.dispose();
+      puff.dispose();
+    }
+    await this.anim.wait(80);
+  }
+
+  private async animateGrenade(from: Point, to: Point): Promise<void> {
+    const a = pointWorld(from);
+    const b = pointWorld(to);
+    const g = CreateSphere('nade', { diameter: 0.14, segments: 4 }, this.scene);
+    const mat = makeMaterial(this.scene, 'nadeMat');
+    mat.diffuseColor = new Color3(0.2, 0.25, 0.15);
+    g.material = mat;
+    const hgt = Math.max(1.5, Vector3.Distance(a, b) * 0.35);
+    await this.anim.tween(450, (t) => {
+      const p = Vector3.Lerp(a, b, t);
+      p.y += Math.sin(t * Math.PI) * hgt;
+      g.position = p;
+    });
+    g.dispose();
+    mat.dispose();
+  }
+
+  private async animateExplosion(at: Point, radius: number): Promise<void> {
+    const p = pointWorld(at);
+    const ball = CreateSphere('boom', { diameter: 1, segments: 8 }, this.scene);
+    const mat = makeMaterial(this.scene, 'boomMat', 0.9, true);
+    mat.emissiveColor = new Color3(1, 0.55, 0.15);
+    ball.material = mat;
+    ball.position = p;
+    const debris = new GeoBuilder();
+    const dirs: Vector3[] = [];
+    for (let i = 0; i < 14; i++) {
+      debris.box(0, 0, 0, 0.08, 0.08, 0.08, [0.3, 0.27, 0.22]);
+      dirs.push(new Vector3(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize());
+    }
+    const parts: Mesh[] = dirs.map((_, i) => {
+      const m = new GeoBuilder().box(0, 0, 0, 0.09, 0.09, 0.09, [0.28 + i * 0.01, 0.25, 0.2]).build('deb', this.scene, this.fxMat);
+      m.position = p.clone();
+      return m;
+    });
+    await this.anim.tween(380, (t) => {
+      ball.scaling.setAll(radius * 1.6 * ease(t));
+      mat.alpha = 0.9 * (1 - t);
+      parts.forEach((m, i) => {
+        m.position = p.add(dirs[i].scale(t * radius * 1.2));
+        m.position.y += -t * t * 0.8;
+      });
+    });
+    ball.dispose();
+    mat.dispose();
+    parts.forEach((m) => m.dispose());
+  }
+
+  private async animateReload(id: string): Promise<void> {
+    const m = this.units.get(id);
+    if (!m) return;
+    const y0 = m.weapon.position.y;
+    await this.anim.tween(300, (t) => (m.weapon.position.y = y0 - Math.sin(t * Math.PI) * 0.12));
+  }
+
+  /** Знімок поточних ключів клітинок під бійцями (для UI). */
+  unitAtCellKey(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const u of this.state.units) if (u.pos && u.status === 'active') map.set(cellKey(u.pos), u.id);
+    return map;
+  }
+}

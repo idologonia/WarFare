@@ -24,19 +24,19 @@ describe('хід і команди', () => {
     const m = freshMission(5);
     const blue = m.state.units.filter((u) => u.side === 'blue');
     expect(blue.every((u) => u.pos === null)).toBe(true);
-    expect(m.dispatch({ type: 'deploy', unitId: blue[0].id, cell: { x: 10, y: 21, z: 0 } }).ok).toBe(true);
+    expect(m.dispatch({ type: 'deploy', unitId: blue[0].id, cell: { x: 10, y: 28, z: 0 } }).ok).toBe(true);
     expect(m.dispatch({ type: 'deploy', unitId: blue[1].id, cell: { x: 10, y: 5, z: 0 } }).ok).toBe(false);
     expect(m.dispatch({ type: 'startBattle' }).ok).toBe(true);
     expect(m.state.turn.phase).toBe('battle');
     const u = blue[0];
     const ap = u.ap;
     expect(ap).toBeGreaterThan(0);
-    const r = m.dispatch({ type: 'move', unitId: u.id, to: { x: 10, y: 19, z: 0 }, mode: 'standard' });
+    const r = m.dispatch({ type: 'move', unitId: u.id, to: { x: 10, y: 26, z: 0 }, mode: 'standard' });
     expect(r.ok).toBe(true);
     expect(u.ap).toBe(ap - 20);
     expect(m.dispatch({ type: 'endTurn' }).ok).toBe(true);
     expect(m.state.turn.side).toBe('red');
-    expect(m.dispatch({ type: 'move', unitId: u.id, to: { x: 10, y: 18, z: 0 }, mode: 'standard' }).ok).toBe(false);
+    expect(m.dispatch({ type: 'move', unitId: u.id, to: { x: 10, y: 25, z: 0 }, mode: 'standard' }).ok).toBe(false);
   });
 
   it('режими руху мають різну вартість; швидкий — лише стоячи', () => {
@@ -77,8 +77,8 @@ describe('хід і команди', () => {
     m.dispatch({ type: 'startBattle' });
     const s = m.state;
     const [a, d] = s.units.filter((u) => u.side === 'blue');
-    place(a, { x: 2, y: 22, z: 0 });
-    place(d, { x: 3, y: 22, z: 0 });
+    place(a, { x: 2, y: 30, z: 0 });
+    place(d, { x: 3, y: 30, z: 0 });
     d.status = 'dead';
     d.health = 0;
     a.ap = 100;

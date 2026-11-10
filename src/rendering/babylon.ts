@@ -1,0 +1,21 @@
+/** Вибіркові імпорти Babylon.js (менший бандл, ніж імпорт усього пакета). */
+export { Engine } from '@babylonjs/core/Engines/engine';
+export { Scene } from '@babylonjs/core/scene';
+export { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+export { Camera } from '@babylonjs/core/Cameras/camera';
+export { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+export { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+export { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
+export { Mesh } from '@babylonjs/core/Meshes/mesh';
+export { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+export { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+export { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
+export { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder';
+export { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+export { Vector3, Matrix } from '@babylonjs/core/Maths/math.vector';
+export { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+export type { AbstractEngine } from '@babylonjs/core/Engines/abstractEngine';
+export type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import '@babylonjs/core/Culling/ray';
+import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
+import '@babylonjs/core/Rendering/edgesRenderer';
