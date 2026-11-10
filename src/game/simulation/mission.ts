@@ -2,7 +2,8 @@ import { Rng } from '@/core/rng';
 import { cellKey, sameCell, toTenths, type Cell } from '@/core/grid';
 import { GAME_VERSION, SCHEMA_VERSION } from '@/core/version';
 import { content, itemDef } from '@/content';
-import { buildMap, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
+import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
+import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
@@ -270,6 +271,55 @@ export class Mission {
         const defId = g.item.defId;
         consume(u, g);
         resolveGrenade(ctx, u, defId, cmd.cell);
+        return null;
+      }
+
+      case 'launch': {
+        if (u.carrying) return 'Руки зайняті пораненим';
+        if (cmd.kind === 'rpg') {
+          const l = launcherOf(u);
+          if (!l) return 'Немає гранатомета';
+          if (!l.loaded) return 'Гранатомет не заряджено';
+          if (u.stance === 'prone') return 'З РПГ не стріляють лежачи — сядьте або встаньте';
+          if (!cellAt(s.map, cmd.cell)) return 'Ціль поза картою';
+          const e = spend(R.launcher.rpgAp);
+          if (e) return e;
+          u.inventory.secondary!.magazine = null;
+          resolveRocket(ctx, u, cmd.cell, l.def);
+        } else if (cmd.kind === 'disposable') {
+          const f = findDisposable(u);
+          if (!f) return 'Немає одноразового гранатомета';
+          if (u.stance === 'prone') return 'З гранатомета не стріляють лежачи — сядьте або встаньте';
+          if (!cellAt(s.map, cmd.cell)) return 'Ціль поза картою';
+          // Дістати з рюкзака й розкласти — +1 AP.
+          const e = spend(R.launcher.rpgAp + (f.where === 'backpack' ? 1 : 0));
+          if (e) return e;
+          if (f.where === 'backpack') u.inventory.backpackItems.splice(f.index, 1);
+          else u.inventory.secondary = null;
+          resolveRocket(ctx, u, cmd.cell, f.def);
+        } else {
+          if (!hasUnderbarrel(u)) return 'Немає підствольного модуля';
+          const ammo = uglAmmo(u);
+          if (!ammo) return 'Немає пострілів до підствольника';
+          if (!canLobTo(s, u, cmd.cell)) return 'Не дістати сюди';
+          const e = spend(R.launcher.uglAp + (ammo.where === 'backpack' ? 2 : 0));
+          if (e) return e;
+          takeUglAmmo(u, ammo);
+          resolveUgl(ctx, u, cmd.cell);
+        }
+        return null;
+      }
+
+      case 'reloadLauncher': {
+        const l = launcherOf(u);
+        if (!l) return 'Немає гранатомета';
+        if (l.loaded) return 'Вже заряджено';
+        if (!findRocket(u)) return 'Немає пострілів';
+        const e = spend(R.launcher.rpgReload);
+        if (e) return e;
+        reloadLauncher(u);
+        ctx.ev.push({ t: 'reload', unitId: u.id });
+        float(ctx, u.id, 'Гранатомет заряджено', 'info');
         return null;
       }
 

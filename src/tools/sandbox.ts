@@ -55,7 +55,7 @@ export function sandboxTeleport(s: MissionState, unitId: string, cell: Cell): st
 }
 
 export function sandboxWeapons(): WeaponDefinition[] {
-  return [...content().items.values()].filter((d) => d.kind === 'weapon') as WeaponDefinition[];
+  return [...content().items.values()].filter((d) => d.kind === 'weapon' && (d as WeaponDefinition).category !== 'launcher') as WeaponDefinition[];
 }
 
 /** Видати зброю з повним магазином і трьома запасними. */

@@ -20,6 +20,7 @@ export function validateMods(weaponId: string, mods: string[]): string[] {
     if (!(w.mods ?? []).includes(id)) errors.push(`${m.name} несумісний з ${w.name}`);
     if (slots.has(m.slot)) errors.push(`${m.name} і ${modDef(slots.get(m.slot)!).name} займають одне місце`);
     slots.set(m.slot, id);
+    for (const ex of m.excludes ?? []) if (mods.includes(ex) && mods.indexOf(ex) > mods.indexOf(id)) errors.push(`${m.name} і ${modDef(ex).name} не ставляться разом`);
     for (const req of m.requires) {
       const ok = req === 'rail' ? w.rail || mods.includes('rail') : mods.includes(req);
       if (!ok) errors.push(`${m.name} потребує: ${req === 'rail' ? 'планки Пікатінні' : modDef(req).name}`);

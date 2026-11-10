@@ -2,6 +2,7 @@ import { content } from '@/content';
 import { dist2d, fmtAp, sameCell, type Cell } from '@/core/grid';
 import { AiPlanner } from '@/game/ai/ai';
 import { blindOrigin, canThrowTo, grenadeRange } from '@/game/combat/fire';
+import { canLobTo, countDisposable, findRocket, hasUnderbarrel, launcherOf, rpgScatter, uglAmmo, uglScatter } from '@/game/combat/launcher';
 import { estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, planPath, unitReachable } from '@/game/combat/movement';
 import { ammoSummary, countItems, primaryDef } from '@/game/inventory/inventory';
@@ -24,6 +25,7 @@ type Pending =
   | { kind: 'move'; cell: Cell; path: Cell[]; cost: number }
   | { kind: 'fire'; targetId?: string; cell?: Cell }
   | { kind: 'throw'; cell: Cell }
+  | { kind: 'launch'; cell: Cell; mode: 'rpg' | 'ugl' | 'disposable' }
   | null;
 
 const STANCE: Record<Stance, string> = { standing: 'Стоячи', crouched: 'Сидячи', prone: 'Лежачи' };
@@ -45,6 +47,7 @@ export class Battle {
   private moveMode: MoveMode = 'standard';
   private fireMode: FireMode | null = null;
   private throwMode = false;
+  private launchMode: 'rpg' | 'ugl' | 'disposable' | null = null;
   private pending: Pending = null;
   private busy = false;
   private ai = new AiPlanner(Date.now() & 0xffff);
@@ -166,6 +169,7 @@ export class Battle {
     if (!this.isHumanTurn() || this.busy) return;
     this.fireMode = null;
     this.throwMode = false;
+    this.launchMode = null;
     await this.exec({ type: 'endTurn' });
     if (this.s.turn.phase !== 'battle') return;
     if (this.isAiTurn()) await this.runAi();
@@ -391,6 +395,7 @@ export class Battle {
     this.pending = null;
     this.fireMode = null;
     this.throwMode = false;
+    this.launchMode = null;
     if (u.pos) this.r.focus(u.pos);
     this.autoView();
     this.refresh();
@@ -401,7 +406,7 @@ export class Battle {
     const cell = this.r.pickCell(x, y);
     const u = this.selected();
     this.r.setCursor(cell);
-    if (!cell || !u?.pos || !this.isHumanTurn() || this.s.turn.phase !== 'battle' || this.fireMode || this.throwMode) {
+    if (!cell || !u?.pos || !this.isHumanTurn() || this.s.turn.phase !== 'battle' || this.fireMode || this.throwMode || this.launchMode) {
       this.r.setPath([], [1, 1, 1]);
       return;
     }
@@ -447,6 +452,18 @@ export class Battle {
     const u = this.selected();
     if (!u || !isActive(u)) return;
 
+    // Гранатомет: ціль — клітинка або клітинка бійця.
+    if (this.launchMode) {
+      const target = clickedUnit?.pos ?? cell;
+      if (!target) return;
+      if (this.pending?.kind === 'launch' && sameCell(this.pending.cell, target)) void this.confirm();
+      else {
+        this.pending = { kind: 'launch', cell: target, mode: this.launchMode };
+        this.r.setCursor(target, [1, 0.35, 0.15]);
+        this.refresh();
+      }
+      return;
+    }
     // Ціль — ворожий боєць.
     if (clickedUnit && clickedUnit.side !== u.side) {
       if (!this.fireMode) this.fireMode = primaryDef(u)?.modes[0] ?? 'snap';
@@ -500,6 +517,7 @@ export class Battle {
     else {
       this.fireMode = null;
       this.throwMode = false;
+    this.launchMode = null;
     }
     this.r.setPath([], [1, 1, 1]);
     this.r.setCursor(null);
@@ -512,7 +530,9 @@ export class Battle {
     if (!u || !p || this.busy) return;
     if (p.kind === 'move') await this.exec({ type: 'move', unitId: u.id, to: p.cell, mode: this.moveMode });
     else if (p.kind === 'fire') await this.exec({ type: 'fire', unitId: u.id, target: p.targetId ? { unitId: p.targetId } : { cell: p.cell }, mode: this.fireMode ?? 'snap' });
-    else if (p.kind === 'throw') {
+    else if (p.kind === 'launch') {
+      if (await this.exec({ type: 'launch', unitId: u.id, kind: p.mode, cell: p.cell })) this.launchMode = null;
+    } else if (p.kind === 'throw') {
       if (await this.exec({ type: 'throw', unitId: u.id, cell: p.cell })) this.throwMode = false;
     }
     this.r.setCursor(null);
@@ -646,7 +666,18 @@ export class Battle {
       r.setOverlay('reach', cells.map((cell) => ({ cell, color: [1, 0.55, 0.2] })), { alpha: 0.3 });
       return;
     }
-    if (this.fireMode) {
+    if (this.launchMode === 'ugl') {
+      const cells: Cell[] = [];
+      const rng = content().rules.launcher.uglRange;
+      for (let y = u.pos.y - rng; y <= u.pos.y + rng; y++)
+        for (let x = u.pos.x - rng; x <= u.pos.x + rng; x++) {
+          const c = { x, y, z: u.pos.z };
+          if (canLobTo(s, u, c)) cells.push(c);
+        }
+      r.setOverlay('reach', cells.map((cell) => ({ cell, color: [1, 0.4, 0.2] as [number, number, number] })), { alpha: 0.25 });
+      return;
+    }
+    if (this.fireMode || this.launchMode) {
       r.setOverlay('reach', []);
       return;
     }
@@ -785,6 +816,19 @@ export class Battle {
       }
     } else if (p.kind === 'move') {
       content2 = h('div', {}, h('div', { class: 'muted' }, MOVE[this.moveMode]), h('div', { class: 'big' }, `${fmtAp(p.cost)} AP`), h('div', { class: 'muted' }, `Залишиться ${fmtAp(u.ap - p.cost)} AP · ${p.path.length - 1} кл.`));
+    } else if (p.kind === 'launch') {
+      const L = content().rules.launcher;
+      const sc = p.mode === 'ugl' ? uglScatter(u, p.cell) : rpgScatter(u, p.cell);
+      const d = dist2d(u.pos, p.cell);
+      content2 = h(
+        'div',
+        {},
+        h('div', { class: 'muted' }, p.mode === 'rpg' ? 'РПГ-7 · прямий постріл' : p.mode === 'disposable' ? 'Bulspike · одноразовий, прямий постріл' : 'Підствольник · навісний постріл'),
+        h('div', { class: 'big' }, `${fmtAp((p.mode === 'ugl' ? L.uglAp : L.rpgAp) * 10)} AP`),
+        h('div', { class: 'muted' }, `Відстань ${d.toFixed(1)} кл. · відхилення ≈ ${sc.toFixed(1)} кл.`),
+        p.mode !== 'ugl' && d < L.armDistance ? h('div', { class: 'neg' }, 'Замало — підривник не встигне звестися') : null,
+        h('div', { class: 'muted' }, p.mode !== 'ugl' ? 'Вибухає при першому влучанні: боєць, стіна або земля. Пробиває тонкі стіни.' : 'Осколковий вибух у точці падіння.'),
+      );
     } else if (p.kind === 'throw') {
       content2 = h('div', {}, h('div', { class: 'muted' }, 'Граната'), h('div', { class: 'big' }, `${fmtAp(content().rules.actions.throw * 10)} AP`), h('div', { class: 'muted' }, `Відстань ${dist2d(u.pos, p.cell).toFixed(1)} кл.; можливе відхилення`));
     }
@@ -836,6 +880,8 @@ export class Battle {
               this.moveMode = m;
               this.fireMode = null;
               this.throwMode = false;
+              this.launchMode = null;
+    this.launchMode = null;
               this.pending = null;
               this.r.setPath([], [1, 1, 1]);
               this.refresh();
@@ -856,6 +902,8 @@ export class Battle {
             btn(`${FIRE[fm]} ${fmtAp(fireApCost(u, fm))}`, () => {
               this.fireMode = this.fireMode === fm ? null : fm;
               this.throwMode = false;
+              this.launchMode = null;
+    this.launchMode = null;
               if (this.pending?.kind !== 'fire') this.pending = null;
               this.r.setPath([], [1, 1, 1]);
               this.refresh();
@@ -871,6 +919,7 @@ export class Battle {
             this.pending = null;
             this.refresh();
           }, { on: this.throwMode, disabled: !can || !countItems(u, (d) => d.kind === 'grenade') }),
+          ...this.launcherButtons(u, can),
           btn('Спостереження', run({ type: 'overwatch', unitId: u.id }), { disabled: !can, title: 'Overwatch: резерв усіх AP для реакції' }),
           btn('Медицина', () => this.openMedical(), { disabled: !u.pos }),
           btn('Інвентар', () => this.openInventory()),
@@ -882,6 +931,26 @@ export class Battle {
     acts.append(group('Хід', btn('Кінець ходу', () => void this.endTurn(), { cls: 'primary', disabled: !this.isHumanTurn() || this.busy })));
     bar2.append(acts);
     this.hud.append(bar2);
+  }
+
+  private launcherButtons(u: Unit, can: boolean): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    const toggle = (m: 'rpg' | 'ugl' | 'disposable') => () => {
+      this.launchMode = this.launchMode === m ? null : m;
+      this.fireMode = null;
+      this.throwMode = false;
+      this.pending = null;
+      this.refresh();
+    };
+    const l = launcherOf(u);
+    if (l) {
+      out.push(btn(`РПГ ${l.loaded ? '' : '(порожній)'}`, toggle('rpg'), { on: this.launchMode === 'rpg', disabled: !can || !l.loaded }));
+      if (!l.loaded) out.push(btn(`Зарядити РПГ (${findRocket(u) ? 'є' : 'немає'})`, () => void this.exec({ type: 'reloadLauncher', unitId: u.id }), { disabled: !can || !findRocket(u) }));
+    }
+    const nd = countDisposable(u);
+    if (nd) out.push(btn(`Bulspike (${nd})`, toggle('disposable'), { on: this.launchMode === 'disposable', disabled: !can, title: 'Одноразовий гранатомет' }));
+    if (hasUnderbarrel(u)) out.push(btn(`Підствольник (${countItems(u, (d) => d.id === 'vog')})`, toggle('ugl'), { on: this.launchMode === 'ugl', disabled: !can || !uglAmmo(u) }));
+    return out;
   }
 
   private pickUpButton(u: Unit, can: boolean): HTMLElement | null {

@@ -24,6 +24,8 @@ export interface ClassKit {
   primary: string;
   primaryMag?: string;
   primaryMods?: string[];
+  secondary?: string;
+  secondaryMag?: string;
   armor?: string;
   helmet?: string;
   rig?: string;

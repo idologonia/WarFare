@@ -158,16 +158,70 @@
   {
    "id": "grenadier1",
    "name": "Стрілець-гранатометник №1",
-   "planned": true,
-   "statMods": {},
-   "kit": null
+   "statMods": {
+    "strength": 8
+   },
+   "kit": {
+    "primary": "ak74",
+    "secondary": "rpg7",
+    "secondaryMag": "pg7",
+    "armor": "plate_carrier",
+    "helmet": "helmet_basic",
+    "rig": "belt_ranger",
+    "backpack": "pack_small",
+    "pouches": [
+     "mag_ak545_30",
+     "mag_ak545_30",
+     "mag_ak545_30"
+    ],
+    "belt": [
+     "rgd5",
+     "med_tourniquet",
+     "med_bandage"
+    ],
+    "backpackItems": [
+     "pg7",
+     "med_packing"
+    ]
+   }
   },
   {
    "id": "grenadier2",
    "name": "Стрілець-гранатометник №2",
-   "planned": true,
-   "statMods": {},
-   "kit": null
+   "statMods": {
+    "strength": 5
+   },
+   "kit": {
+    "primary": "ak74",
+    "primaryMods": [
+     "underbarrel"
+    ],
+    "armor": "plate_carrier",
+    "helmet": "helmet_basic",
+    "rig": "belt_ranger",
+    "backpack": "pack_small",
+    "pouches": [
+     "mag_ak545_30",
+     "mag_ak545_30",
+     "mag_ak545_30",
+     "vog",
+     "vog",
+     "vog"
+    ],
+    "belt": [
+     "med_tourniquet",
+     "med_bandage"
+    ],
+    "backpackItems": [
+     "bulspike",
+     "pg7",
+     "pg7",
+     "vog",
+     "vog",
+     "med_packing",
+     "med_seal"
+    ]
+   }
   },
   {
    "id": "driver",

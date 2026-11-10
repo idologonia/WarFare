@@ -62,7 +62,10 @@
    "effects": {
     "recoil": -3,
     "snap": 2
-   }
+   },
+   "excludes": [
+    "underbarrel"
+   ]
   },
   {
    "id": "underbarrel",
@@ -70,8 +73,10 @@
    "slot": "underbarrel",
    "weight": 1.5,
    "requires": [],
-   "planned": true,
-   "effects": {}
+   "effects": {},
+   "excludes": [
+    "foregrip"
+   ]
   }
  ]
 }

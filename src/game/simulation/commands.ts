@@ -14,6 +14,8 @@ export type Command =
   | { type: 'reload'; unitId: string }
   | { type: 'throw'; unitId: string; cell: Cell }
   | { type: 'overwatch'; unitId: string }
+  | { type: 'launch'; unitId: string; kind: 'rpg' | 'ugl' | 'disposable'; cell: Cell }
+  | { type: 'reloadLauncher'; unitId: string }
   | { type: 'treat'; unitId: string; patientId: string; effect: MedicalEffect; injuryId: string | null }
   | { type: 'pickUp'; unitId: string; targetId: string }
   | { type: 'drop'; unitId: string }

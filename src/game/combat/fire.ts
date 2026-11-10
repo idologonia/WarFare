@@ -232,33 +232,47 @@ export function resolveGrenade(ctx: Ctx, u: Unit, defId: string, target: Cell): 
   const from = eyePoint(s, u.pos!, 'standing');
   const at = cellCenter(land, groundHeight(s.map, land) + 0.15);
   ctx.ev.push({ t: 'grenade', unitId: u.id, from, to: at });
-  ctx.ev.push({ t: 'explosion', at, radius: g.radius });
   u.stats_mission.grenades++;
+  explode(ctx, land, at, { radius: g.radius, damage: g.damage, fragments: g.fragments, objectDamage: g.damage }, u);
+}
 
-  // Бійці: стіни захищають, шкода спадає з відстанню, кілька осколків.
+export interface Blast {
+  radius: number;
+  damage: number;
+  fragments: number;
+  /** Шкода оточенню в епіцентрі (до множника матеріалу). */
+  objectDamage: number;
+}
+
+/**
+ * Вибух у клітинці: осколки по бійцях (стіни захищають, шкода спадає з відстанню), придушення,
+ * руйнування об'єктів і тонких стін у радіусі.
+ */
+export function explode(ctx: Ctx, land: Cell, at: Point, b: Blast, attacker: Unit | null): void {
+  const s = ctx.s;
+  ctx.ev.push({ t: 'explosion', at, radius: b.radius });
   for (const v of s.units) {
     if (!onField(v) || v.pos!.z !== land.z) continue;
     const dd = dist2d(v.pos!, land);
-    if (dd > g.radius) continue;
+    if (dd > b.radius) continue;
     const tp = targetPoints(s, v.pos!, v.stance)[0];
     if (dd > 0.1 && trace(s.map, at, tp, { skipStart: land, skipEnd: v.pos! }).blocked) continue;
-    const k = 1 - dd / (g.radius + 0.5);
-    const frags = Math.max(1, Math.round(g.fragments * k + ctx.rng.next()));
-    const per = (g.damage * k * (v.stance === 'prone' ? 0.7 : 1)) / Math.sqrt(frags);
+    const k = 1 - dd / (b.radius + 0.5);
+    const frags = Math.max(1, Math.round(b.fragments * k + ctx.rng.next()));
+    const per = (b.damage * k * (v.stance === 'prone' ? 0.7 : 1)) / Math.sqrt(frags);
     for (let i = 0; i < frags && onField(v) && v.status !== 'dead'; i++) {
-      applyHit(ctx, v, per, 2, 'shrapnel', { attacker: v.side === u.side ? undefined : u });
+      applyHit(ctx, v, per, 2, 'shrapnel', { attacker: attacker && v.side !== attacker.side ? attacker : undefined });
     }
     if (v.status === 'active') v.suppression = Math.min(100, v.suppression + 40);
   }
-  // Оточення.
-  const rad = Math.ceil(g.radius);
+  const rad = Math.ceil(b.radius);
   for (let y = land.y - rad; y <= land.y + rad; y++)
     for (let x = land.x - rad; x <= land.x + rad; x++) {
       const c = { x, y, z: land.z };
       const dd = dist2d(c, land);
       const cl = cellAt(s.map, c);
-      if (dd > g.radius || !cl) continue;
-      const amount = g.damage * (1 - dd / (g.radius + 0.5));
+      if (dd > b.radius || !cl) continue;
+      const amount = b.objectDamage * (1 - dd / (b.radius + 0.5));
       for (const side of Object.keys(cl.edges ?? {}) as EdgeSide[]) damageEdge(ctx, c, side, amount, true);
       if (cl.object) damageObject(ctx, c, amount, true);
     }

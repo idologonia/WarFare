@@ -85,6 +85,11 @@ export function buildInventory(kit: ClassKit, id: IdGen): Inventory {
   const wd = itemDef<WeaponDefinition>(kit.primary);
   w.magazine = createItem(kit.primaryMag ?? wd.magazines[0], id) as MagazineInstance;
   w.mods = [...(kit.primaryMods ?? [])];
+  if (kit.secondary) {
+    const sw = createItem(kit.secondary, id) as WeaponInstance;
+    sw.magazine = createItem(kit.secondaryMag ?? itemDef<WeaponDefinition>(kit.secondary).magazines[0], id) as MagazineInstance;
+    inv.secondary = sw;
+  }
   inv.primary = w;
   const cap = pouchCapacity(inv);
   for (const m of kit.pouches) {

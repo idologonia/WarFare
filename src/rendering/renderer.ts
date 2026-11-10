@@ -454,6 +454,9 @@ export class Renderer {
         case 'grenade':
           await this.animateGrenade(e.from, e.to);
           break;
+        case 'rocket':
+          await this.animateRocket(e.from, e.to);
+          break;
         case 'explosion':
           await this.animateExplosion(e.at, e.radius);
           break;
@@ -596,6 +599,28 @@ export class Renderer {
     });
     g.dispose();
     mat.dispose();
+  }
+
+  private async animateRocket(from: Point, to: Point): Promise<void> {
+    const a = pointWorld(from);
+    const b = pointWorld(to);
+    const rocket = new GeoBuilder().box(0, 0, 0, 0.08, 0.08, 0.32, [0.25, 0.3, 0.2]).build('rocket', this.scene, this.fxMat);
+    rocket.lookAt(b.subtract(a));
+    const smoke: Mesh[] = [];
+    const len = Vector3.Distance(a, b);
+    await this.anim.tween(Math.max(150, len * 35), (t) => {
+      const p = Vector3.Lerp(a, b, t);
+      rocket.position = p;
+      rocket.lookAt(b);
+      if (smoke.length < 24 && Math.random() < 0.6) {
+        const puff = new GeoBuilder().box(0, 0, 0, 0.12, 0.12, 0.12, [0.75, 0.75, 0.72], 0.6).build('smoke', this.scene, this.overlayMat);
+        puff.hasVertexAlpha = true;
+        puff.position = p.clone();
+        smoke.push(puff);
+      }
+    });
+    rocket.dispose();
+    void this.anim.tween(500, (t) => smoke.forEach((m) => m.scaling.setAll(1 + t * 2))).then(() => smoke.forEach((m) => m.dispose()));
   }
 
   private async animateExplosion(at: Point, radius: number): Promise<void> {

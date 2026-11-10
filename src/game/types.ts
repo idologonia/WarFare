@@ -97,6 +97,10 @@ export interface WeaponDefinition extends ItemDefinitionBase {
   /** Віддача: додається до штрафу кожної наступної кулі черги. */
   recoil?: number;
   suppression: number;
+  /** Одноразовий гранатомет: заряджений, після пострілу викидається. */
+  disposable?: boolean;
+  /** Гранатомет: параметри вибуху пострілу. */
+  blast?: { radius: number; damage: number; fragments: number; objectDamage: number };
 }
 
 export interface WeaponModEffects {
@@ -116,6 +120,8 @@ export interface WeaponModDefinition {
   slot: 'rail' | 'optic' | 'magnifier' | 'grip' | 'underbarrel';
   weight: number;
   requires: string[];
+  /** Несумісні одночасно модифікації. */
+  excludes?: string[];
   planned?: boolean;
   effects: WeaponModEffects;
 }

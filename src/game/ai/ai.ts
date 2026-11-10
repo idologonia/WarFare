@@ -1,10 +1,11 @@
 import { Rng } from '@/core/rng';
 import { dist2d, sameCell, toTenths, type Cell } from '@/core/grid';
 import { content, itemDef } from '@/content';
-import { cellsInZone, groundHeight } from '@/game/maps/map';
+import { cellsInZone, groundHeight, isIndoor } from '@/game/maps/map';
 import { findItem, findMedical, findReloadMagazine, primaryDef } from '@/game/inventory/inventory';
 import { canSelfApply, treatmentOptions } from '@/game/injuries/injuries';
 import { canThrowTo } from '@/game/combat/fire';
+import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, uglAmmo } from '@/game/combat/launcher';
 import { coverAgainst, effectiveCover, estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, unitReachable } from '@/game/combat/movement';
 import { canSeeFrom } from '@/game/visibility/visibility';
@@ -128,6 +129,25 @@ export class AiPlanner {
     if (retreating) {
       const cell = this.bestCell(s, u, known, u.ap, 'retreat');
       if (cell && !sameCell(cell, u.pos!)) return { type: 'move', unitId: u.id, to: cell, mode: 'standard' };
+    }
+
+    // 3б. Гранатомети: РПГ — по цілі в укритті/будівлі; підствольник — навісом по укриттю.
+    const L = R.launcher;
+    const lau = launcherOf(u);
+    if (lau && !lau.loaded && findRocket(u) && u.ap >= toTenths(L.rpgReload) && (visible.length === 0 || u.ap >= toTenths(L.rpgReload + L.rpgAp)))
+      return { type: 'reloadLauncher', unitId: u.id };
+    for (const k of visible) {
+      const d = dist2d(u.pos!, k.pos);
+      const cover = coverAgainst(s, k.pos, u.pos!);
+      const allyNear = sideUnits(s, u.side).some((a) => a.pos && isActive(a) && a !== u && a.pos.z === k.pos.z && dist2d(a.pos, k.pos) <= 3);
+      if (allyNear || d < 4) continue;
+      const roll = this.rng.chance(s.scenario.difficulty === 'easy' ? 25 : 55);
+      if (lau?.loaded && u.stance !== 'prone' && d <= 18 && (cover >= 1 || isIndoor(s.map, k.pos)) && u.ap >= toTenths(L.rpgAp) && roll)
+        return { type: 'launch', unitId: u.id, kind: 'rpg', cell: k.pos };
+      if (!lau?.loaded && findDisposable(u) && u.stance !== 'prone' && d <= 15 && (cover >= 1 || isIndoor(s.map, k.pos)) && u.ap >= toTenths(L.rpgAp + 1) && roll)
+        return { type: 'launch', unitId: u.id, kind: 'disposable', cell: k.pos };
+      if (hasUnderbarrel(u) && uglAmmo(u) && cover >= 1 && canLobTo(s, u, k.pos) && u.ap >= toTenths(L.uglAp + 2) && roll)
+        return { type: 'launch', unitId: u.id, kind: 'ugl', cell: k.pos };
     }
 
     // 4. Граната по цілі в укритті.

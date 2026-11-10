@@ -45,6 +45,7 @@ export type SimEvent =
   | { t: 'status'; unitId: string; status: UnitStatus }
   | { t: 'object'; cell: Cell; defId: string | null }
   | { t: 'grenade'; unitId: string; from: Point; to: Point }
+  | { t: 'rocket'; unitId: string; from: Point; to: Point }
   | { t: 'explosion'; at: Point; radius: number }
   | { t: 'reload'; unitId: string }
   | { t: 'overwatch'; unitId: string }
