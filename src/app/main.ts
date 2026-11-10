@@ -201,7 +201,7 @@ class App {
       const mode: BattleMode = s.revealAll ? 'test' : s.controllers.red === 'ai' || s.controllers.blue === 'ai' ? 'ai' : 'hotseat';
       this.startBattle(new Mission(s), mode);
     } catch (e) {
-      alert((e as Error).message);
+      this.note((e as Error).message);
     }
   }
 
@@ -235,7 +235,7 @@ class App {
         const mode: BattleMode = s.revealAll ? 'test' : s.controllers.red === 'ai' || s.controllers.blue === 'ai' ? 'ai' : 'hotseat';
         this.startBattle(new Mission(s), mode);
       } catch (e) {
-        alert(`Не вдалося імпортувати: ${(e as Error).message}`);
+        this.note(`Не вдалося імпортувати: ${(e as Error).message}`);
       }
     });
     input.click();
