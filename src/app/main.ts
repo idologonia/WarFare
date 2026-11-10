@@ -1,9 +1,13 @@
 import '@/ui/styles.css';
-import { content } from '@/content';
+import { BUILTIN_IDS, content } from '@/content';
+import { deleteFromLibrary, loadLibrary } from '@/persistence/library';
+import { MapEditor } from '@/tools/mapEditor';
+import { fromDefinition, type EditMap } from '@/tools/mapModel';
+import { ScenarioEditor } from '@/tools/scenarioEditor';
 import { GAME_VERSION } from '@/core/version';
 import { createMission, Mission } from '@/game/simulation/mission';
 import { computeResult } from '@/game/scenarios/result';
-import type { Difficulty, SideId } from '@/game/types';
+import type { Difficulty, Scenario, SideId } from '@/game/types';
 import { deleteSave, exportToFile, importFromFile, listSaves, loadGame, saveGame, SLOTS } from '@/persistence/saves';
 import { Renderer } from '@/rendering/renderer';
 import { Music } from '@/ui/audio';
@@ -24,6 +28,7 @@ class App {
 
   async start(): Promise<void> {
     applySettings(this.settings);
+    loadLibrary();
     this.music.volume = this.settings.music;
     const canvas = h('canvas', { id: 'view' });
     this.app.append(canvas, this.ui);
@@ -33,9 +38,13 @@ class App {
     this.mainMenu();
   }
 
+  private editor: { dispose(): void } | null = null;
+
   private clear(): void {
     this.battle?.dispose();
     this.battle = null;
+    this.editor?.dispose();
+    this.editor = null;
     this.ui.innerHTML = '';
   }
 
@@ -55,6 +64,8 @@ class App {
       auto ? btn(`Продовжити (${auto.name})`, () => void this.loadSlot('auto')) : null,
       btn('Завантажити', () => this.loadMenu()),
       btn('Імпорт збереження з файлу', () => this.importSave()),
+      btn('Редактор карт', () => this.mapEditorMenu()),
+      btn('Редактор сценаріїв', () => this.scenarioEditorMenu()),
       btn('Налаштування', () => this.settingsModal()),
       h('div', { class: 'muted', style: 'text-align:center;margin-top:16px;font-size:0.85em' }, `Версія ${GAME_VERSION} · одиночна гра працює офлайн`),
     );
@@ -77,11 +88,17 @@ class App {
       return wrap;
     };
     const desc = h('p', { class: 'muted' }, sc[0].description);
+    const describe = (id: string) => {
+      const x = content().scenarios.get(id)!;
+      const m = content().maps.get(x.mapId);
+      desc.textContent = `${x.description || 'Без опису.'} Карта: ${m?.name ?? '?'}.${BUILTIN_IDS.has(x.id) ? '' : ' (користувацький)'}`;
+    };
+    describe(scenarioId);
     const box = h(
       'div',
       { class: 'menu-box panel', style: 'padding:16px' },
       h('h2', {}, 'Нова місія'),
-      h('div', { class: 'field' }, h('label', {}, 'Сценарій'), seg(sc.map((s) => [s.id, s.name] as [string, string]), () => scenarioId, (v) => (scenarioId = v))),
+      h('div', { class: 'field' }, h('label', {}, 'Сценарій'), seg(sc.map((s) => [s.id, s.name] as [string, string]), () => scenarioId, (v) => ((scenarioId = v), describe(v)))),
       desc,
       h('div', { class: 'field' }, h('label', {}, 'Рівень AI'), seg<Difficulty>([['easy', 'Легкий'], ['medium', 'Середній'], ['hard', 'Важкий']], () => difficulty, (v) => (difficulty = v))),
       h(
@@ -99,7 +116,14 @@ class App {
   /** Підготовка: згенерований склад, характеристики й спорядження. */
   private prep(scenarioId: string, difficulty: Difficulty, mode: BattleMode, seed?: number): void {
     this.clear();
-    const controllers: Record<SideId, 'human' | 'ai'> = mode === 'ai' ? { blue: 'human', red: 'ai' } : { blue: 'human', red: 'human' };
+    const scDef = content().scenarios.get(scenarioId)!;
+    // Проти AI: керування сторонами як у сценарії (хоча б одна — гравець).
+    let controllers: Record<SideId, 'human' | 'ai'> = { blue: 'human', red: 'human' };
+    if (mode === 'ai') {
+      controllers = { blue: scDef.sides.blue.controller, red: scDef.sides.red.controller };
+      if (controllers.blue === 'ai' && controllers.red === 'ai') controllers.blue = 'human';
+      if (controllers.blue === 'human' && controllers.red === 'human') controllers.red = 'ai';
+    }
     const state = createMission(scenarioId, { seed, difficulty, controllers, revealAll: mode === 'test' });
     const blue = state.units.filter((u) => u.side === 'blue');
     const cls = (id: string) => content().classes.get(id)?.name ?? id;
@@ -145,6 +169,64 @@ class App {
       onMenu: () => this.battleMenu(),
       autosave: (mm) => void saveGame('auto', mm.state).catch(() => {}),
     });
+  }
+
+  // ---------- Редактори ----------
+
+  private pickList(title: string, items: { label: string; sub: string; open: () => void; remove?: () => void }[], extra: HTMLElement[]): void {
+    this.clear();
+    const box = h('div', { class: 'menu-box panel', style: 'padding:16px;width:min(560px,100%)' }, h('h2', {}, title), ...extra);
+    for (const it of items)
+      box.append(
+        h(
+          'div',
+          { class: 'row', style: 'border-top:1px solid var(--line);padding-top:6px' },
+          h('div', { style: 'flex:1' }, h('b', {}, it.label), h('div', { class: 'muted', style: 'font-size:0.85em' }, it.sub)),
+          btn('Відкрити', it.open),
+          it.remove ? btn('Видалити', it.remove, { cls: 'danger' }) : null,
+        ),
+      );
+    box.append(btn('Назад', () => void this.mainMenu()));
+    this.ui.append(h('div', { class: 'menu' }, box));
+  }
+
+  private mapEditorMenu(): void {
+    const maps = [...content().maps.values()];
+    this.pickList(
+      'Редактор карт',
+      maps.map((m) => ({
+        label: m.name,
+        sub: `${m.width}×${m.height}, поверхів: ${m.layers.length}${BUILTIN_IDS.has(m.id) ? ' · вбудована (збережеться копією)' : ''}`,
+        open: () => this.openMapEditor(fromDefinition(m)),
+        remove: BUILTIN_IDS.has(m.id) ? undefined : () => (deleteFromLibrary('map', m.id), this.mapEditorMenu()),
+      })),
+      [h('div', { class: 'row' }, btn('Нова карта', () => this.openMapEditor(null), { cls: 'primary' }))],
+    );
+  }
+
+  private openMapEditor(map: EditMap | null): void {
+    this.clear();
+    this.music.play('menu');
+    this.editor = new MapEditor(this.ui, this.renderer, map, () => this.mapEditorMenu());
+  }
+
+  private scenarioEditorMenu(): void {
+    const list = [...content().scenarios.values()];
+    this.pickList(
+      'Редактор сценаріїв',
+      list.map((sc) => ({
+        label: sc.name,
+        sub: `${content().maps.get(sc.mapId)?.name ?? 'карта відсутня'}${BUILTIN_IDS.has(sc.id) ? ' · вбудований (збережеться копією)' : ''}`,
+        open: () => this.openScenarioEditor(sc),
+        remove: BUILTIN_IDS.has(sc.id) ? undefined : () => (deleteFromLibrary('scenario', sc.id), this.scenarioEditorMenu()),
+      })),
+      [h('div', { class: 'row' }, btn('Новий сценарій', () => this.openScenarioEditor(null), { cls: 'primary' }))],
+    );
+  }
+
+  private openScenarioEditor(sc: Scenario | null): void {
+    this.clear();
+    this.editor = new ScenarioEditor(this.ui, sc, () => this.scenarioEditorMenu(), (s) => this.prep(s.id, s.difficulty, 'ai'));
   }
 
   // ---------- Меню в бою ----------

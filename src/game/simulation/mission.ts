@@ -6,14 +6,14 @@ import { buildMap, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/gam
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
-import { consume, findItem, findMedical, findReloadMagazine, primaryDef, swapMagazine } from '@/game/inventory/inventory';
+import { consume, createItem, findItem, findMedical, findReloadMagazine, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
 import { applyTreatment, tickInjuries } from '@/game/injuries/injuries';
 import { canThrowTo, resolveFire, resolveGrenade } from '@/game/combat/fire';
 import { fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/movement';
 import { canSee, updateContacts } from '@/game/visibility/visibility';
 import { computeResult } from '@/game/scenarios/result';
-import type { ControllerKind, MedicalDefinition, MoveMode, SideId, Unit } from '@/game/types';
+import type { ControllerKind, MagazineInstance, MedicalDefinition, MoveMode, SideId, StackItem, Unit } from '@/game/types';
 import type { Command, CommandResult } from './commands';
 import {
   activeUnitAt,
@@ -71,7 +71,11 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
     const setup = scenario.sides[side];
     const bonus = s.controllers[side] === 'ai' ? DIFF_BONUS[scenario.difficulty] : 0;
     for (const { classId, count } of setup.squad)
-      for (let i = 0; i < count; i++) s.units.push(generateUnit(side, classId, rng, idGen, { statBonus: bonus, aiStyle: setup.aiStyle }));
+      for (let i = 0; i < count; i++) {
+        const u = generateUnit(side, classId, rng, idGen, { statBonus: bonus, aiStyle: setup.aiStyle });
+        if (setup.loadout) applyLoadout(u, setup.loadout, idGen);
+        s.units.push(u);
+      }
   }
   const ctx: Ctx = { s, rng, ev: [] };
   for (const side of ['blue', 'red'] as SideId[]) {
@@ -79,6 +83,35 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
   }
   s.rng = rng.state;
   return s;
+}
+
+/** Спорядження сторони за сценарієм: запасні магазини, гранати, броня. */
+function applyLoadout(u: Unit, l: NonNullable<MissionState['scenario']['sides']['blue']['loadout']>, id: (p: string) => string): void {
+  const inv = u.inventory;
+  if (l.noArmor) {
+    inv.armor = null;
+    inv.helmet = null;
+    inv.pouches = inv.pouches.slice(0, pouchCapacity(inv));
+  }
+  const w = primaryDef(u);
+  if (w && l.extraMags > 0)
+    for (let i = 0; i < l.extraMags; i++) {
+      const m = createItem(w.magazines[0], id);
+      if (inv.pouches.length < pouchCapacity(inv)) inv.pouches.push(m as MagazineInstance);
+      else placeInBackpack(inv, m);
+    }
+  if (l.extraMags < 0) {
+    let drop = -l.extraMags;
+    while (drop > 0 && inv.backpackItems.some((e) => itemDef(e.item.defId).kind === 'magazine')) {
+      inv.backpackItems.splice(inv.backpackItems.findIndex((e) => itemDef(e.item.defId).kind === 'magazine'), 1);
+      drop--;
+    }
+    while (drop > 0 && inv.pouches.length) {
+      inv.pouches.pop();
+      drop--;
+    }
+  }
+  for (let i = 0; i < l.extraGrenades; i++) inv.belt.push(createItem('frag_g1', id) as StackItem);
 }
 
 function autoDeploy(ctx: Ctx, side: SideId): void {

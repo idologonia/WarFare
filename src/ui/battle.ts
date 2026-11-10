@@ -15,6 +15,7 @@ import type { FireMode, MoveMode, SideId, Stance, Unit, WeaponState } from '@/ga
 import type { Renderer } from '@/rendering/renderer';
 import { bar, btn, h, modal } from './dom';
 import { inventoryBody, medicalBody, statusName } from './panels';
+import { SandboxPanel } from './sandboxPanel';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test';
 
@@ -55,6 +56,7 @@ export class Battle {
   };
   private disposed = false;
   private handover = false;
+  private sandbox: SandboxPanel | null = null;
 
   constructor(
     public root: HTMLElement,
@@ -410,6 +412,7 @@ export class Battle {
     if (this.busy) return;
     const unitId = this.r.pickUnit(x, y);
     const cell = this.r.pickCell(x, y);
+    if (this.sandbox && this.sandbox.click(unitId, cell)) return;
     const s = this.s;
     let clickedUnit = unitId ? s.units.find((u) => u.id === unitId) ?? null : null;
     // Клік по клітинці, де стоїть свій боєць, теж вибирає його.
@@ -575,6 +578,20 @@ export class Battle {
     render(patientId);
   }
 
+  private toggleSandbox(): void {
+    if (this.sandbox) {
+      this.sandbox.el.remove();
+      this.sandbox = null;
+    } else {
+      this.sandbox = new SandboxPanel(this.m, (full) => {
+        if (full) this.r.load(this.s, this.viewer, true);
+        this.r.sync();
+        this.refresh();
+      }, (t) => this.toast(t));
+    }
+    this.refresh();
+  }
+
   private openInventory(): void {
     const u = this.selected();
     if (!u) return;
@@ -647,6 +664,7 @@ export class Battle {
     this.renderStatus();
     this.renderActions();
     this.renderHit();
+    if (this.sandbox) this.hud.append(this.sandbox.el);
   }
 
   private renderTop(): void {
@@ -673,6 +691,7 @@ export class Battle {
         btn('▲', () => this.changeLevel(1), { title: 'Поверх вище (PgUp)' }),
         btn('＋', () => this.r.zoomBy(0.85), { title: 'Наблизити' }),
         btn('－', () => this.r.zoomBy(1.15), { title: 'Віддалити' }),
+        this.mode === 'test' ? btn('Пісочниця', () => this.toggleSandbox(), { on: !!this.sandbox }) : null,
         btn('☰', () => this.hooks.onMenu(), { title: 'Меню' }),
       ),
     );

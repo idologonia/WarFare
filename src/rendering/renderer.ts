@@ -224,7 +224,7 @@ export class Renderer {
   // ---------- Стан ----------
 
   /** Повна побудова сцени для стану місії. */
-  load(state: MissionState, viewSide: SideId): void {
+  load(state: MissionState, viewSide: SideId, keepCamera = false): void {
     this.state = state;
     this.viewSide = viewSide;
     for (const u of this.units.values()) u.root.dispose();
@@ -233,7 +233,7 @@ export class Renderer {
     for (const o of this.overlays.values()) o.dispose();
     this.overlays.clear();
     this.map = new MapView(this.scene, state.map, this.registerMesh);
-    this.camera.target = world(state.map.width / 2, state.map.height * 0.7, 0);
+    if (!keepCamera) this.camera.target = world(state.map.width / 2, state.map.height * 0.7, 0);
     for (const u of state.units) this.ensureUnit(u);
     this.sync();
   }

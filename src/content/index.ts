@@ -90,3 +90,19 @@ export function terrainDef(id: string): TerrainDefinition {
   if (!d) throw new Error(`Невідомий тип місцевості: ${id}`);
   return d;
 }
+
+/** Вбудовані (не користувацькі) карти й сценарії — їх не можна перезаписати з редактора. */
+export const BUILTIN_IDS = new Set(['village', 'first_mission']);
+
+/** Додати або оновити користувацьку карту/сценарій у реєстрі контенту. */
+export function registerMap(def: MapDefinition): void {
+  content().maps.set(def.id, def);
+}
+export function registerScenario(sc: Scenario): void {
+  content().scenarios.set(sc.id, sc);
+}
+export function unregister(kind: 'map' | 'scenario', id: string): void {
+  if (BUILTIN_IDS.has(id)) return;
+  if (kind === 'map') content().maps.delete(id);
+  else content().scenarios.delete(id);
+}

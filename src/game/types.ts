@@ -334,6 +334,17 @@ export interface SideSetup {
   /** Якщо true — гравець сам розставляє бійців. */
   manualDeploy: boolean;
   aiStyle?: AiStyle;
+  /** Зміни стандартного комплекту класу для цього сценарію. */
+  loadout?: SideLoadout;
+}
+
+export interface SideLoadout {
+  /** Додаткові (або менше, якщо від'ємне) запасні магазини на бійця. */
+  extraMags: number;
+  /** Додаткові гранати на бійця. */
+  extraGrenades: number;
+  /** Без бронежилетів і касок. */
+  noArmor: boolean;
 }
 
 export interface Scenario {

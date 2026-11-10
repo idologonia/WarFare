@@ -145,12 +145,18 @@ export class MapView {
 
   private build(): void {
     const m = this.map;
-    const L = LH();
     // Темна основа під картою — проміжки між плитками дають сітку.
     const bg = new GeoBuilder().box(m.width / 2, -0.2, -m.height / 2, m.width + 0.2, 0.36, m.height + 0.2, [0.16, 0.14, 0.11]);
     this.base = bg.build('base', this.scene, this.solid);
     this.onMesh(this.base, true);
-    for (let z = 0; z < m.levels; z++) {
+    for (let z = 0; z < m.levels; z++) this.levelMeshes.push(this.buildLevel(z));
+    for (let z = 0; z < m.levels; z++)
+      for (let y = 0; y < m.height; y++) for (let x = 0; x < m.width; x++) this.rebuildObject({ x, y, z });
+  }
+
+  private buildLevel(z: number): Mesh {
+    const m = this.map;
+    const L = LH();
       const g = new GeoBuilder();
       for (let y = 0; y < m.height; y++)
         for (let x = 0; x < m.width; x++) {
@@ -171,12 +177,15 @@ export class MapView {
             for (let i = 0; i < 5; i++) g.box(x + 0.5, z * L + (i + 0.5) * (L / 5) / 2, -(y + 0.1 + i * 0.18), 0.8, (i + 1) * (L / 5), 0.18, shade([0.55, 0.45, 0.35], 0.9 + i * 0.04));
           }
         }
-      const mesh = g.build(`level${z}`, this.scene, this.solid);
-      this.onMesh(mesh, true);
-      this.levelMeshes.push(mesh);
-    }
-    for (let z = 0; z < m.levels; z++)
-      for (let y = 0; y < m.height; y++) for (let x = 0; x < m.width; x++) this.rebuildObject({ x, y, z });
+    const mesh = g.build(`level${z}`, this.scene, this.solid);
+    this.onMesh(mesh, true);
+    return mesh;
+  }
+
+  /** Перебудувати плитки поверху (після зміни місцевості в редакторі). */
+  rebuildLevel(z: number): void {
+    this.levelMeshes[z]?.dispose();
+    this.levelMeshes[z] = this.buildLevel(z);
   }
 
   dispose(): void {
