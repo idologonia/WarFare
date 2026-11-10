@@ -27,6 +27,10 @@ export class GeoBuilder {
   normals: number[] = [];
   colors: number[] = [];
   indices: number[] = [];
+  uvs: number[] = [];
+  /** Якщо задано — грані отримують UV для камуфляжної текстури (масштаб на одиницю світу). */
+  camo: number | null = null;
+  private camoSeed = 0.13;
 
   get empty(): boolean {
     return this.indices.length === 0;
@@ -44,14 +48,26 @@ export class GeoBuilder {
       [[0, 0, 1], [[hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz], [-hx, -hy, hz]]],
       [[0, 0, -1], [[-hx, -hy, -hz], [-hx, hy, -hz], [hx, hy, -hz], [hx, -hy, -hz]]],
     ];
+    const camo = this.camo;
     for (const [n, verts] of faces) {
       const base = this.positions.length / 3;
+      // Зсув візерунка для кожної грані, щоб плями не повторювались.
+      this.camoSeed = (this.camoSeed * 9301 + 0.4927) % 1;
+      const off = 0.1 + this.camoSeed * 0.08;
       // Легке «запечене» затінення граней для ретро-вигляду.
       const k = n[1] > 0 ? 1.0 : n[1] < 0 ? 0.55 : n[0] !== 0 ? 0.8 : 0.88;
       for (const [x, y, z] of verts) {
         this.positions.push(cx + x * cos + z * sin, cy + y, cz - x * sin + z * cos);
         this.normals.push(n[0] * cos + n[2] * sin, n[1], -n[0] * sin + n[2] * cos);
         this.colors.push(color[0] * k, color[1] * k, color[2] * k, alpha);
+        if (camo === null) this.uvs.push(0.02, 0.02);
+        else {
+          // Проєкція на площину грані: дві осі, перпендикулярні нормалі.
+          const [a, b] = n[0] !== 0 ? [z, y] : n[1] !== 0 ? [x, z] : [x, y];
+          const ua = (a + (n[0] !== 0 ? hz : hx)) * camo;
+          const vb = (b + (n[1] !== 0 ? hz : hy)) * camo;
+          this.uvs.push(off + Math.min(0.8, ua), off + Math.min(0.8, vb));
+        }
       }
       this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
@@ -65,6 +81,7 @@ export class GeoBuilder {
     vd.normals = this.normals;
     vd.colors = this.colors;
     vd.indices = this.indices;
+    vd.uvs = this.uvs;
     vd.applyToMesh(mesh);
     mesh.material = material;
     for (let i = 3; i < this.colors.length; i += 4)

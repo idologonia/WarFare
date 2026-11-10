@@ -73,6 +73,11 @@ export function medicalBody(s: MissionState, medic: Unit, dispatch: (c: Command)
     const loc = findMedical(medic, o.effect);
     const def = [...content().items.values()].find((d) => d.kind === 'medical' && (d as MedicalDefinition).effect === o.effect) as MedicalDefinition;
     const cost = def.ap + (loc?.where === 'backpack' ? 2 : 0);
+    const selfSeal = o.effect === 'chestSeal' && patient.id === medic.id;
+    if (selfSeal) {
+      actions.append(btn(`${o.label} — потрібен інший боєць`, () => {}, { disabled: true, title: 'Оклюзійну наліпку не можна накласти самому собі' }));
+      continue;
+    }
     actions.append(
       btn(`${o.label} — ${cost} AP${loc ? '' : ' (немає)'}`, () => {
         if (dispatch({ type: 'treat', unitId: medic.id, patientId: patient.id, effect: o.effect, injuryId: o.injuryId })) rerender(patient.id);

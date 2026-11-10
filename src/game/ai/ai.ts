@@ -106,7 +106,7 @@ export class AiPlanner {
 
     // 2. Самодопомога при кровотечі.
     for (const opt of treatmentOptions(u)) {
-      if (opt.effect === 'pills') continue;
+      if (opt.effect === 'pills' || opt.effect === 'chestSeal') continue; // наліпку собі не накласти
       const loc = findMedical(u, opt.effect);
       if (!loc) continue;
       const cost = itemDef<MedicalDefinition>(loc.item.defId).ap + (loc.where === 'backpack' ? 2 : 0);

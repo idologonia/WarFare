@@ -93,6 +93,24 @@ describe('магазини', () => {
 });
 
 describe('поранення і медицина', () => {
+  it('оклюзійну наліпку не можна накласти самому собі, а товаришу — можна', () => {
+    const m = freshMission(3);
+    m.dispatch({ type: 'startBattle' });
+    const [a, b] = m.state.units.filter((u) => u.side === 'blue');
+    place(a, { x: 10, y: 28, z: 0 });
+    place(b, { x: 11, y: 28, z: 0 });
+    for (const u of [a, b]) u.injuries.push({ id: `t${u.id}`, part: 'torso', type: 'gunshotHeavy', bleeding: 'none', turn: 1 });
+    // наліпка є в рюкзаку стрільця
+    const medic = a.inventory.backpackItems.some((e) => e.item.defId === 'med_seal') ? a : b;
+    const other = medic === a ? b : a;
+    medic.ap = 100;
+    const self = m.dispatch({ type: 'treat', unitId: medic.id, patientId: medic.id, effect: 'chestSeal', injuryId: `t${medic.id}` });
+    expect(self.ok).toBe(false);
+    const buddy = m.dispatch({ type: 'treat', unitId: medic.id, patientId: other.id, effect: 'chestSeal', injuryId: `t${other.id}` });
+    expect(buddy.ok).toBe(true);
+    expect(other.injuries.find((i) => i.id === `t${other.id}`)!.sealed).toBe(true);
+  });
+
   it('кровотеча знижує здоров’я, турнікет/бинт зупиняють', () => {
     const m = freshMission();
     const s = m.state;

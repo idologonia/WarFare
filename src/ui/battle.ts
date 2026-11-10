@@ -49,6 +49,10 @@ export class Battle {
   private viewer: SideId;
   private ctxMenu: HTMLElement | null = null;
   private keyHandler: (e: KeyboardEvent) => void;
+  private blurHandler = () => {
+    this.keysDown.clear();
+    this.updateKeyMove();
+  };
   private disposed = false;
   private handover = false;
 
@@ -68,6 +72,8 @@ export class Battle {
     this.bindInput();
     this.keyHandler = (e) => this.onKey(e);
     window.addEventListener('keydown', this.keyHandler);
+    window.addEventListener('keyup', this.keyHandler);
+    window.addEventListener('blur', this.blurHandler);
     const first = this.myUnits().find((u) => u.pos) ?? this.myUnits()[0];
     if (first?.pos) r.focus(first.pos, false);
     if (m.s.turn.phase === 'deploy') this.sel = this.myUnits().find((u) => !u.pos)?.id ?? null;
@@ -79,6 +85,9 @@ export class Battle {
   dispose(): void {
     this.disposed = true;
     window.removeEventListener('keydown', this.keyHandler);
+    window.removeEventListener('keyup', this.keyHandler);
+    window.removeEventListener('blur', this.blurHandler);
+    this.r.keyMove.x = this.r.keyMove.y = this.r.keyMove.rot = 0;
     this.hud.remove();
     this.floats.remove();
     this.ctxMenu?.remove();
@@ -226,17 +235,26 @@ export class Battle {
 
   // ---------- Введення ----------
 
+  /**
+   * Керування камерою: миша — ліва кнопка обертає/нахиляє, права або середня зсуває, колесо — масштаб;
+   * дотик — один палець зсуває, два пальці — масштаб і обертання; клавіші — WASD/стрілки зсув, Q/E обертання.
+   */
   private bindInput(): void {
     const canvas = this.r.engine.getRenderingCanvas()!;
     const pointers = new Map<number, { x: number; y: number }>();
-    let downAt: { x: number; y: number; t: number } | null = null;
+    let downAt: { x: number; y: number; button: number; type: string } | null = null;
     let dragged = false;
     let pinch = 0;
+    let twist = 0;
     let longTimer: number | null = null;
 
     const pos = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const two = () => {
+      const [a, b] = [...pointers.values()];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x) };
     };
     canvas.addEventListener('pointerdown', (e) => {
       if (this.disposed) return;
@@ -245,7 +263,7 @@ export class Battle {
       const p = pos(e);
       pointers.set(e.pointerId, p);
       if (pointers.size === 1) {
-        downAt = { ...p, t: performance.now() };
+        downAt = { ...p, button: e.button, type: e.pointerType };
         dragged = false;
         if (e.pointerType !== 'mouse') {
           longTimer = window.setTimeout(() => {
@@ -256,37 +274,49 @@ export class Battle {
           }, 550);
         }
       } else if (pointers.size === 2) {
-        const [a, b] = [...pointers.values()];
-        pinch = Math.hypot(a.x - b.x, a.y - b.y);
+        const t = two();
+        pinch = t.d;
+        twist = t.ang;
         dragged = true;
+        if (longTimer) clearTimeout(longTimer);
       }
     });
     canvas.addEventListener('pointermove', (e) => {
       const p = pos(e);
       const prev = pointers.get(e.pointerId);
-      if (prev) {
-        if (pointers.size === 2) {
-          pointers.set(e.pointerId, p);
-          const [a, b] = [...pointers.values()];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (pinch > 0) this.r.zoomBy(pinch / d);
-          pinch = d;
-          return;
-        }
-        if (downAt && Math.hypot(p.x - downAt.x, p.y - downAt.y) > 8) dragged = true;
-        if (dragged) {
-          if (longTimer) clearTimeout(longTimer);
-          this.r.pan(p.x - prev.x, p.y - prev.y);
-        }
-        pointers.set(e.pointerId, p);
-      } else if (e.pointerType === 'mouse') this.hover(p.x, p.y);
+      if (!prev) {
+        if (e.pointerType === 'mouse') this.hover(p.x, p.y);
+        return;
+      }
+      pointers.set(e.pointerId, p);
+      if (pointers.size === 2) {
+        const t = two();
+        if (pinch > 0) this.r.zoomBy(pinch / t.d);
+        let da = t.ang - twist;
+        if (da > Math.PI) da -= Math.PI * 2;
+        if (da < -Math.PI) da += Math.PI * 2;
+        this.r.camera.alpha -= da;
+        pinch = t.d;
+        twist = t.ang;
+        return;
+      }
+      if (downAt && Math.hypot(p.x - downAt.x, p.y - downAt.y) > 6) dragged = true;
+      if (!dragged) return;
+      if (longTimer) clearTimeout(longTimer);
+      const dx = p.x - prev.x;
+      const dy = p.y - prev.y;
+      if (downAt?.type === 'mouse' && downAt.button === 0 && !e.shiftKey) this.r.orbit(dx, dy);
+      else this.r.pan(dx, dy);
     });
     const up = (e: PointerEvent) => {
       if (longTimer) clearTimeout(longTimer);
       const had = pointers.delete(e.pointerId);
       if (!had) return;
-      if (pointers.size === 0 && !dragged && downAt && e.button !== 2) this.click(downAt.x, downAt.y);
-      if (pointers.size === 0) downAt = null;
+      if (pointers.size === 0 && downAt) {
+        if (!dragged && downAt.button === 2) this.openCtx(downAt.x, downAt.y);
+        else if (!dragged) this.click(downAt.x, downAt.y);
+        downAt = null;
+      }
     };
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', (e) => {
@@ -297,23 +327,32 @@ export class Battle {
       e.preventDefault();
       this.r.zoomBy(e.deltaY > 0 ? 1.1 : 0.9);
     }, { passive: false });
-    canvas.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      this.openCtx(e.clientX - rect.left, e.clientY - rect.top);
-    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private keysDown = new Set<string>();
+
+  private updateKeyMove(): void {
+    const k = this.keysDown;
+    const has = (...names: string[]) => names.some((n) => k.has(n));
+    this.r.keyMove.x = (has('d', 'arrowright') ? 1 : 0) - (has('a', 'arrowleft') ? 1 : 0);
+    this.r.keyMove.y = (has('w', 'arrowup') ? 1 : 0) - (has('s', 'arrowdown') ? 1 : 0);
+    this.r.keyMove.rot = (has('e') ? 1 : 0) - (has('q') ? 1 : 0);
   }
 
   private onKey(e: KeyboardEvent): void {
     if (this.disposed || (e.target as HTMLElement)?.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
-    if (k === 'q') this.r.rotate(-1);
-    else if (k === 'e') this.r.rotate(1);
-    else if (k === 'w' || k === 'arrowup') this.r.pan(0, 40);
-    else if (k === 's' || k === 'arrowdown') this.r.pan(0, -40);
-    else if (k === 'a' || k === 'arrowleft') this.r.pan(40, 0);
-    else if (k === 'd' || k === 'arrowright') this.r.pan(-40, 0);
-    else if (k === 'pageup') this.changeLevel(1);
+    if (e.type === 'keyup') {
+      this.keysDown.delete(k);
+      this.updateKeyMove();
+      return;
+    }
+    if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
+      e.preventDefault();
+      this.keysDown.add(k);
+      this.updateKeyMove();
+    } else if (k === 'pageup') this.changeLevel(1);
     else if (k === 'pagedown') this.changeLevel(-1);
     else if (k === 'escape') this.cancel();
     else if (k === 'enter') void this.confirm();
@@ -372,7 +411,9 @@ export class Battle {
     const unitId = this.r.pickUnit(x, y);
     const cell = this.r.pickCell(x, y);
     const s = this.s;
-    const clickedUnit = unitId ? s.units.find((u) => u.id === unitId) ?? null : null;
+    let clickedUnit = unitId ? s.units.find((u) => u.id === unitId) ?? null : null;
+    // Клік по клітинці, де стоїть свій боєць, теж вибирає його.
+    if (!clickedUnit && cell) clickedUnit = s.units.find((u) => u.side === this.viewer && u.status === 'active' && u.pos && sameCell(u.pos, cell)) ?? null;
 
     if (s.turn.phase === 'deploy') {
       if (clickedUnit && clickedUnit.side === this.viewer) {
@@ -394,7 +435,7 @@ export class Battle {
       return;
     }
 
-    if (clickedUnit && clickedUnit.side === this.viewer && clickedUnit.status === 'active' && !this.fireMode) {
+    if (clickedUnit && clickedUnit.side === this.viewer && clickedUnit.status === 'active') {
       if (this.sel !== clickedUnit.id) this.selectUnit(clickedUnit);
       return;
     }
@@ -403,8 +444,7 @@ export class Battle {
     if (!u || !isActive(u)) return;
 
     // Ціль — ворожий боєць.
-    if (clickedUnit && (clickedUnit.side !== u.side || this.fireMode)) {
-      if (clickedUnit.side === u.side && clickedUnit.id === u.id) return;
+    if (clickedUnit && clickedUnit.side !== u.side) {
       if (!this.fireMode) this.fireMode = primaryDef(u)?.modes[0] ?? 'snap';
       if (this.pending?.kind === 'fire' && this.pending.targetId === clickedUnit.id) {
         void this.confirm();
@@ -626,7 +666,7 @@ export class Battle {
       h(
         'div',
         { class: 'row' },
-        btn('⟲', () => this.r.rotate(-1), { title: 'Повернути камеру (Q)' }),
+        btn('⟲', () => this.r.rotate(-1), { title: 'Повернути камеру (Q, або перетягніть лівою кнопкою миші)' }),
         btn('⟳', () => this.r.rotate(1), { title: 'Повернути камеру (E)' }),
         btn('▼', () => this.changeLevel(-1), { title: 'Поверх нижче (PgDn)' }),
         h('span', { class: 'turn-label' }, `Поверх ${this.r.viewLevel + 1}`),

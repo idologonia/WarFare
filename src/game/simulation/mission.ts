@@ -256,6 +256,7 @@ export class Mission {
         if (!p.pos && p.carriedBy !== u.id) return 'Пацієнт недоступний';
         if (p.id !== u.id && p.carriedBy !== u.id && !adjacent(u.pos!, p.pos!)) return 'Пацієнт має бути поруч';
         if (p.side !== u.side) return 'Можна лікувати лише своїх';
+        if (cmd.effect === 'chestSeal' && p.id === u.id) return 'Оклюзійну наліпку не можна накласти самому собі — потрібен інший боєць';
         const loc = findMedical(u, cmd.effect);
         if (!loc) return 'Немає потрібного засобу';
         const md = itemDef<MedicalDefinition>(loc.item.defId);

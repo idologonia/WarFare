@@ -1,13 +1,16 @@
 import { itemDef } from '@/content';
 import type { Stance, Unit, WeaponDefinition, WeaponState } from '@/game/types';
-import { Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
+import { Color4, Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
 import { GeoBuilder, hex, shade, type RGB } from './geo';
 
 const SKIN = ['#e8c39e', '#d4a373', '#a87449', '#7a4e2d'];
+const HAIR = ['#2b2118', '#4a3524', '#7a5a35', '#1a1a1a', '#8a7a6a'];
 export const SIDE_COLOR: Record<string, string> = { blue: '#3d82e8', red: '#e5463b' };
-const UNIFORM: Record<string, [string, string]> = { blue: ['#56683e', '#3f4c2e'], red: ['#7a6440', '#5c4a30'] };
+/** Колір спорядження (плитоноска, підсумки, рюкзак) за стороною. */
+const GEAR: Record<string, string> = { blue: '#4b5436', red: '#8d7550' };
+const CAMO_SCALE = 1.15;
 
-/** Частина моделі: сітка з точкою обертання (pivot) у початку координат вузла. */
+/** Частина моделі: сітка з точкою обертання у початку координат вузла. */
 function part(scene: Scene, mat: StandardMaterial, parent: TransformNode, name: string, build: (g: GeoBuilder) => void): Mesh {
   const g = new GeoBuilder();
   build(g);
@@ -27,95 +30,176 @@ export interface UnitModel {
   weapon: TransformNode;
   meshes: Mesh[];
   pool: Mesh;
+  hit: Mesh;
 }
 
-/** Ретро-модель бійця з коробок: насичені кольори, кольорова пов'язка сторони. */
+const WHITE: RGB = [1, 1, 1];
+
+/**
+ * Модель бійця з блоків у ретро-стилі: камуфляжна форма (текстура сторони),
+ * однотонне спорядження, кольорові пов'язки сторони, контур граней.
+ */
 export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): UnitModel {
   const root = new TransformNode(`unit_${u.id}`, scene);
   const body = new TransformNode('body', scene);
   body.parent = root;
-  const [uni, uniDark] = UNIFORM[u.side].map(hex) as [RGB, RGB];
   const side = hex(SIDE_COLOR[u.side]);
+  const gear = hex(GEAR[u.side]);
+  const gearDark = shade(gear, 0.78);
   const skin = hex(SKIN[u.appearance.skin % SKIN.length]);
-  const boots: RGB = [0.16, 0.13, 0.1];
-  const gear: RGB = shade(uniDark, 0.85);
+  const hair = hex(HAIR[u.appearance.hair % HAIR.length]);
+  const boots: RGB = [0.17, 0.14, 0.11];
+  const black: RGB = [0.09, 0.09, 0.1];
+  const gloves: RGB = [0.2, 0.19, 0.16];
   const meshes: Mesh[] = [];
   const reg = (m: Mesh) => {
     m.metadata = { unitId: u.id };
     meshes.push(m);
     return m;
   };
+  const camo = (g: GeoBuilder, on: boolean) => {
+    g.camo = on ? CAMO_SCALE : null;
+  };
 
   const hips = new TransformNode('hips', scene);
   hips.parent = body;
-  hips.position.y = 0.52;
+  hips.position.y = 0.5;
+
+  // ---- Ноги ----
   const leg = (x: number) => {
     const n = new TransformNode('legPivot', scene);
     n.parent = hips;
     n.position.x = x;
     return reg(
       part(scene, mat, n, 'leg', (g) => {
-        g.box(0, -0.2, 0, 0.15, 0.42, 0.17, uni);
-        g.box(0, -0.47, 0.03, 0.16, 0.1, 0.22, boots);
-        g.box(0, -0.2, 0.09, 0.12, 0.1, 0.03, shade(uni, 0.8)); // наколінник
+        camo(g, true);
+        g.box(0, -0.12, 0, 0.16, 0.24, 0.18, WHITE); // стегно
+        g.box(0, -0.33, 0, 0.145, 0.2, 0.16, WHITE); // гомілка
+        camo(g, false);
+        g.box(0, -0.25, 0.085, 0.12, 0.09, 0.04, black); // наколінник
+        g.box(0, -0.45, 0.025, 0.16, 0.09, 0.24, boots); // черевик
+        g.box(0, -0.495, 0.025, 0.17, 0.02, 0.25, shade(boots, 0.6)); // підошва
+        if (x < 0) g.box(-0.085, -0.1, 0.02, 0.03, 0.1, 0.1, gearDark); // кишеня
       }),
     );
   };
-  const legL = leg(-0.1);
-  const legR = leg(0.1);
+  const legL = leg(-0.095);
+  const legR = leg(0.095);
 
+  // ---- Тулуб, голова, шолом ----
   const torso = new TransformNode('torso', scene);
   torso.parent = hips;
+  const hasArmor = !!u.inventory.armor;
+  const isRig = u.inventory.armor?.defId === 'rig_ballistic';
   reg(
     part(scene, mat, torso, 'torso', (g) => {
-      g.box(0, 0.22, 0, 0.36, 0.44, 0.22, uni);
-      if (u.inventory.armor) {
-        g.box(0, 0.24, 0.01, 0.4, 0.36, 0.28, gear);
-        for (const x of [-0.12, 0, 0.12]) g.box(x, 0.12, 0.15, 0.1, 0.12, 0.05, shade(gear, 1.15));
+      camo(g, true);
+      g.box(0, 0.22, 0, 0.34, 0.42, 0.2, WHITE); // куртка
+      camo(g, false);
+      // Ремінь із підсумками.
+      g.box(0, 0.02, 0, 0.37, 0.07, 0.23, gearDark);
+      g.box(-0.13, 0.02, 0.11, 0.07, 0.08, 0.05, gear);
+      g.box(0.13, 0.02, 0.11, 0.07, 0.08, 0.05, gear);
+      g.box(0, 0.02, 0.12, 0.06, 0.05, 0.02, [0.55, 0.5, 0.4]); // пряжка
+      if (hasArmor) {
+        // Плитоноска або РПС: передня/задня панелі, магазинні підсумки, адмін-панель.
+        g.box(0, 0.28, 0.06, 0.32, 0.3, 0.1, gear);
+        g.box(0, 0.28, -0.06, 0.32, 0.3, 0.1, gear);
+        g.box(-0.13, 0.43, 0, 0.06, 0.04, 0.22, gearDark); // плечові лямки
+        g.box(0.13, 0.43, 0, 0.06, 0.04, 0.22, gearDark);
+        for (const x of [-0.1, 0, 0.1]) {
+          g.box(x, 0.19, 0.125, 0.085, 0.13, 0.05, shade(gear, 1.08));
+          g.box(x, 0.255, 0.128, 0.085, 0.02, 0.05, gearDark); // клапани
+        }
+        g.box(0, 0.33, 0.115, 0.16, 0.07, 0.03, gearDark); // адмін-панель
+        g.box(0, 0.335, 0.132, 0.1, 0.035, 0.005, side); // шеврон сторони
+        if (isRig) g.box(0.17, 0.15, 0, 0.04, 0.14, 0.14, gearDark); // бічний підсумок
       }
-      g.box(0, 0.0, 0, 0.38, 0.06, 0.24, [0.2, 0.17, 0.12]); // пояс
-      if (u.inventory.backpack && u.classId !== 'scout') g.box(0, 0.26, -0.2, 0.3, 0.32, 0.14, shade(gear, 0.95));
-      // Голова й каска.
-      g.box(0, 0.54, 0.01, 0.19, 0.2, 0.19, skin);
-      g.box(0, 0.66, 0.0, 0.25, 0.1, 0.26, shade(uni, 0.75));
-      g.box(0, 0.6, 0.0, 0.26, 0.04, 0.27, side); // пов'язка на касці
-      g.box(0.2, 0.36, 0, 0.03, 0.08, 0.13, side); // пов'язка на плечі
-      g.box(-0.2, 0.36, 0, 0.03, 0.08, 0.13, side);
+      if (u.inventory.backpack && u.classId !== 'scout') {
+        g.box(0, 0.27, -0.19, 0.26, 0.3, 0.13, shade(gear, 0.92));
+        g.box(0, 0.4, -0.2, 0.22, 0.05, 0.14, gearDark);
+        g.box(0, 0.18, -0.26, 0.18, 0.12, 0.03, gearDark); // кишеня рюкзака
+      }
+      // Шия й голова.
+      g.box(0, 0.45, 0.0, 0.1, 0.05, 0.1, skin);
+      g.box(0, 0.56, 0.01, 0.2, 0.2, 0.19, skin);
+      g.box(-0.045, 0.575, 0.104, 0.035, 0.02, 0.01, black); // очі
+      g.box(0.045, 0.575, 0.104, 0.035, 0.02, 0.01, black);
+      g.box(0, 0.6, 0.104, 0.13, 0.014, 0.008, shade(hair, 1)); // брови
+      if (u.appearance.face % 3 === 0) g.box(0, 0.495, 0.07, 0.19, 0.07, 0.07, hair); // борода
+      else if (u.appearance.face % 3 === 1) g.box(0, 0.523, 0.103, 0.09, 0.02, 0.01, hair); // вуса
+      g.box(0, 0.53, -0.09, 0.18, 0.1, 0.03, hair); // потилиця
+      // Шолом (high-cut) у чохлі з камуфляжем.
+      camo(g, true);
+      g.box(0, 0.69, -0.005, 0.25, 0.09, 0.25, WHITE);
+      g.box(0, 0.745, -0.005, 0.2, 0.04, 0.2, WHITE);
+      camo(g, false);
+      g.box(-0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black); // рейки
+      g.box(0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black);
+      g.box(-0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black); // навушники
+      g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
+      g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
+      g.box(0, 0.69, -0.13, 0.12, 0.04, 0.012, side); // мітка сторони на шоломі
     }),
   );
+
+  // ---- Руки ----
   const arm = (x: number) => {
     const n = new TransformNode('armPivot', scene);
     n.parent = torso;
     n.position.set(x, 0.4, 0);
     return reg(
       part(scene, mat, n, 'arm', (g) => {
-        g.box(0, -0.17, 0, 0.11, 0.36, 0.12, uni);
-        g.box(0, -0.38, 0, 0.1, 0.08, 0.1, skin);
+        camo(g, true);
+        g.box(0, -0.09, 0, 0.115, 0.2, 0.125, WHITE);
+        g.box(0, -0.27, 0, 0.105, 0.18, 0.115, WHITE);
+        camo(g, false);
+        g.box(0, -0.06, 0, 0.122, 0.06, 0.132, side); // пов'язка сторони
+        g.box(0, -0.39, 0.0, 0.1, 0.08, 0.1, gloves); // рукавиця
       }),
     );
   };
-  const armL = arm(-0.24);
-  const armR = arm(0.24);
+  const armL = arm(-0.235);
+  const armR = arm(0.235);
 
+  // ---- Зброя ----
   const weapon = new TransformNode('weapon', scene);
   weapon.parent = torso;
   const wd = u.inventory.primary ? itemDef<WeaponDefinition>(u.inventory.primary.defId) : null;
   reg(
     part(scene, mat, weapon, 'weapon', (g) => {
-      const dark: RGB = [0.13, 0.13, 0.13];
-      const wood: RGB = [0.42, 0.27, 0.15];
+      const dark: RGB = [0.12, 0.12, 0.13];
+      const poly: RGB = [0.2, 0.2, 0.19];
       if (wd?.category === 'lmg') {
-        g.box(0, 0, 0.25, 0.1, 0.12, 0.75, dark);
-        g.box(0, -0.1, 0.18, 0.14, 0.12, 0.16, [0.25, 0.28, 0.2]); // короб
-        g.box(0, -0.06, 0.62, 0.02, 0.1, 0.02, dark); // сошки
+        g.box(0, 0, 0.18, 0.1, 0.12, 0.44, dark); // ствольна коробка
+        g.box(0, 0.01, 0.55, 0.04, 0.04, 0.32, dark); // ствол
+        g.box(0, -0.005, 0.47, 0.08, 0.08, 0.16, poly); // цівка
+        g.box(0, -0.12, 0.17, 0.15, 0.13, 0.17, [0.27, 0.3, 0.21]); // короб
+        g.box(0, -0.02, -0.12, 0.08, 0.1, 0.2, poly); // приклад
+        g.box(0, -0.09, 0.06, 0.05, 0.1, 0.05, poly); // руків'я
+        g.box(0, 0.08, 0.12, 0.03, 0.03, 0.14, dark); // ручка
+        g.box(-0.03, -0.07, 0.63, 0.015, 0.12, 0.015, dark); // сошки
+        g.box(0.03, -0.07, 0.63, 0.015, 0.12, 0.015, dark);
       } else if (wd?.category === 'marksman') {
-        g.box(0, 0, 0.3, 0.07, 0.08, 0.82, dark);
-        g.box(0, 0.08, 0.2, 0.05, 0.05, 0.22, [0.1, 0.1, 0.12]); // приціл
-        g.box(0, -0.02, -0.08, 0.08, 0.12, 0.2, wood);
+        g.box(0, 0, 0.16, 0.07, 0.09, 0.38, dark);
+        g.box(0, 0.01, 0.54, 0.035, 0.035, 0.4, dark);
+        g.box(0, 0.0, 0.43, 0.07, 0.07, 0.18, poly);
+        g.box(0, 0.09, 0.16, 0.055, 0.055, 0.26, [0.08, 0.08, 0.09]); // приціл
+        g.box(0, 0.09, 0.3, 0.07, 0.07, 0.03, [0.08, 0.08, 0.09]);
+        g.box(0, 0.09, 0.305, 0.05, 0.05, 0.01, [0.3, 0.55, 0.7]); // лінза
+        g.box(0, -0.1, 0.2, 0.05, 0.12, 0.07, dark); // магазин
+        g.box(0, -0.02, -0.12, 0.07, 0.12, 0.22, [0.42, 0.27, 0.15]); // дерев'яний приклад
+        g.box(0, -0.09, 0.06, 0.05, 0.1, 0.05, poly);
       } else {
-        g.box(0, 0, 0.22, 0.07, 0.09, 0.62, dark);
-        g.box(0, -0.09, 0.27, 0.05, 0.13, 0.06, dark); // магазин
-        g.box(0, -0.02, -0.06, 0.07, 0.11, 0.18, wood);
+        g.box(0, 0, 0.14, 0.07, 0.09, 0.32, dark); // ствольна коробка
+        g.box(0, 0.01, 0.46, 0.035, 0.035, 0.3, dark); // ствол
+        g.box(0, -0.005, 0.38, 0.075, 0.075, 0.16, poly); // цівка
+        g.box(0, -0.11, 0.2, 0.055, 0.14, 0.07, [0.26, 0.2, 0.14]); // магазин
+        g.box(0, -0.16, 0.22, 0.055, 0.05, 0.07, [0.26, 0.2, 0.14]);
+        g.box(0, -0.02, -0.1, 0.06, 0.1, 0.18, poly); // приклад
+        g.box(0, -0.08, 0.05, 0.05, 0.1, 0.05, poly); // руків'я
+        g.box(0, 0.075, 0.16, 0.045, 0.05, 0.07, black); // коліматор
+        g.box(0, 0.08, 0.196, 0.03, 0.03, 0.006, [0.85, 0.2, 0.2]); // скло
       }
     }),
   );
@@ -125,7 +209,19 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
   pool.setEnabled(false);
   pool.isPickable = false;
 
-  return { root, body, legL, legR, armL, armR, torso, weapon, meshes, pool };
+  // Невидима зона для вибору кліком (більша за модель).
+  const hit = new GeoBuilder().box(0, 0.55, 0, 0.8, 1.1, 0.8, WHITE).build('hit', scene, mat);
+  hit.parent = root;
+  hit.visibility = 0;
+  hit.metadata = { unitId: u.id, hitbox: true };
+
+  for (const m of meshes) {
+    m.enableEdgesRendering(0.95);
+    m.edgesWidth = 1.6;
+    m.edgesColor = new Color4(0.04, 0.04, 0.05, 0.75);
+  }
+
+  return { root, body, legL, legR, armL, armR, torso, weapon, meshes, pool, hit };
 }
 
 /** Поза за станом: позиція тіла, стан зброї, поранений/загиблий. */
@@ -137,11 +233,13 @@ export function applyPose(m: UnitModel, stance: Stance, ws: WeaponState, status:
   const armR = m.armR.parent as TransformNode;
   m.body.rotation.set(0, 0, 0);
   m.body.position.set(0, 0, 0);
-  hips.position.y = 0.52;
+  hips.position.y = 0.5;
   legL.rotation.set(0, 0, 0);
   legR.rotation.set(0, 0, 0);
   m.torso.rotation.set(0, 0, 0);
   m.pool.setEnabled(false);
+  m.hit.scaling.set(1, 1, 1);
+  m.hit.position.set(0, 0, 0);
 
   if (status === 'down' || status === 'dead') {
     m.body.rotation.x = -Math.PI / 2;
@@ -150,6 +248,7 @@ export function applyPose(m: UnitModel, stance: Stance, ws: WeaponState, status:
     armR.rotation.set(0, 0, -0.5);
     m.weapon.setEnabled(false);
     m.pool.setEnabled(status === 'dead');
+    m.hit.scaling.set(1, 0.35, 1.2);
     return;
   }
   m.weapon.setEnabled(true);
@@ -158,9 +257,11 @@ export function applyPose(m: UnitModel, stance: Stance, ws: WeaponState, status:
     legL.rotation.x = -1.35;
     legR.rotation.x = 0.35;
     m.torso.rotation.x = 0.12;
+    m.hit.scaling.set(1, 0.75, 1);
   } else if (stance === 'prone') {
     m.body.rotation.x = Math.PI / 2;
     m.body.position.set(0, 0.13, -0.3);
+    m.hit.scaling.set(1, 0.35, 1.3);
   }
   // Стан зброї: high ready — біля плеча, low ready — стволом донизу, вільне — на ремені.
   if (ws === 'high') {

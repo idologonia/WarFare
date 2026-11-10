@@ -26,6 +26,7 @@ import { Animator, ease, lerp } from './anim';
 import { GeoBuilder, hex, type RGB } from './geo';
 import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
+import { camoMaterial } from './camo';
 
 export interface GraphicsSettings {
   shadows: boolean;
@@ -51,14 +52,13 @@ export class Renderer {
   private shadowGen: ShadowGenerator | null = null;
   private light!: DirectionalLight;
   private units = new Map<string, UnitModel>();
-  private unitMat!: StandardMaterial;
+  private unitMats: Record<string, StandardMaterial> = {};
   private silhouetteMat!: StandardMaterial;
   private overlayMat!: StandardMaterial;
   private fxMat!: StandardMaterial;
   private overlays = new Map<string, Mesh>();
   private selRing!: Mesh;
-  private rot = 0;
-  private zoom = 7.5;
+  private zoom = 6.5;
   viewLevel = 0;
   viewSide: SideId = 'blue';
   private state!: MissionState;
@@ -98,7 +98,7 @@ export class Renderer {
     this.light.position = new Vector3(30, 40, -10);
     this.setShadows(this.gfx.shadows);
 
-    this.unitMat = makeMaterial(scene, 'unit');
+    this.unitMats = { blue: camoMaterial(scene, 'blue'), red: camoMaterial(scene, 'red') };
     this.silhouetteMat = makeMaterial(scene, 'silhouette');
     this.silhouetteMat.diffuseColor = new Color3(0.15, 0.15, 0.17);
     this.silhouetteMat.emissiveColor = new Color3(0.12, 0.12, 0.14);
@@ -113,6 +113,7 @@ export class Renderer {
     this.selRing.setEnabled(false);
 
     scene.onBeforeRenderObservable.add(() => {
+      this.applyKeys(Math.min(50, this.engine.getDeltaTime()));
       this.updateOrtho();
       if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
     });
@@ -164,13 +165,26 @@ export class Renderer {
     c.orthoRight = this.zoom * aspect;
   }
 
+  /** Плавний поворот кнопками (крок 45°). */
   rotate(dir: 1 | -1): void {
-    this.rot = (this.rot + dir + 4) % 4;
     const from = this.camera.alpha;
-    let to = this.alphaFor(this.rot);
-    while (to - from > Math.PI) to -= Math.PI * 2;
-    while (from - to > Math.PI) to += Math.PI * 2;
+    const to = from - (dir * Math.PI) / 4;
     void this.anim.tween(260, (t) => (this.camera.alpha = lerp(from, to, ease(t))));
+  }
+
+  /** Довільне обертання й нахил камери (перетягування мишею або двома пальцями). */
+  orbit(dx: number, dy: number): void {
+    this.camera.alpha -= dx * 0.008;
+    this.camera.beta = Math.max(0.4, Math.min(1.3, this.camera.beta - dy * 0.006));
+  }
+
+  /** Утримувані клавіші руху камери: напрямок у межах [-1, 1]. */
+  keyMove = { x: 0, y: 0, rot: 0 };
+
+  private applyKeys(dtMs: number): void {
+    const k = this.keyMove;
+    if (k.x || k.y) this.pan(-k.x * dtMs * 0.9, k.y * dtMs * 0.9);
+    if (k.rot) this.camera.alpha -= k.rot * dtMs * 0.0025;
   }
 
   zoomBy(k: number): void {
@@ -231,7 +245,7 @@ export class Renderer {
   private ensureUnit(u: Unit): UnitModel {
     let m = this.units.get(u.id);
     if (!m) {
-      m = buildUnitModel(this.scene, this.unitMat, u);
+      m = buildUnitModel(this.scene, this.unitMats[u.side], u);
       for (const mesh of m.meshes) {
         mesh.receiveShadows = true;
         this.shadowGen?.addShadowCaster(mesh);
@@ -255,7 +269,7 @@ export class Renderer {
       m.root.position = cellWorld(u.pos, groundHeight(s.map, u.pos));
       applyPose(m, u.stance, u.weaponState, u.status);
       const identified = u.side === this.viewSide || s.revealAll || s.contacts[this.viewSide][u.id]?.identified;
-      for (const mesh of m.meshes) mesh.material = identified ? this.unitMat : this.silhouetteMat;
+      for (const mesh of m.meshes) mesh.material = identified ? this.unitMats[u.side] : this.silhouetteMat;
     }
     this.refreshVisibility();
   }
@@ -363,7 +377,7 @@ export class Renderer {
   // ---------- Вибір ----------
 
   pickUnit(x: number, y: number): string | null {
-    const r = this.scene.pick(x, y, (m) => !!m.metadata?.unitId && m.isEnabled() && m.isVisible);
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.hitbox && m.isEnabled());
     return r?.hit ? (r.pickedMesh!.metadata.unitId as string) : null;
   }
 
