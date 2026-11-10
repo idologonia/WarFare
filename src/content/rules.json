@@ -1,0 +1,120 @@
+{
+  "_comment": "Початковий баланс. Усі числа — робочі припущення, редагуються тут без зміни коду. AP — у звичайних одиницях (можна з десятими).",
+  "ap": {
+    "base": 10,
+    "min": 4,
+    "lowStaminaThreshold": 30,
+    "lowStaminaPenalty": 2,
+    "freeWeightBase": 18,
+    "freeWeightPerStrength": 0.12,
+    "overweightPenaltyPerKg": 0.25,
+    "suppressionPerAp": 25,
+    "carryingPenalty": 4
+  },
+  "move": {
+    "modeCost": { "fast": 0.7, "standard": 1.0, "careful": 1.5 },
+    "stanceMul": { "standing": 1.0, "crouched": 1.4, "prone": 2.5 },
+    "diagonalMul": 1.5,
+    "staminaPerCell": { "fast": 3, "standard": 1, "careful": 0.5 },
+    "slowTerrainStamina": 2,
+    "fastAllowedStances": ["standing"]
+  },
+  "actions": {
+    "stance": 1,
+    "weaponState": 0.5,
+    "reloadPouch": 2,
+    "reloadBackpack": 4,
+    "throw": 3,
+    "overwatchMin": 2,
+    "pickUp": 2,
+    "drop": 1,
+    "evacuate": 1,
+    "carryRaise": 1
+  },
+  "fire": {
+    "apCost": { "snap": 2, "burst": 3, "aimed": 4, "blind": 2 },
+    "accuracyMod": { "snap": -10, "burst": -5, "aimed": 15, "blind": -40 },
+    "burstShotPenalty": 8,
+    "highReadySnapDiscount": 0.5
+  },
+  "hit": {
+    "base": 24,
+    "trainingFactor": 0.55,
+    "rangePenaltyPerCell": 3,
+    "closeRange": 3,
+    "cover": { "1": -20, "2": -40 },
+    "targetStanceFar": { "standing": 0, "crouched": -5, "prone": -15 },
+    "farRange": 8,
+    "shooterStance": { "standing": 0, "crouched": 5, "prone": 10 },
+    "heightBonus": 10,
+    "suppressionFactor": 0.4,
+    "lowMoralePenalty": 10,
+    "lowMoraleThreshold": 30,
+    "carryStatePenalty": 10,
+    "armWoundPenalty": 8,
+    "headWoundPenalty": 10,
+    "concealmentPerCell": 5,
+    "notIdentifiedPenalty": 10,
+    "nightPenalty": 15,
+    "min": 5,
+    "max": 95
+  },
+  "damage": {
+    "variance": 0.25,
+    "partWeights": { "head": 8, "torso": 42, "leftArm": 10, "rightArm": 10, "leftLeg": 15, "rightLeg": 15 },
+    "lowCoverHidesLegs": 0.25,
+    "heavyThreshold": 18,
+    "headHeavyLethal": 0.6,
+    "pneumothoraxChance": 0.35,
+    "massiveBleedChance": 0.45,
+    "lightBleedChance": 0.7,
+    "amputationThreshold": 45,
+    "armorStopFactor": 0.2,
+    "armorReduceFactor": 0.65,
+    "armorWearPerHit": 12,
+    "downThreshold": 20
+  },
+  "bleeding": { "light": 2, "massive": 9, "pneumothorax": 4, "pneumothoraxApPenalty": 3 },
+  "suppression": {
+    "nearMissRadius": 1.6,
+    "perBullet": 12,
+    "hitBonus": 15,
+    "decayPerTurn": 30,
+    "max": 100
+  },
+  "morale": {
+    "allyKilled": -15,
+    "allyDown": -8,
+    "hit": -8,
+    "enemyKilled": 6,
+    "suppressedPerTurn": -4,
+    "leftOnFieldPerTurn": -2,
+    "leftOnFieldFloor": 35,
+    "panicRecovery": 20,
+    "recoverPerTurn": 4,
+    "panicThreshold": 20,
+    "panicChancePerPoint": 3
+  },
+  "stamina": { "recoverPerTurn": 12, "highReadyDrain": 3 },
+  "vision": {
+    "dayRange": 15,
+    "nightRange": 7,
+    "fogRange": 9,
+    "perceptionBonus": 0.06,
+    "identifyFraction": 0.6,
+    "eyeHeight": { "standing": 0.78, "crouched": 0.5, "prone": 0.18 },
+    "bodyHeight": { "standing": 0.62, "crouched": 0.4, "prone": 0.14 }
+  },
+  "overwatch": {
+    "baseChance": 45,
+    "reactionFactor": 0.5,
+    "highReadyBonus": 15,
+    "slowTerrainBonus": 10,
+    "fastTargetBonus": 10,
+    "carefulTargetPenalty": 10,
+    "accuracyPenalty": 10
+  },
+  "grenade": { "rangeBase": 7, "rangePerStrength": 0.06, "scatterPerCell": 0.12 },
+  "xp": { "shot": 1, "hit": 3, "kill": 10, "treat": 3, "survive": 10 },
+  "map": { "levelHeight": 1.4 }
+}

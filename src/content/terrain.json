@@ -1,0 +1,35 @@
+{
+  "terrain": [
+    { "id": "grass", "name": "Трава", "slow": 0, "color": "#5d7f2e" },
+    { "id": "dirt", "name": "Ґрунтова дорога", "slow": 0, "color": "#8a6b3f" },
+    { "id": "road", "name": "Асфальт", "slow": 0, "color": "#5b5b58" },
+    { "id": "mud", "name": "Багнюка", "slow": 1, "color": "#5a4a30" },
+    { "id": "floor", "name": "Підлога", "slow": 0, "color": "#8c7a62", "indoor": true },
+    { "id": "roof", "name": "Дах", "slow": 0, "color": "#7c7468" },
+    { "id": "rubble", "name": "Уламки", "slow": 1, "color": "#776d60" }
+  ],
+  "objects": [
+    { "id": "bush", "name": "Кущ", "material": "foliage", "cover": 0, "blocksMove": false, "height": 0.55, "concealment": 4, "hp": 30, "destroyedTo": null, "color": "#3f6a22" },
+    { "id": "tree", "name": "Дерево", "material": "wood", "cover": 2, "blocksMove": true, "height": 1.0, "concealment": 2, "hp": 160, "damagedTo": "tree_damaged", "destroyedTo": "stump", "color": "#4a3520" },
+    { "id": "tree_damaged", "name": "Посічене дерево", "material": "wood", "cover": 2, "blocksMove": true, "height": 1.0, "concealment": 1, "hp": 80, "destroyedTo": "stump", "color": "#4a3520" },
+    { "id": "stump", "name": "Пень", "material": "wood", "cover": 1, "blocksMove": true, "height": 0.35, "hp": 60, "destroyedTo": null, "color": "#4a3520" },
+    { "id": "sandbags", "name": "Мішки з піском", "material": "sandbag", "cover": 1, "blocksMove": true, "height": 0.45, "hp": 140, "damagedTo": "sandbags_damaged", "destroyedTo": null, "color": "#b49a68" },
+    { "id": "sandbags_damaged", "name": "Пошкоджені мішки", "material": "sandbag", "cover": 1, "blocksMove": true, "height": 0.35, "hp": 70, "destroyedTo": null, "color": "#a08858" },
+    { "id": "fence", "name": "Дерев'яний паркан", "material": "wood", "cover": 1, "blocksMove": true, "height": 0.5, "hp": 40, "destroyedTo": null, "color": "#8b6a3e" },
+    { "id": "crates", "name": "Ящики", "material": "wood", "cover": 1, "blocksMove": true, "height": 0.5, "hp": 50, "destroyedTo": null, "color": "#9a7442" },
+    { "id": "container", "name": "Металевий контейнер", "material": "metal", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 450, "damagedTo": "container_damaged", "destroyedTo": "scrap", "color": "#3f6e8c" },
+    { "id": "container_damaged", "name": "Пробитий контейнер", "material": "metal", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 225, "destroyedTo": "scrap", "color": "#3a6077" },
+    { "id": "scrap", "name": "Металобрухт", "material": "metal", "cover": 1, "blocksMove": true, "height": 0.4, "hp": 200, "destroyedTo": null, "color": "#555" },
+    { "id": "earth_berm", "name": "Земляний вал", "material": "earth", "cover": 1, "blocksMove": true, "height": 0.45, "hp": 400, "destroyedTo": null, "color": "#6b5532" },
+
+    { "id": "brick_wall", "name": "Цегляна стіна", "material": "brick", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 240, "wall": true, "damagedTo": "brick_wall_damaged", "destroyedTo": "brick_rubble", "color": "#a4553a" },
+    { "id": "brick_wall_damaged", "name": "Пошкоджена цегляна стіна", "material": "brick", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 120, "wall": true, "destroyedTo": "brick_rubble", "color": "#8e4a33" },
+    { "id": "brick_window", "name": "Вікно", "material": "brick", "cover": 1, "blocksMove": true, "height": 1.0, "window": true, "sill": 0.42, "hp": 90, "wall": true, "destroyedTo": "brick_rubble", "color": "#a4553a" },
+    { "id": "brick_rubble", "name": "Пролом", "material": "brick", "cover": 1, "blocksMove": false, "height": 0.3, "hp": 400, "destroyedTo": null, "color": "#7a4535" },
+    { "id": "door", "name": "Двері", "material": "wood", "cover": 0, "blocksMove": false, "height": 1.0, "door": true, "wall": true, "hp": 60, "destroyedTo": null, "color": "#6b4a2a" },
+    { "id": "concrete_wall", "name": "Бетонна стіна", "material": "concrete", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 450, "wall": true, "damagedTo": "concrete_wall_damaged", "destroyedTo": "concrete_rubble", "color": "#8d8d86" },
+    { "id": "concrete_wall_damaged", "name": "Пошкоджена бетонна стіна", "material": "concrete", "cover": 2, "blocksMove": true, "height": 1.0, "hp": 225, "wall": true, "destroyedTo": "concrete_rubble", "color": "#77776f" },
+    { "id": "concrete_rubble", "name": "Бетонні уламки", "material": "concrete", "cover": 1, "blocksMove": false, "height": 0.3, "hp": 500, "destroyedTo": null, "color": "#6d6d66" },
+    { "id": "parapet", "name": "Парапет", "material": "brick", "cover": 1, "blocksMove": true, "height": 0.4, "hp": 160, "destroyedTo": null, "color": "#9a5038" }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+ "id": "village",
+ "name": "Хутір біля дороги",
+ "width": 24,
+ "height": 24,
+ "legend": {
+  ".": {
+   "terrain": "grass"
+  },
+  ",": {
+   "terrain": "dirt"
+  },
+  "~": {
+   "terrain": "mud"
+  },
+  "h": {
+   "terrain": "grass",
+   "elevation": 0.35
+  },
+  "T": {
+   "terrain": "grass",
+   "object": "tree"
+  },
+  "b": {
+   "terrain": "grass",
+   "object": "bush"
+  },
+  "?": {
+   "terrain": "grass",
+   "variation": [
+    [
+     null,
+     4
+    ],
+    [
+     "bush",
+     4
+    ],
+    [
+     "crates",
+     2
+    ]
+   ]
+  },
+  "#": {
+   "terrain": "floor",
+   "object": "brick_wall"
+  },
+  "W": {
+   "terrain": "floor",
+   "object": "brick_window"
+  },
+  "D": {
+   "terrain": "floor",
+   "object": "door"
+  },
+  "_": {
+   "terrain": "floor"
+  },
+  "S": {
+   "terrain": "floor",
+   "stairsUp": true
+  },
+  "C": {
+   "terrain": "floor",
+   "object": "concrete_wall"
+  },
+  "V": {
+   "terrain": "floor",
+   "object": "brick_window"
+  },
+  "P": {
+   "terrain": "roof",
+   "object": "parapet"
+  },
+  "^": {
+   "terrain": "roof"
+  },
+  " ": {
+   "terrain": "roof",
+   "floor": false
+  },
+  "f": {
+   "terrain": "grass",
+   "object": "fence"
+  },
+  "s": {
+   "terrain": "grass",
+   "object": "sandbags"
+  },
+  "m": {
+   "terrain": "grass",
+   "object": "container"
+  },
+  "c": {
+   "terrain": "grass",
+   "object": "crates"
+  },
+  "e": {
+   "terrain": "grass",
+   "object": "earth_berm"
+  }
+ },
+ "layers": [
+  [
+   "TT.eeee,,.....b.......TT",
+   "T......,,...T......hhh.T",
+   "...bb..,,.b....?..hhhhh.",
+   ".......,,........shhhhh.",
+   ".m.....,,##W##W##shhhhh.",
+   ".m...?.,,#_____S#..hhh..",
+   ".......,,W______#....b..",
+   "....ss.,,###D___W...b...",
+   ".T.....,,W______#.......",
+   ".....b.,,#c_____D....T..",
+   "...c...,,##W#D#W#ff.fff.",
+   "..b....,,...........?...",
+   ".......,,,,,,,,,,,,,,,,,",
+   "..CCVCC,,........c..mm..",
+   "..C___C,,.sss.c.......b.",
+   "..C___D,,....?..b.~~....",
+   "..C___C,,c........~~~...",
+   "..CCCCC,,..bb......~....",
+   ".......,,....f.T........",
+   "....b..,,.?..f.....ss...",
+   "..T....,,...cf.....b....",
+   "......c,,....f.........T",
+   "T......,,...............",
+   ".......,,..............."
+  ],
+  [
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "         ##W#W#W#       ",
+   "         #S_____#       ",
+   "         W______W       ",
+   "         #______#       ",
+   "         W______W       ",
+   "         #______#       ",
+   "         ##W##W##       ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        "
+  ],
+  [
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "         PPPPPPPP       ",
+   "         P^^^^^^P       ",
+   "         P^^^^^^P       ",
+   "         P^^^^^^P       ",
+   "         P^^^^^^P       ",
+   "         P^^^^^^P       ",
+   "         PPPPPPPP       ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        ",
+   "                        "
+  ]
+ ],
+ "buildings": [
+  [
+   9,
+   4,
+   16,
+   10
+  ],
+  [
+   2,
+   13,
+   6,
+   17
+  ]
+ ]
+}

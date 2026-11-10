@@ -1,0 +1,24 @@
+import type { Cell } from '@/core/grid';
+import type { FireTarget } from '@/game/combat/fire';
+import type { FireMode, MedicalEffect, MoveMode, SideId, Stance, WeaponState } from '@/game/types';
+
+/** Усі зміни стану місії — лише через ці команди (однакові для людини, AI і майбутньої мережі). */
+export type Command =
+  | { type: 'deploy'; unitId: string; cell: Cell }
+  | { type: 'autoDeploy'; side: SideId }
+  | { type: 'startBattle' }
+  | { type: 'move'; unitId: string; to: Cell; mode: MoveMode }
+  | { type: 'stance'; unitId: string; stance: Stance }
+  | { type: 'weaponState'; unitId: string; state: WeaponState }
+  | { type: 'fire'; unitId: string; target: FireTarget; mode: FireMode }
+  | { type: 'reload'; unitId: string }
+  | { type: 'throw'; unitId: string; cell: Cell }
+  | { type: 'overwatch'; unitId: string }
+  | { type: 'treat'; unitId: string; patientId: string; effect: MedicalEffect; injuryId: string | null }
+  | { type: 'pickUp'; unitId: string; targetId: string }
+  | { type: 'drop'; unitId: string }
+  | { type: 'evacuate'; unitId: string }
+  | { type: 'endTurn' }
+  | { type: 'withdraw'; side: SideId };
+
+export type CommandResult = { ok: true } | { ok: false; error: string };

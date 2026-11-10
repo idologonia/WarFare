@@ -1,0 +1,45 @@
+{
+  "id": "first_mission",
+  "name": "Зачистка хутора",
+  "description": "Противник закріпився на хуторі біля дороги: у двоповерховому будинку та навколо нього. Знищіть усіх противників. Поранених і загиблих можна евакуювати через зону евакуації на південному заході.",
+  "type": "clear",
+  "mapId": "village",
+  "timeOfDay": "day",
+  "weather": "clear",
+  "difficulty": "medium",
+  "sides": {
+    "blue": {
+      "name": "Синя сторона",
+      "factionId": "test",
+      "controller": "human",
+      "squad": [
+        { "classId": "rifleman", "count": 1 },
+        { "classId": "marksman", "count": 1 },
+        { "classId": "mg1", "count": 1 },
+        { "classId": "scout", "count": 1 }
+      ],
+      "deployZone": [0, 19, 23, 23],
+      "manualDeploy": true
+    },
+    "red": {
+      "name": "Червона сторона",
+      "factionId": "test",
+      "controller": "ai",
+      "squad": [
+        { "classId": "rifleman", "count": 3 },
+        { "classId": "marksman", "count": 1 },
+        { "classId": "mg1", "count": 1 },
+        { "classId": "mg2", "count": 1 }
+      ],
+      "deployZone": [9, 0, 23, 10],
+      "manualDeploy": false,
+      "aiStyle": "cautious"
+    }
+  },
+  "evacZone": [0, 21, 4, 23],
+  "reinforcementDelay": 3,
+  "victory": { "type": "eliminate" },
+  "randomEvents": false,
+  "mapPreview": true,
+  "maxTurns": 40
+}

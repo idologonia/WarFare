@@ -1,0 +1,29 @@
+{
+  "_comment": "Клас визначає спеціалізацію та стартовий комплект, але не забороняє іншу зброю.",
+  "classes": [
+    { "id": "rifleman", "name": "Стрілець", "statMods": {}, "kit": {
+      "primary": "rifle_a1", "armor": "plate_carrier", "helmet": "helmet_basic", "rig": "belt_ranger", "backpack": "pack_small",
+      "pouches": ["mag_a1_30", "mag_a1_30", "mag_a1_30", "mag_a1_30"], "belt": ["frag_g1", "med_tourniquet", "med_bandage"],
+      "backpackItems": ["mag_a1_30", "mag_a1_30", "med_packing", "med_seal", "med_needle", "med_pills"] } },
+    { "id": "marksman", "name": "Стрілець-марксмен", "statMods": { "training": 10, "perception": 5 }, "kit": {
+      "primary": "dmr_m1", "armor": "rig_ballistic", "helmet": "helmet_basic", "rig": "belt_ranger", "backpack": "pack_small",
+      "pouches": ["mag_m1_10", "mag_m1_10", "mag_m1_10", "mag_m1_10"], "belt": ["med_tourniquet", "med_bandage"],
+      "backpackItems": ["mag_m1_10", "mag_m1_10", "med_packing", "med_seal"] } },
+    { "id": "mg1", "name": "Стрілець-кулеметник №1", "statMods": { "strength": 10 }, "kit": {
+      "primary": "lmg_k1", "primaryMag": "box_k1_100", "armor": "plate_carrier", "helmet": "helmet_basic", "rig": "belt_ranger", "backpack": "pack_small",
+      "pouches": ["mag_k1_45", "mag_k1_45"], "belt": ["med_tourniquet", "med_bandage"],
+      "backpackItems": ["box_k1_100", "med_packing"] } },
+    { "id": "mg2", "name": "Стрілець-кулеметник №2", "statMods": {}, "kit": {
+      "primary": "rifle_a1", "armor": "plate_carrier", "helmet": "helmet_basic", "rig": "belt_ranger", "backpack": "pack_small",
+      "pouches": ["mag_a1_30", "mag_a1_30", "mag_a1_30"], "belt": ["frag_g1", "med_tourniquet", "med_bandage"],
+      "backpackItems": ["box_k1_100", "box_k1_100", "med_packing", "med_seal"] } },
+    { "id": "scout", "name": "Розвідник", "statMods": { "perception": 12, "reaction": 6, "stamina": 5 }, "kit": {
+      "primary": "rifle_a1", "armor": "rig_ballistic", "helmet": "helmet_basic", "rig": "belt_ranger", "backpack": "pack_small",
+      "pouches": ["mag_a1_30", "mag_a1_30", "mag_a1_30", "mag_a1_30"], "belt": ["frag_g1", "frag_g1", "med_tourniquet"],
+      "backpackItems": ["mag_a1_30", "med_bandage", "med_packing"] } },
+    { "id": "grenadier1", "name": "Стрілець-гранатометник №1", "planned": true, "statMods": {}, "kit": null },
+    { "id": "grenadier2", "name": "Стрілець-гранатометник №2", "planned": true, "statMods": {}, "kit": null },
+    { "id": "driver", "name": "Водій", "planned": true, "statMods": {}, "kit": null },
+    { "id": "droneOperator", "name": "Оператор дрона", "planned": true, "statMods": {}, "kit": null }
+  ]
+}
