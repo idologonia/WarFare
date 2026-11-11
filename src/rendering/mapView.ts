@@ -148,6 +148,24 @@ export class MapView {
     const m = this.map;
     // Темна основа під картою — проміжки між плитками дають сітку.
     const bg = new GeoBuilder().box(m.width / 2, -0.2, -m.height / 2, m.width + 0.2, 0.36, m.height + 0.2, [0.16, 0.14, 0.11]);
+    // Околиці за межами карти: поле з плямами й деревами вдалині (лише вигляд, ходити не можна).
+    const O = 18;
+    const fieldCol: RGB = [0.42, 0.52, 0.26];
+    bg.box(m.width / 2, -0.06, -m.height / 2, m.width + O * 2, 0.04, m.height + O * 2, shade(fieldCol, 0.85));
+    for (let i = 0; i < 160; i++) {
+      const a = hash2(i, 3, 7) * (m.width + O * 2) - O;
+      const b = hash2(7, i, 3) * (m.height + O * 2) - O;
+      if (a > -1 && a < m.width + 1 && b > -1 && b < m.height + 1) continue;
+      const k = hash2(i, i, 11);
+      if (k < 0.55) bg.box(a, -0.035, -b, 1 + k * 3, 0.01, 1 + hash2(i, 5, 5) * 3, shade(fieldCol, 0.8 + k * 0.4));
+      else {
+        // дерево
+        const h = 1.2 + k * 1.4;
+        bg.box(a, h * 0.3 - 0.04, -b, 0.22, h * 0.6, 0.22, [0.25, 0.18, 0.12]);
+        bg.box(a, h * 0.75, -b, 1.1, h * 0.55, 1.1, shade([0.18, 0.3, 0.14], 0.85 + k * 0.3));
+        bg.box(a, h * 1.05, -b, 0.7, 0.35, 0.7, shade([0.2, 0.33, 0.15], 0.9 + k * 0.3));
+      }
+    }
     this.base = bg.build('base', this.scene, this.solid);
     this.onMesh(this.base, true);
     for (let z = 0; z < m.levels; z++) this.levelMeshes.push(this.buildLevel(z));

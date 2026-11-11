@@ -351,12 +351,12 @@ export class Renderer {
     const night = sc.timeOfDay === 'night';
     const scene = this.scene;
     this.hemi.intensity = night ? 0.2 : sc.weather === 'rain' ? 0.5 : 0.62;
-    this.hemi.diffuse = night ? new Color3(0.45, 0.55, 0.85) : new Color3(1, 1, 1);
-    this.hemi.groundColor = night ? new Color3(0.08, 0.08, 0.14) : new Color3(0.32, 0.3, 0.36);
+    this.hemi.diffuse = night ? new Color3(0.45, 0.55, 0.85) : new Color3(0.86, 0.92, 1);
+    this.hemi.groundColor = night ? new Color3(0.08, 0.08, 0.14) : new Color3(0.36, 0.33, 0.25);
     this.light.intensity = night ? 0.22 : sc.weather === 'rain' ? 0.55 : 0.85;
     if (this.pp) this.pp.imageProcessing.exposure = night ? 0.85 : 1.25;
-    this.light.diffuse = night ? new Color3(0.6, 0.7, 1) : new Color3(1, 0.98, 0.92);
-    scene.clearColor = night ? new Color4(0.02, 0.03, 0.06, 1) : new Color4(0.07, 0.08, 0.1, 1);
+    this.light.diffuse = night ? new Color3(0.6, 0.7, 1) : new Color3(1, 0.94, 0.82);
+    scene.clearColor = night ? new Color4(0.02, 0.03, 0.06, 1) : sc.weather === 'fog' ? new Color4(0.55, 0.57, 0.6, 1) : new Color4(0.36, 0.43, 0.5, 1);
     if (sc.weather === 'fog' || sc.weather === 'rain') {
       scene.fogMode = Scene.FOGMODE_LINEAR;
       scene.fogColor = night ? new Color3(0.05, 0.06, 0.09) : sc.weather === 'fog' ? new Color3(0.62, 0.64, 0.66) : new Color3(0.35, 0.38, 0.42);
@@ -965,7 +965,15 @@ export class Renderer {
 
   private syncUnit(id: string): void {
     const u = this.state.units.find((x) => x.id === id);
+    // Зміна вигляду спорядження (ПНБ відкинуто/опущено) — перебудувати модель.
+    const old = this.units.get(id);
+    if (u && old && (old.root.metadata?.nvgUp ?? false) !== !!u.nvgUp) {
+      old.root.dispose();
+      this.units.delete(id);
+      this.beams.delete(id);
+    }
     const m = this.units.get(id) ?? (u ? this.ensureUnit(u) : undefined);
+    if (m && u) m.root.metadata = { nvgUp: !!u.nvgUp };
     if (!u || !m) return;
     if (!u.pos) {
       m.root.setEnabled(false);
