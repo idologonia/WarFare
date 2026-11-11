@@ -1141,10 +1141,8 @@ export class Battle {
   /** Прицілювання по поверхах: ворожий дрон у клітинці на рівні, що зараз переглядається. */
   private droneAtCell(cell: Cell | null): string | null {
     if (!cell || this.selDrone) return null;
-    const lv = this.s.map.levels;
-    const d = (this.s.drones ?? []).find(
-      (x) => !x.destroyed && x.side !== this.viewer && x.x === cell.x && x.y === cell.y && Math.min(droneAlt(this.s, x), lv - 1) === cell.z && this.r.isDroneShown(x.id),
-    );
+    // Клік по клітинці під дроном (по його тіні) на будь-якому поверсі — ціль для пострілу.
+    const d = (this.s.drones ?? []).find((x) => !x.destroyed && x.side !== this.viewer && x.x === cell.x && x.y === cell.y && this.r.isDroneShown(x.id));
     return d?.id ?? null;
   }
 

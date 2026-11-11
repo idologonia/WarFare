@@ -32,7 +32,9 @@ import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
 import { buildDroneModel, type DroneModel } from './droneView';
-import { sfx } from './sound';
+import { sfx, type Sfx } from './sound';
+import { itemDef } from '@/content';
+import type { WeaponDefinition } from '@/game/types';
 import { visibleCells } from '@/game/visibility/visibility';
 import { facingOf, facingRotation } from '@/game/units/facing';
 import { droneAltitude, droneNoticedBy } from '@/game/drones';
@@ -296,6 +298,7 @@ export class Renderer {
     this.map?.dispose();
     for (const o of this.overlays.values()) o.dispose();
     this.overlays.clear();
+    this.scars = [];
     this.map = new MapView(this.scene, state.map, this.registerMesh);
     if (!keepCamera) this.camera.target = world(state.map.width / 2, state.map.height * 0.7, 0);
     for (const u of state.units) this.ensureUnit(u);
@@ -854,15 +857,14 @@ export class Renderer {
           if (this.isShown(e.unitId) || this.viewSide === this.unitSide(e.unitId)) await this.animateMove(e.unitId, e.path, e.mode);
           break;
         case 'fired':
-          sfx(e.shots.length > 1 ? 'burst' : 'shot');
           await this.animateFire(e);
           break;
         case 'grenade':
-          sfx('throw');
+          sfx('throw', this.sdist(pointWorld(e.from)));
           await this.animateGrenade(e.from, e.to);
           break;
         case 'rocket':
-          sfx('rocket');
+          sfx('rocket', this.sdist(pointWorld(e.from)));
           await this.animateRocket(e.from, e.to);
           break;
         case 'smoke':
@@ -873,20 +875,21 @@ export class Renderer {
           this.refreshFog(true);
           break;
         case 'vehicle':
-          if (e.path) sfx('engine');
+          if (e.path) sfx('engine', this.vehDist(e.vehicleId));
           if (e.path && this.vehicleModels.get(e.vehicleId)?.root.isEnabled()) await this.animateVehicle(e.vehicleId, e.path);
           this.syncVehicles();
           break;
         case 'drone':
-          sfx(e.lost ? 'boom' : 'drone');
+          sfx(e.lost ? 'thud' : 'drone', this.droneModels.get(e.droneId) ? this.sdist(this.droneModels.get(e.droneId)!.root.position) : 12);
           await this.animateDrone(e);
           break;
         case 'vehicleHit':
-          sfx('clang');
+          sfx('clang', this.vehDist(e.vehicleId));
           await this.animateVehicleHit(e.vehicleId, e.penetrated);
           break;
         case 'explosion':
-          sfx('boom');
+          sfx('boom', this.sdist(pointWorld(e.at)));
+          this.addScar(pointWorld(e.at), e.radius);
           await this.animateExplosion(e.at, e.radius);
           break;
         case 'object':
@@ -915,7 +918,7 @@ export class Renderer {
           sfx(e.kind);
           break;
         case 'reload':
-          sfx('click');
+          sfx('click', this.unitDist(e.unitId));
           await this.animateReload(e.unitId);
           break;
         case 'reaction':
@@ -943,6 +946,7 @@ export class Renderer {
     if (!m) return;
     const r0 = m.body.rotation.x;
     const y0 = m.body.position.y;
+    setTimeout(() => sfx('thud', this.sdist(m.root.position)), 330);
     await this.anim.tween(380, (t) => {
       const k = t * t;
       m.body.rotation.x = r0 + (-Math.PI / 2 - r0) * k;
@@ -989,6 +993,7 @@ export class Renderer {
       if (enemyVisibleNow) m.root.setEnabled(path[i].z <= this.viewLevel && this.visibleCellForViewer(path[i]));
       const legL = m.legL.parent!;
       const legR = m.legR.parent!;
+      if (m.root.isEnabled()) sfx('step', this.sdist(b) + (mode === 'careful' ? 12 : 0));
       await this.anim.tween(per, (t) => {
         m.root.position = Vector3.Lerp(a, b, t);
         if (u.stance === 'standing') {
@@ -1008,9 +1013,50 @@ export class Renderer {
     return !!contact || this.state.revealAll;
   }
 
+  private scars: { p: Vector3; r: number }[] = [];
+
+  /** Вирва й кіптява від вибуху (лишаються на землі до кінця бою). */
+  private addScar(p: Vector3, radius: number): void {
+    this.scars.push({ p, r: Math.min(1.4, 0.45 + radius * 0.25) });
+    const g = new GeoBuilder();
+    this.scars.forEach(({ p: q, r }, k) => {
+      const y = q.y - 0.12;
+      g.box(q.x, y + 0.012 + k * 0.0003, q.z, r * 2, 0.006, r * 2, [0.13, 0.11, 0.09], 0.75);
+      g.box(q.x, y + 0.015 + k * 0.0003, q.z, r, 0.008, r, [0.07, 0.06, 0.05], 0.9);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + k;
+        g.box(q.x + Math.cos(a) * r * 0.9, y + 0.03, q.z + Math.sin(a) * r * 0.9, 0.09, 0.05, 0.07, [0.32, 0.27, 0.2]);
+      }
+    });
+    this.overlays.get('scars')?.dispose();
+    const mesh = g.build('ov_scars', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('scars', mesh);
+  }
+
+  /** Відстань від центру огляду камери (для гучності звуку). */
+  private sdist(p: Vector3): number {
+    return Vector3.Distance(p, this.camera.target) * 0.6;
+  }
+
+  private unitDist(id: string): number {
+    const m = this.units.get(id);
+    return m ? this.sdist(m.root.position) : 15;
+  }
+
+  private vehDist(id: string): number {
+    const m = this.vehicleModels.get(id);
+    return m ? this.sdist(m.root.position) : 15;
+  }
+
   private async animateFire(e: Extract<SimEvent, { t: 'fired' }>): Promise<void> {
     const m = this.units.get(e.unitId);
     const from = pointWorld(e.from);
+    const shooter = this.state.units.find((x) => x.id === e.unitId);
+    const w = shooter?.inventory.primary ? itemDef<WeaponDefinition>(shooter.inventory.primary.defId) : null;
+    const snd: Sfx = !w ? 'rifle' : w.category === 'lmg' ? 'lmg' : w.category === 'marksman' ? 'dmr' : 'rifle';
+    const dist = this.sdist(from);
     if (m && e.shots.length) this.face(m, m.root.position, pointWorld(e.shots[0].to));
     const shooterShown = this.isShown(e.unitId);
     for (const sh of e.shots) {
@@ -1020,6 +1066,12 @@ export class Renderer {
       flash.position = from;
       flash.isPickable = false;
       flash.setEnabled(shooterShown);
+      sfx(snd, dist);
+      // Віддача: корпус відкидає назад.
+      if (m && shooterShown) {
+        const r0 = m.torso.rotation.x;
+        void this.anim.tween(90, (t) => (m.torso.rotation.x = r0 + Math.sin(t * Math.PI) * 0.12)).then(() => (m.torso.rotation.x = r0));
+      }
       const len = Vector3.Distance(from, to);
       const g = new GeoBuilder().box(0, 0, len / 2, 0.035, 0.035, len, [1, 0.9, 0.4]);
       const tracer = g.build('tracer', this.scene, this.fxMat);

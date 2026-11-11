@@ -165,27 +165,47 @@ export class MapView {
           if (!cell.floor) continue;
           const t = terrainDef(cell.terrain);
           const n = hash2(x, y, z);
-          const checker = (x + y) % 2 === 0 ? 1.0 : 0.94;
-          const col = shade(hex(t.color), checker * (0.92 + n * 0.16));
+          const col = shade(hex(t.color), 0.93 + n * 0.14);
+          const top = z === 0 ? cell.elevation * L : z * L;
           if (z === 0) {
-            const top = cell.elevation * L;
-            g.box(x + 0.5, (top - 0.02) / 2 + 0.0, -(y + 0.5), 0.96, top + 0.02, 0.96, col);
-            if (cell.elevation > 0) g.box(x + 0.5, top / 2 - 0.01, -(y + 0.5), 1.0, top, 1.0, shade(col, 0.8));
+            // Підкладка темнішого відтінку + плитка трохи менша: тонка ненав'язлива сітка замість чорних щілин.
+            g.box(x + 0.5, (top - 0.02) / 2, -(y + 0.5), 1.0, top + 0.02, 1.0, shade(col, 0.78));
+            g.box(x + 0.5, top - 0.005, -(y + 0.5), 0.975, 0.012, 0.975, col);
           } else {
-            g.box(x + 0.5, z * L - 0.06, -(y + 0.5), 1.0, 0.12, 1.0, col);
+            g.box(x + 0.5, z * L - 0.06, -(y + 0.5), 1.0, 0.12, 1.0, shade(col, 0.8));
+            g.box(x + 0.5, z * L + 0.001, -(y + 0.5), 0.975, 0.012, 0.975, col);
           }
-          // Кущики трави й камінці на частині плиток — щоб земля не була пласкою.
-          if (z === 0 && (cell.terrain === 'grass' || cell.terrain === 'dirt') && !cell.object) {
-            const top = cell.elevation * L;
-            const k = hash2(x * 7, y * 13, 5);
-            if (k < 0.45) {
-              const grass = cell.terrain === 'grass';
-              for (let i = 0; i < (grass ? 3 : 1); i++) {
-                const a = hash2(x, y, i + 11);
-                const b = hash2(y, x, i + 17);
-                const c2: RGB = grass ? shade(col, 1.04 + a * 0.08) : shade(col, 0.85);
-                g.box(x + 0.15 + a * 0.7, top + (grass ? 0.05 : 0.03), -(y + 0.15 + b * 0.7), grass ? 0.06 : 0.09, grass ? 0.1 : 0.05, grass ? 0.06 : 0.08, c2);
-              }
+          // Строкатість: кілька плоских плям іншого відтінку — земля не виглядає однотонною.
+          if (cell.terrain !== 'floor' && cell.terrain !== 'roof') {
+            for (let i = 0; i < 3; i++) {
+              const a = hash2(x, y, i + 31);
+              const b = hash2(y, x, i + 37);
+              const sz = 0.2 + hash2(x + i, y, 41) * 0.3;
+              const pc = shade(col, 0.86 + hash2(i, x, y) * 0.24);
+              g.box(x + 0.12 + a * 0.76, top + 0.004 + i * 0.001, -(y + 0.12 + b * 0.76), sz, 0.006, sz * (0.6 + b * 0.8), pc);
+            }
+            if (cell.terrain === 'road') {
+              // Колії.
+              g.box(x + 0.32, top + 0.009, -(y + 0.5), 0.12, 0.004, 0.98, shade(col, 0.82));
+              g.box(x + 0.68, top + 0.009, -(y + 0.5), 0.12, 0.004, 0.98, shade(col, 0.82));
+            }
+          } else if (z > 0 || cell.terrain === 'floor') {
+            // Підлога: дошки/плитка.
+            for (let i = 1; i < 4; i++) g.box(x + i * 0.25, top + 0.009, -(y + 0.5), 0.01, 0.003, 0.97, shade(col, 0.82));
+          }
+          // Трава й камінці.
+          if (z === 0 && (cell.terrain === 'grass' || cell.terrain === 'dirt' || cell.terrain === 'mud') && !cell.object) {
+            const grass = cell.terrain === 'grass';
+            const cnt = grass ? 4 + Math.floor(hash2(x * 7, y * 13, 5) * 5) : hash2(x * 7, y * 13, 5) < 0.5 ? 2 : 0;
+            for (let i = 0; i < cnt; i++) {
+              const a = hash2(x, y, i + 11);
+              const b = hash2(y, x, i + 17);
+              if (grass) {
+                const h = 0.07 + hash2(i, y, x) * 0.1;
+                const c2: RGB = shade(col, 1.05 + a * 0.18);
+                g.box(x + 0.1 + a * 0.8, top + h / 2, -(y + 0.1 + b * 0.8), 0.035, h, 0.035, c2);
+                g.box(x + 0.13 + a * 0.8, top + h * 0.4, -(y + 0.12 + b * 0.8), 0.03, h * 0.8, 0.03, shade(c2, 0.85));
+              } else g.box(x + 0.15 + a * 0.7, top + 0.025, -(y + 0.15 + b * 0.7), 0.07 + a * 0.05, 0.045, 0.06 + b * 0.05, [0.5 + a * 0.15, 0.48 + a * 0.12, 0.44 + a * 0.1]);
             }
           }
           if (cell.stairsUp) {
