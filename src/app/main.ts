@@ -13,6 +13,9 @@ import { Renderer } from '@/rendering/renderer';
 import { Music } from '@/ui/audio';
 import { Battle, type BattleMode } from '@/ui/battle';
 import { openOnlineMenu } from '@/ui/onlineMenu';
+import { openHgsMenu } from '@/ui/hgsMenu';
+import { hgsLink } from '@/net/hgsClient';
+import type { OnlineLink } from '@/net/link';
 import type { NetClient } from '@/net/client';
 import { loadoutSummary } from '@/ui/loadout';
 import { openLoadout } from '@/ui/gunsmith';
@@ -46,6 +49,40 @@ class App {
   private editor: { dispose(): void } | null = null;
   private net: NetClient | null = null;
 
+  /** Гра по мережі через HOME GAME SERVER (основний варіант). */
+  private hgsMenu(): void {
+    this.clear();
+    const dispose = openHgsMenu(this.ui, {
+      back: () => void this.mainMenu(),
+      reserve: () => this.onlineMenu(),
+      start: (c, side, state) => this.startOnlineLink(hgsLink(c, side), state),
+    });
+    this.editor = { dispose };
+  }
+
+  /** Бій по мережі (будь-який зв'язок: HGS або резервний сервер). */
+  private link: OnlineLink | null = null;
+  private startOnlineLink(link: OnlineLink, state: MissionState): void {
+    this.editor = null;
+    this.clear();
+    this.link = link;
+    this.battleMode = 'online';
+    this.music.play('battle');
+    const battle = new Battle(this.ui, this.renderer, new Mission(state), 'online', {
+      onEnd: (mm) => this.results(mm),
+      onMenu: () => this.battleMenu(),
+      autosave: () => {},
+      net: { side: link.side, send: (cmd) => link.send(cmd) },
+    });
+    this.battle = battle;
+    link.attach({
+      remote: (cmd) => this.battle === battle && battle.applyRemote(cmd),
+      state: (st, err) => this.battle === battle && battle.syncState(st, err),
+      notice: (t) => this.battle === battle && battle.netNotice(t),
+    });
+  }
+
+  /** Резервний власний сервер (start-server.bat). */
   private onlineMenu(): void {
     this.clear();
     const dispose = openOnlineMenu(this.ui, {
@@ -79,6 +116,10 @@ class App {
   }
 
   private clear(): void {
+    if (this.link && this.battle) {
+      this.link.close();
+      this.link = null;
+    }
     if (this.net && this.battleMode === 'online' && this.battle) {
       this.net.close();
       this.net = null;
@@ -103,7 +144,7 @@ class App {
       h('div', { class: 'title-logo', style: 'text-align:center' }, 'WARFARE'),
       h('div', { class: 'muted', style: 'text-align:center;margin-bottom:12px' }, 'Тактична покрокова гра'),
       btn('Нова місія', () => this.newMission(), { cls: 'primary' }),
-      btn('Гра по мережі', () => this.onlineMenu()),
+      btn('Гра по мережі', () => this.hgsMenu()),
       auto ? btn(`Продовжити (${auto.name})`, () => void this.loadSlot('auto')) : null,
       btn('Завантажити', () => this.loadMenu()),
       btn('Імпорт збереження з файлу', () => this.importSave()),

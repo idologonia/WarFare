@@ -26,6 +26,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Перевірка правил для сервера HGS
+        run: npm run build:hgs && git diff --quiet server/sim-node.cjs || echo "::warning::server/sim-node.cjs застарів — запустіть npm run build:hgs і закомітьте"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

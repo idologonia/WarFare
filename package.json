@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build:server": "vite build --ssr server/index.ts --outDir dist-server --emptyOutDir",
-    "server": "node dist-server/index.js"
+    "server": "node dist-server/index.js",
+    "build:hgs": "vite build -c vite.sim.config.ts"
   },
   "dependencies": {
     "@babylonjs/core": "9.32.0",

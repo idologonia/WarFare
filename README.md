@@ -7,7 +7,8 @@
 
 ## Гра по мережі
 
-Сервер запускається на ПК господаря: `start-server.bat` (Windows). Інструкція: [docs/ONLINE.md](docs/ONLINE.md).
+Через HOME GAME SERVER на ПК господаря: [docs/HGS.md](docs/HGS.md).
+Резервний варіант — власний сервер `start-server.bat`: [docs/ONLINE.md](docs/ONLINE.md).
 
 ## Запуск
 

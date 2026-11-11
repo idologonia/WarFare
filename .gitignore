@@ -5,3 +5,4 @@ dist
 dist-server
 tools
 cloudflared*
+__pycache__/

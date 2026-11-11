@@ -1,0 +1,15 @@
+{
+  "manifest_version": 1,
+  "id": "warfare",
+  "name": "WarFare",
+  "version": "1.0.0",
+  "adapter": "html",
+  "client": {
+    "url": "https://idologonia.github.io/WarFare/",
+    "allowed_origins": ["https://idologonia.github.io"]
+  },
+  "backend": { "mode": "logic", "module": "server/logic.py", "class": "Game" },
+  "auth": { "mode": "account" },
+  "rooms": { "max_rooms": 20, "max_players": 16, "allow_player_create": true, "empty_ttl_s": 1800, "default_rooms": ["lobby"] },
+  "limits": { "max_message_bytes": 32768, "messages_per_s": 30, "burst": 60, "memory_mb": 1024 }
+}
