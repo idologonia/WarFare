@@ -12,7 +12,8 @@ import { deleteSave, exportToFile, importFromFile, listSaves, loadGame, saveGame
 import { Renderer } from '@/rendering/renderer';
 import { Music } from '@/ui/audio';
 import { Battle, type BattleMode } from '@/ui/battle';
-import { loadoutModal, loadoutSummary } from '@/ui/loadout';
+import { loadoutSummary } from '@/ui/loadout';
+import { openLoadout } from '@/ui/gunsmith';
 import type { MissionState } from '@/game/simulation/state';
 import { btn, h, modal } from '@/ui/dom';
 import { resultsBody, statusName } from '@/ui/panels';
@@ -148,7 +149,7 @@ class App {
         h('td', {}, `${u.stats.perception}`),
         h('td', {}, `${u.stats.strength}`),
         h('td', {}, loadoutSummary(u)),
-        h('td', {}, btn('Спорядження', () => this.ui.append(loadoutModal(state, u, rerender)))),
+        h('td', {}, btn('Спорядження', () => this.ui.append(openLoadout(state, u, rerender)))),
       ),
     );
     const box = h(

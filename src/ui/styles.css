@@ -140,3 +140,22 @@ th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: lef
 /* Дощ — легкі косі струмені поверх сцени */
 .rain { pointer-events: none !important; background-image: repeating-linear-gradient(105deg, rgba(180, 200, 230, 0.16) 0 1px, transparent 1px 22px); background-size: 120px 120px; animation: rainfall 0.35s linear infinite; }
 @keyframes rainfall { from { background-position: 0 0; } to { background-position: -30px 120px; } }
+
+/* Майстерня зброї та спорядження */
+.modal.wide { width: min(1100px, 100%); }
+.gs-grid { display: grid; grid-template-columns: minmax(0, 580px) minmax(0, 1fr); gap: 14px; align-items: start; }
+canvas.preview3d { width: 100%; max-width: 560px; aspect-ratio: 560 / 300; border-radius: 8px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, #222830, #0e1013); }
+.slots { display: flex; flex-wrap: wrap; gap: 6px; }
+.slot { position: relative; min-width: 104px; flex: 1; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 6px; background: var(--panel-2); cursor: pointer; }
+.slot.filled { border-style: solid; }
+.slot.open { border-color: var(--accent); }
+.slot-title { font-size: 0.75em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.slot-item { font-weight: 600; font-size: 0.9em; }
+.slot-pop { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 60; display: flex; flex-direction: column; gap: 3px; min-width: 240px; }
+.slot-pop button { text-align: left; white-space: normal; }
+.statrow { display: grid; grid-template-columns: 120px 1fr auto; gap: 8px; align-items: center; font-size: 0.88em; }
+.statrow .bar { margin: 0; height: 7px; }
+.weapon-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; }
+.wcard { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); cursor: pointer; }
+.wcard.sel { border-color: var(--accent); }
+@media (max-width: 860px) { .gs-grid { grid-template-columns: 1fr; } }

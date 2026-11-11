@@ -92,3 +92,25 @@ export function setExtraArmor(s: MissionState, u: Unit, ids: string[]): string |
   u.inventory.extraArmor = ids.map((id) => ({ id: newId(s, 'a'), defId: id, durability: itemDef<ArmorDefinition>(id).durability }));
   return null;
 }
+
+export const BODY_ARMOR = ['plate_carrier', 'rig_ballistic'];
+
+/** Бронежилет: плитоноска, РПС з балістикою або нічого. Зайві підсумки — у рюкзак. */
+export function setBodyArmor(s: MissionState, u: Unit, armorId: string | null): void {
+  assertBeforeBattle(s);
+  const inv = u.inventory;
+  inv.armor = armorId ? { id: newId(s, 'a'), defId: armorId, durability: itemDef<ArmorDefinition>(armorId).durability } : null;
+  const cap = pouchCapacity(inv);
+  while (inv.pouches.length > cap) {
+    const it = inv.pouches.pop()!;
+    placeInBackpack(inv, it);
+  }
+  if (!armorId) inv.extraArmor = (inv.extraArmor ?? []).filter((a) => !itemDef<ArmorDefinition>(a.defId).requiresCarrier);
+}
+
+export function setHelmet(s: MissionState, u: Unit, on: boolean): void {
+  assertBeforeBattle(s);
+  u.inventory.helmet = on ? { id: newId(s, 'a'), defId: 'helmet_basic', durability: itemDef<ArmorDefinition>('helmet_basic').durability } : null;
+  if (!on) u.inventory.helmetMounts = [];
+  else if (!(u.inventory.helmetMounts ?? []).length) u.inventory.helmetMounts = [{ id: newId(s, 'i'), defId: 'flashlight' }];
+}

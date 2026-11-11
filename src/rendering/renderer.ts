@@ -90,6 +90,13 @@ export class Renderer {
     scene.clearColor = new Color4(0.07, 0.08, 0.1, 1);
     scene.ambientColor = new Color3(0.3, 0.3, 0.3);
     this.anim = new Animator(scene);
+    // Обробка кольору: трохи контрасту, експозиції й віньєтка.
+    const ip = scene.imageProcessingConfiguration;
+    ip.contrast = 1.18;
+    ip.exposure = 1.06;
+    ip.vignetteEnabled = true;
+    ip.vignetteWeight = 1.6;
+    ip.vignetteStretch = 0.4;
     this.anim.speed = this.gfx.animSpeed;
 
     const cam = (this.camera = new ArcRotateCamera('cam', this.alphaFor(0), 0.92, 60, Vector3.Zero(), scene));
@@ -138,6 +145,7 @@ export class Renderer {
     if (on && !this.shadowGen) {
       this.shadowGen = new ShadowGenerator(2048, this.light);
       this.shadowGen.usePercentageCloserFiltering = true;
+      this.shadowGen.filteringQuality = ShadowGenerator.QUALITY_HIGH;
       this.shadowGen.bias = 0.002;
       this.shadowGen.darkness = 0.35;
       for (const m of this.scene.meshes) if (m.metadata?.caster) this.shadowGen.addShadowCaster(m);

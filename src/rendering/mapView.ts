@@ -174,6 +174,20 @@ export class MapView {
           } else {
             g.box(x + 0.5, z * L - 0.06, -(y + 0.5), 1.0, 0.12, 1.0, col);
           }
+          // Кущики трави й камінці на частині плиток — щоб земля не була пласкою.
+          if (z === 0 && (cell.terrain === 'grass' || cell.terrain === 'dirt') && !cell.object) {
+            const top = cell.elevation * L;
+            const k = hash2(x * 7, y * 13, 5);
+            if (k < 0.45) {
+              const grass = cell.terrain === 'grass';
+              for (let i = 0; i < (grass ? 3 : 1); i++) {
+                const a = hash2(x, y, i + 11);
+                const b = hash2(y, x, i + 17);
+                const c2: RGB = grass ? shade(hex(t.color), 1.15 + a * 0.2) : [0.45, 0.42, 0.38];
+                g.box(x + 0.15 + a * 0.7, top + (grass ? 0.05 : 0.03), -(y + 0.15 + b * 0.7), grass ? 0.06 : 0.09, grass ? 0.1 : 0.05, grass ? 0.06 : 0.08, c2);
+              }
+            }
+          }
           if (cell.stairsUp) {
             for (let i = 0; i < 5; i++) g.box(x + 0.5, z * L + (i + 0.5) * (L / 5) / 2, -(y + 0.1 + i * 0.18), 0.8, (i + 1) * (L / 5), 0.18, shade([0.55, 0.45, 0.35], 0.9 + i * 0.04));
           }
@@ -249,10 +263,9 @@ export class MapView {
     this.levelMeshes.forEach((m, z) => m.setEnabled(z <= viewLevel));
     for (const info of this.objects.values()) {
       info.mesh.setEnabled(info.level <= viewLevel);
-      if (info.wall && info.buildingId !== undefined) {
-        const ghost = transparentBuildings.has(info.buildingId);
-        info.mesh.material = ghost ? this.ghost : info.glass ? this.glass : this.solid;
-      }
+      // Стіни не робимо прозорими: огляд усередину — поворотом камери й перемиканням поверхів.
+      void transparentBuildings;
+      info.mesh.material = info.glass ? this.glass : this.solid;
     }
   }
 }

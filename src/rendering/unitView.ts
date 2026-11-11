@@ -2,6 +2,7 @@ import { itemDef } from '@/content';
 import type { Stance, Unit, WeaponDefinition, WeaponState } from '@/game/types';
 import { Color4, Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
 import { GeoBuilder, hex, shade, type RGB } from './geo';
+import { buildWeaponGeo } from './weaponGeo';
 
 const SKIN = ['#e8c39e', '#d4a373', '#a87449', '#7a4e2d'];
 const HAIR = ['#2b2118', '#4a3524', '#7a5a35', '#1a1a1a', '#8a7a6a'];
@@ -90,31 +91,49 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
   // ---- Тулуб, голова, шолом ----
   const torso = new TransformNode('torso', scene);
   torso.parent = hips;
-  const hasArmor = !!u.inventory.armor;
-  const isRig = u.inventory.armor?.defId === 'rig_ballistic';
+  const armorId = u.inventory.armor?.defId ?? null;
   reg(
     part(scene, mat, torso, 'torso', (g) => {
       camo(g, true);
       g.box(0, 0.22, 0, 0.34, 0.42, 0.2, WHITE); // куртка
       camo(g, false);
-      // Ремінь із підсумками.
-      g.box(0, 0.02, 0, 0.37, 0.07, 0.23, gearDark);
-      g.box(-0.13, 0.02, 0.11, 0.07, 0.08, 0.05, gear);
-      g.box(0.13, 0.02, 0.11, 0.07, 0.08, 0.05, gear);
-      g.box(0, 0.02, 0.12, 0.06, 0.05, 0.02, [0.55, 0.5, 0.4]); // пряжка
-      if (hasArmor) {
-        // Плитоноска або РПС: передня/задня панелі, магазинні підсумки, адмін-панель.
-        g.box(0, 0.28, 0.06, 0.32, 0.3, 0.1, gear);
-        g.box(0, 0.28, -0.06, 0.32, 0.3, 0.1, gear);
-        g.box(-0.13, 0.43, 0, 0.06, 0.04, 0.22, gearDark); // плечові лямки
-        g.box(0.13, 0.43, 0, 0.06, 0.04, 0.22, gearDark);
+      if (u.inventory.rig) {
+        // Пояс рейнджера з підсумками.
+        g.box(0, 0.02, 0, 0.38, 0.08, 0.24, gearDark);
+        for (const x of [-0.14, 0.14]) g.box(x, 0.02, 0.12, 0.07, 0.09, 0.05, gear);
+        g.box(0.19, 0.0, -0.04, 0.04, 0.1, 0.1, gear); // аптечка
+        g.box(0, 0.02, 0.125, 0.06, 0.05, 0.02, [0.55, 0.5, 0.4]); // пряжка
+      } else g.box(0, 0.02, 0, 0.36, 0.04, 0.22, [0.2, 0.17, 0.12]); // звичайний ремінь
+      if (armorId === 'plate_carrier') {
+        // Плитоноска: передня й задня плити, камербанд, три магазинні підсумки, адмін-панель.
+        g.box(0, 0.28, 0.065, 0.31, 0.3, 0.1, gear);
+        g.box(0, 0.28, -0.065, 0.31, 0.3, 0.1, gear);
+        g.box(-0.18, 0.2, 0, 0.04, 0.16, 0.2, gearDark);
+        g.box(0.18, 0.2, 0, 0.04, 0.16, 0.2, gearDark);
+        g.box(-0.12, 0.44, 0, 0.07, 0.04, 0.24, gearDark);
+        g.box(0.12, 0.44, 0, 0.07, 0.04, 0.24, gearDark);
         for (const x of [-0.1, 0, 0.1]) {
-          g.box(x, 0.19, 0.125, 0.085, 0.13, 0.05, shade(gear, 1.08));
-          g.box(x, 0.255, 0.128, 0.085, 0.02, 0.05, gearDark); // клапани
+          g.box(x, 0.19, 0.13, 0.085, 0.13, 0.05, shade(gear, 1.08));
+          g.box(x, 0.255, 0.133, 0.085, 0.02, 0.05, gearDark);
         }
-        g.box(0, 0.33, 0.115, 0.16, 0.07, 0.03, gearDark); // адмін-панель
-        g.box(0, 0.335, 0.132, 0.1, 0.035, 0.005, side); // шеврон сторони
-        if (isRig) g.box(0.17, 0.15, 0, 0.04, 0.14, 0.14, gearDark); // бічний підсумок
+        g.box(0, 0.34, 0.12, 0.16, 0.07, 0.03, gearDark);
+        g.box(0, 0.345, 0.137, 0.1, 0.035, 0.005, side);
+        g.box(0, 0.38, -0.12, 0.12, 0.06, 0.02, gearDark); // ручка евакуації
+      } else if (armorId) {
+        // РПС з балістичним захистом: нагрудник із двома рядами підсумків, X-лямки на спині.
+        g.box(0, 0.22, 0.08, 0.32, 0.22, 0.07, gear);
+        for (const x of [-0.11, -0.037, 0.037, 0.11]) {
+          g.box(x, 0.15, 0.125, 0.065, 0.09, 0.04, shade(gear, 1.1));
+          g.box(x, 0.25, 0.125, 0.065, 0.08, 0.04, shade(gear, 0.95));
+        }
+        g.box(-0.1, 0.38, 0.06, 0.05, 0.14, 0.03, gearDark);
+        g.box(0.1, 0.38, 0.06, 0.05, 0.14, 0.03, gearDark);
+        g.box(0, 0.28, -0.105, 0.05, 0.3, 0.02, gearDark, 1, 0.6);
+        g.box(0, 0.28, -0.105, 0.05, 0.3, 0.02, gearDark, 1, -0.6);
+        g.box(-0.18, 0.15, 0, 0.04, 0.12, 0.14, gearDark); // бічний підсумок
+        g.box(0, 0.335, 0.118, 0.08, 0.03, 0.005, side);
+      } else {
+        g.box(0.13, 0.36, 0.105, 0.08, 0.05, 0.01, side); // нашивка сторони на куртці
       }
       if (u.inventory.secondary && itemDef<WeaponDefinition>(u.inventory.secondary.defId).category === 'launcher') {
         // Труба гранатомета за спиною.
@@ -130,7 +149,7 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         g.box(-0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
         g.box(0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
       }
-      if (u.inventory.backpack && u.classId !== 'scout') {
+      if (u.inventory.backpack) {
         g.box(0, 0.27, -0.19, 0.26, 0.3, 0.13, shade(gear, 0.92));
         g.box(0, 0.4, -0.2, 0.22, 0.05, 0.14, gearDark);
         g.box(0, 0.18, -0.26, 0.18, 0.12, 0.03, gearDark); // кишеня рюкзака
@@ -144,26 +163,30 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
       if (u.appearance.face % 3 === 0) g.box(0, 0.495, 0.07, 0.19, 0.07, 0.07, hair); // борода
       else if (u.appearance.face % 3 === 1) g.box(0, 0.523, 0.103, 0.09, 0.02, 0.01, hair); // вуса
       g.box(0, 0.53, -0.09, 0.18, 0.1, 0.03, hair); // потилиця
-      // Шолом (high-cut) у чохлі з камуфляжем.
-      camo(g, true);
-      g.box(0, 0.69, -0.005, 0.25, 0.09, 0.25, WHITE);
-      g.box(0, 0.745, -0.005, 0.2, 0.04, 0.2, WHITE);
-      camo(g, false);
-      g.box(-0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black); // рейки
-      g.box(0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black);
-      g.box(-0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black); // навушники
-      g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
-      g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
-      g.box(0, 0.69, -0.13, 0.12, 0.04, 0.012, side); // мітка сторони на шоломі
-      const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
-      if (mounts.includes('nvg_mono')) g.box(0.045, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
-      if (mounts.includes('nvg_bino')) {
-        g.box(-0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
-        g.box(0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
-      }
-      if (mounts.includes('flashlight')) {
-        g.box(0.15, 0.68, 0.05, 0.04, 0.04, 0.09, black);
-        g.box(0.15, 0.68, 0.096, 0.03, 0.03, 0.004, [1, 0.95, 0.7]);
+      if (u.inventory.helmet) {
+        // Шолом (high-cut) у чохлі з камуфляжем.
+        camo(g, true);
+        g.box(0, 0.69, -0.005, 0.25, 0.09, 0.25, WHITE);
+        g.box(0, 0.745, -0.005, 0.2, 0.04, 0.2, WHITE);
+        camo(g, false);
+        g.box(-0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black); // рейки
+        g.box(0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black);
+        g.box(-0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black); // навушники
+        g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
+        g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
+        g.box(0, 0.69, -0.13, 0.12, 0.04, 0.012, side); // мітка сторони на шоломі
+        const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
+        if (mounts.includes('nvg_mono')) g.box(0.045, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+        if (mounts.includes('nvg_bino')) {
+          g.box(-0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+          g.box(0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+        }
+        if (mounts.includes('flashlight')) {
+          g.box(0.15, 0.68, 0.05, 0.04, 0.04, 0.09, black);
+          g.box(0.15, 0.68, 0.096, 0.03, 0.03, 0.004, [1, 0.95, 0.7]);
+        }
+      } else {
+        g.box(0, 0.665, -0.005, 0.21, 0.05, 0.2, hair); // зачіска
       }
     }),
   );
@@ -191,77 +214,9 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
   // ---- Зброя ----
   const weapon = new TransformNode('weapon', scene);
   weapon.parent = torso;
-  const wd = u.inventory.primary ? itemDef<WeaponDefinition>(u.inventory.primary.defId) : null;
-  const wmods = u.inventory.primary?.mods ?? [];
   reg(
     part(scene, mat, weapon, 'weapon', (g) => {
-      const dark: RGB = [0.12, 0.12, 0.13];
-      const poly: RGB = [0.2, 0.2, 0.19];
-      const wood: RGB = [0.45, 0.27, 0.14];
-      const bakelite: RGB = [0.45, 0.22, 0.12];
-      const tan: RGB = [0.55, 0.47, 0.33];
-      const id = wd?.id ?? '';
-      // Прицільні пристрої та обвіс за встановленими модифікаціями.
-      const optics = (y: number, z: number) => {
-        if (wmods.includes('rail') || wd?.rail) g.box(0, y - 0.035, z + 0.02, 0.05, 0.02, 0.22, dark);
-        if (wmods.includes('reddot')) {
-          g.box(0, y, z, 0.045, 0.05, 0.07, black);
-          g.box(0, y + 0.005, z + 0.036, 0.03, 0.03, 0.006, [0.85, 0.2, 0.2]);
-        }
-        if (wmods.includes('magnifier')) g.box(0, y, z - 0.09, 0.05, 0.05, 0.08, black);
-        if (wmods.includes('scope4')) {
-          g.box(0, y + 0.01, z, 0.05, 0.05, 0.24, [0.08, 0.08, 0.09]);
-          g.box(0, y + 0.01, z + 0.13, 0.065, 0.065, 0.03, [0.08, 0.08, 0.09]);
-          g.box(0, y + 0.01, z + 0.146, 0.045, 0.045, 0.006, [0.3, 0.55, 0.7]);
-        }
-      };
-      if (wd?.category === 'lmg') {
-        const body: RGB = id === 'minimi' ? [0.16, 0.16, 0.15] : dark;
-        g.box(0, 0, 0.18, 0.1, 0.12, 0.44, body);
-        g.box(0, 0.01, 0.58, 0.04, 0.04, 0.38, dark);
-        g.box(0, -0.005, 0.46, 0.08, 0.08, 0.14, id === 'pkm' ? wood : poly);
-        g.box(0, -0.12, 0.15, 0.15, 0.13, 0.17, id === 'minimi' ? tan : [0.27, 0.3, 0.21]); // короб
-        g.box(0, -0.02, -0.12, 0.07, 0.11, 0.22, id === 'pkm' ? wood : poly); // приклад
-        g.box(0, -0.09, 0.06, 0.05, 0.1, 0.05, poly);
-        g.box(0, 0.08, 0.12, 0.03, 0.03, 0.14, dark);
-        g.box(-0.03, -0.07, 0.66, 0.015, 0.12, 0.015, dark);
-        g.box(0.03, -0.07, 0.66, 0.015, 0.12, 0.015, dark);
-        optics(0.1, 0.15);
-      } else if (wd?.category === 'marksman') {
-        g.box(0, 0, 0.16, 0.07, 0.09, 0.38, dark);
-        g.box(0, 0.01, 0.54, 0.035, 0.035, 0.4, dark);
-        g.box(0, 0.0, 0.43, 0.07, 0.07, 0.18, poly);
-        g.box(0, 0.09, 0.16, 0.055, 0.055, 0.26, [0.08, 0.08, 0.09]);
-        g.box(0, -0.1, 0.2, 0.05, 0.12, 0.07, dark);
-        g.box(0, -0.02, -0.12, 0.07, 0.12, 0.22, wood);
-        g.box(0, -0.09, 0.06, 0.05, 0.1, 0.05, poly);
-      } else if (id === 'ar15') {
-        g.box(0, 0, 0.14, 0.07, 0.1, 0.3, [0.16, 0.16, 0.15]);
-        g.box(0, 0.01, 0.46, 0.035, 0.035, 0.3, dark);
-        g.box(0, 0.0, 0.37, 0.08, 0.08, 0.2, [0.16, 0.16, 0.15]); // цівка M-LOK
-        g.box(0, -0.12, 0.17, 0.055, 0.15, 0.065, dark); // прямий магазин
-        g.box(0, 0.0, -0.08, 0.04, 0.04, 0.16, dark); // буферна труба
-        g.box(0, -0.02, -0.17, 0.065, 0.11, 0.1, poly); // приклад
-        g.box(0, -0.08, 0.05, 0.05, 0.1, 0.05, poly);
-        g.box(0, 0.07, 0.07, 0.03, 0.03, 0.05, dark); // ручка зведення
-        if (wmods.includes('foregrip')) g.box(0, -0.09, 0.38, 0.035, 0.1, 0.035, poly);
-        optics(0.085, 0.16);
-      } else {
-        // Сімейство АК: вигнутий магазин, дерев'яні накладки в АКМ.
-        const furniture: RGB = id === 'akm' ? wood : id === 'ak74' ? bakelite : poly;
-        g.box(0, 0, 0.14, 0.07, 0.09, 0.32, dark);
-        g.box(0, 0.01, 0.47, 0.035, 0.035, 0.32, dark);
-        g.box(0, 0.035, 0.42, 0.03, 0.03, 0.18, dark); // газова трубка
-        g.box(0, -0.005, 0.37, 0.075, 0.075, 0.16, furniture);
-        const magCol: RGB = id === 'akm' ? [0.3, 0.27, 0.2] : bakelite;
-        const rpk = u.inventory.primary?.magazine?.defId === 'mag_rpk545_45';
-        g.box(0, -0.11, 0.21, 0.055, 0.13, 0.07, magCol);
-        g.box(0, -0.18, 0.25, 0.055, rpk ? 0.12 : 0.06, 0.07, magCol);
-        g.box(0, -0.02, -0.1, 0.06, 0.1, 0.18, id === 'akm' ? wood : poly);
-        g.box(0, -0.08, 0.05, 0.05, 0.1, 0.05, poly);
-        if (wmods.includes('foregrip')) g.box(0, -0.09, 0.38, 0.035, 0.1, 0.035, poly);
-        optics(0.08, 0.15);
-      }
+      if (u.inventory.primary) buildWeaponGeo(g, u.inventory.primary.defId, u.inventory.primary.mods, u.inventory.primary.magazine?.defId ?? null);
     }),
   );
 

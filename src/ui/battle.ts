@@ -15,7 +15,7 @@ import type { Command } from '@/game/simulation/commands';
 import { isActive, type SimEvent } from '@/game/simulation/state';
 import type { FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
 import type { Renderer } from '@/rendering/renderer';
-import { bar, btn, h, modal } from './dom';
+import { bar, btn, h, keyName, modal } from './dom';
 import { inventoryBody, medicalBody, statusName } from './panels';
 import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
@@ -363,7 +363,7 @@ export class Battle {
 
   private onKey(e: KeyboardEvent): void {
     if (this.disposed || (e.target as HTMLElement)?.tagName === 'INPUT') return;
-    const k = e.key.toLowerCase();
+    const k = keyName(e);
     if (e.type === 'keyup') {
       this.keysDown.delete(k);
       this.updateKeyMove();
@@ -440,6 +440,8 @@ export class Battle {
     const clickedVeh = vehId ? vehicleById(s, vehId) : undefined;
     if (s.turn.phase === 'battle' && this.vehicleClick(clickedVeh, unitId, cell)) return;
     let clickedUnit = unitId ? s.units.find((u) => u.id === unitId) ?? null : null;
+    // Тіла («200») і непритомні не перехоплюють клік: клітинка з ними — звичайна ціль руху.
+    if (clickedUnit && clickedUnit.status !== 'active') clickedUnit = null;
     // Клік по клітинці, де стоїть свій боєць, теж вибирає його.
     if (!clickedUnit && cell) clickedUnit = s.units.find((u) => u.side === this.viewer && u.status === 'active' && u.pos && sameCell(u.pos, cell)) ?? null;
 

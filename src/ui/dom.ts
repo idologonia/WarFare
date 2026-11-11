@@ -43,3 +43,12 @@ export function modal(title: string, body: HTMLElement, onClose: () => void, ext
 }
 
 export const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+
+/**
+ * Назва клавіші незалежно від розкладки: фізична клавіша (KeyQ → 'q'), щоб керування
+ * працювало й з українською/іншою розкладкою (де Q — це «й»).
+ */
+export function keyName(e: KeyboardEvent): string {
+  if (e.code?.startsWith('Key')) return e.code.slice(3).toLowerCase();
+  return e.key.toLowerCase();
+}

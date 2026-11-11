@@ -5,7 +5,7 @@ import type { EdgeSide, MapState } from '@/game/types';
 import { getEdge, setEdge } from '@/game/maps/map';
 import { downloadJson, pickJsonFile, saveMap, unpackShared } from '@/persistence/library';
 import type { Renderer } from '@/rendering/renderer';
-import { btn, h, modal } from '@/ui/dom';
+import { btn, h, keyName, modal } from '@/ui/dom';
 import { assignBuildings, DEFAULT_VARIATION, fromDefinition, newMap, resizeMap, toDefinition, validateMap, type EditMap } from './mapModel';
 
 type Tool =
@@ -329,7 +329,7 @@ export class MapEditor {
 
   private onKey(e: KeyboardEvent): void {
     if (this.disposed || (e.target as HTMLElement)?.tagName === 'INPUT') return;
-    const k = e.key.toLowerCase();
+    const k = keyName(e);
     if (e.type === 'keydown' && (e.ctrlKey || e.metaKey) && k === 'z') {
       e.preventDefault();
       this.doUndo();
