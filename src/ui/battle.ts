@@ -1,5 +1,5 @@
-import { content, itemDef, vehicleDef } from '@/content';
-import { dist2d, fmtAp, sameCell, type Cell } from '@/core/grid';
+import { content, droneDef, itemDef, vehicleDef } from '@/content';
+import { dist2d, fmtAp, sameCell, toTenths as toTenthsUi, type Cell } from '@/core/grid';
 import { AiPlanner } from '@/game/ai/ai';
 import { blindOrigin, canThrowTo, grenadeRange } from '@/game/combat/fire';
 import { canLobTo, countDisposable, hasUnderbarrel, launcherOf, loadedAmmo, rocketStock, rpgScatter, uglAmmo, uglScatter } from '@/game/combat/launcher';
@@ -13,7 +13,7 @@ import { computeApMax } from '@/game/units/derived';
 import { Mission } from '@/game/simulation/mission';
 import type { Command } from '@/game/simulation/commands';
 import { isActive, type SimEvent } from '@/game/simulation/state';
-import type { FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
+import type { DroneState, FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
 import type { Renderer } from '@/rendering/renderer';
 import { bar, btn, h, keyName, modal } from './dom';
 import { medicalBody, statusName } from './panels';
@@ -21,6 +21,7 @@ import { openInventoryDnD } from './inventoryDnD';
 import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
+import { droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test';
 
@@ -32,6 +33,10 @@ type Pending =
   | { kind: 'vmove'; x: number; y: number; cost: number }
   | { kind: 'vfire'; targetId?: string; cell?: Cell }
   | { kind: 'disembark'; unitId: string; cell: Cell }
+  | { kind: 'dmove'; x: number; y: number; cost: number }
+  | { kind: 'dattack'; cell: Cell }
+  | { kind: 'ddrop' }
+  | { kind: 'shootDrone'; droneId: string }
   | null;
 
 const STANCE: Record<Stance, string> = { standing: 'Стоячи', crouched: 'Сидячи', prone: 'Лежачи' };
@@ -73,6 +78,9 @@ export class Battle {
   private selVehicle: string | null = null;
   private vFireMode: FireMode | null = null;
   private disembarkUnit: string | null = null;
+  /** Вибраний дрон і режим (політ / атака). */
+  private selDrone: string | null = null;
+  private droneAttackMode = false;
 
   constructor(
     public root: HTMLElement,
@@ -204,6 +212,7 @@ export class Battle {
       if (!res.ok) {
         if ('unitId' in cmd) this.ai.reject(cmd.unitId);
         else if ('vehicleId' in cmd) this.ai.reject(cmd.vehicleId);
+        else if ('droneId' in cmd) this.ai.reject(cmd.droneId);
         else break;
         continue;
       }
@@ -408,6 +417,7 @@ export class Battle {
   private selectUnit(u: Unit): void {
     if (u.inVehicle) return this.selectVehicle(u.inVehicle);
     this.selVehicle = null;
+    this.selDrone = null;
     this.sel = u.id;
     this.pending = null;
     this.fireMode = null;
@@ -437,6 +447,7 @@ export class Battle {
     const cell = this.r.pickCell(x, y);
     if (this.sandbox && this.sandbox.click(unitId, cell)) return;
     const s = this.s;
+    if (s.turn.phase === 'battle' && this.droneClick(this.r.pickDrone(x, y), unitId, cell)) return;
     const vehId = this.r.pickVehicle(x, y);
     const clickedVeh = vehId ? vehicleById(s, vehId) : undefined;
     if (s.turn.phase === 'battle' && this.vehicleClick(clickedVeh, unitId, cell)) return;
@@ -541,6 +552,7 @@ export class Battle {
       this.fireMode = null;
       this.vFireMode = null;
       this.disembarkUnit = null;
+      this.droneAttackMode = false;
       this.throwGrenade = null;
     this.launchMode = null;
     }
@@ -550,6 +562,23 @@ export class Battle {
   }
 
   private async confirm(): Promise<void> {
+    const pd = this.pending;
+    const dr = this.selectedDrone();
+    if (pd?.kind === 'shootDrone' && !this.busy) {
+      const u0 = this.selected();
+      if (u0) await this.exec({ type: 'fire', unitId: u0.id, target: { droneId: pd.droneId }, mode: this.fireMode === 'burst' ? 'burst' : 'snap' });
+      this.refresh();
+      return;
+    }
+    if (dr && pd && !this.busy) {
+      if (pd.kind === 'dmove') await this.exec({ type: 'droneMove', droneId: dr.id, x: pd.x, y: pd.y });
+      else if (pd.kind === 'dattack') {
+        if (await this.exec({ type: 'droneAttack', droneId: dr.id, cell: pd.cell })) this.afterDroneGone(dr.operatorId);
+      } else if (pd.kind === 'ddrop') await this.exec({ type: 'droneDrop', droneId: dr.id });
+      this.r.setCursor(null);
+      this.refresh();
+      return;
+    }
     const p0 = this.pending;
     const v0 = this.selectedVehicle();
     if (v0 && p0 && !this.busy) {
@@ -701,6 +730,7 @@ export class Battle {
     const s = this.s;
     const r = this.r;
     if (this.selVehicle && s.turn.phase === 'battle') return this.vehicleOverlays();
+    if (this.selDrone && s.turn.phase === 'battle') return this.droneOverlays();
     const u = this.selected();
     r.select(u && u.pos && u.status === 'active' ? u : null);
     r.setGhosts(this.ghostCells());
@@ -797,6 +827,17 @@ export class Battle {
 
   private renderList(): void {
     const list = h('div', { class: 'unitlist', 'data-part': 'list' });
+    for (const d of drones(this.s).filter((x) => x.side === this.viewer)) {
+      const dd = droneDef(d.defId);
+      list.append(
+        h(
+          'div',
+          { class: `ucard${this.selDrone === d.id ? ' sel' : ''}`, onclick: () => this.selectDrone(d.id) },
+          h('div', { class: 'nm' }, dd.name, ' ', h('span', { class: 'muted' }, `батарея ${d.battery}`)),
+          bar(d.ap, toTenthsUi(dd.ap), 'var(--accent)'),
+        ),
+      );
+    }
     for (const v of vehicles(this.s).filter((x) => x.side === this.viewer && !x.destroyed)) {
       const d = vehicleDef(v.defId);
       list.append(
@@ -827,6 +868,7 @@ export class Battle {
 
   private renderStatus(): void {
     if (this.selVehicle) return this.renderVehicleStatus();
+    if (this.selDrone) return this.renderDroneStatus();
     const u = this.selected();
     if (!u || this.s.turn.phase === 'deploy' && !u) return;
     const ammo = ammoSummary(u);
@@ -870,7 +912,26 @@ export class Battle {
   }
 
   private renderHit(): void {
+    if (this.pending?.kind === 'shootDrone') {
+      const u = this.selected();
+      const d = droneById(this.s, this.pending.droneId);
+      if (u?.pos && d) {
+        const mode = this.fireMode === 'burst' ? 'burst' : 'snap';
+        this.hud.append(
+          h(
+            'div',
+            { class: 'hitpanel panel', 'data-part': 'hit' },
+            h('div', { class: 'muted' }, `Постріл по дрону · ${FIRE[mode]} · ${fmtAp(fireApCost(u, mode))} AP`),
+            h('div', { class: 'big' }, `${shootDroneChance(u, d)}%`),
+            h('div', { class: 'muted' }, 'Шанс на кожну кулю; черга дає кілька спроб.'),
+            h('div', { class: 'row', style: 'margin-top:6px' }, btn('Підтвердити', () => void this.confirm(), { cls: 'primary' }), btn('Скасувати', () => this.cancel())),
+          ),
+        );
+      }
+      return;
+    }
     if (this.selVehicle) return this.renderVehicleHit();
+    if (this.selDrone) return this.renderDroneHit();
     const u = this.selected();
     const p = this.pending;
     if (!u?.pos || !p) return;
@@ -950,11 +1011,191 @@ export class Battle {
     const can = this.isHumanTurn() && !this.busy && !!u && isActive(u) && !u.panicked;
     const acts = h('div', { class: 'actions' });
     const sv = this.selectedVehicle();
-    if (sv) for (const menu of this.vehicleMenus(sv)) acts.append(this.menuButton(menu));
+    const sd = this.selectedDrone();
+    if (sd) for (const menu of this.droneMenus(sd)) acts.append(this.menuButton(menu));
+    else if (sv) for (const menu of this.vehicleMenus(sv)) acts.append(this.menuButton(menu));
     else if (u) for (const menu of this.menus(u, can)) acts.append(this.menuButton(menu));
     acts.append(btn('Кінець ходу', () => void this.endTurn(), { cls: 'primary', disabled: !this.isHumanTurn() || this.busy }));
     bar2.append(acts);
     this.hud.append(bar2);
+  }
+
+  // ---------- Дрони ----------
+
+  private selectedDrone(): DroneState | null {
+    const d = this.selDrone ? droneById(this.s, this.selDrone) : undefined;
+    return d && !d.destroyed ? d : null;
+  }
+
+  private selectDrone(id: string): void {
+    const d = droneById(this.s, id);
+    if (!d || d.destroyed || d.side !== this.viewer) return;
+    this.selDrone = id;
+    this.selVehicle = null;
+    this.sel = null;
+    this.pending = null;
+    this.droneAttackMode = false;
+    this.r.focus({ x: d.x, y: d.y, z: 0 });
+    this.refresh();
+  }
+
+  private afterDroneGone(operatorId: string): void {
+    this.selDrone = null;
+    const op = this.s.units.find((u) => u.id === operatorId);
+    if (op && isActive(op)) this.selectUnit(op);
+  }
+
+  /** Клік із урахуванням дронів. true — оброблено. */
+  private droneClick(droneId: string | null, unitId: string | null, cell: Cell | null): boolean {
+    const s = this.s;
+    const clicked = droneId ? droneById(s, droneId) : undefined;
+    if (clicked && clicked.side === this.viewer) {
+      if (this.selDrone !== clicked.id) {
+        this.selectDrone(clicked.id);
+        return true;
+      }
+    }
+    // Ворожий дрон — ціль для вибраного бійця.
+    if (clicked && clicked.side !== this.viewer && !this.selDrone) {
+      const u = this.selected();
+      if (!u?.pos || !this.isHumanTurn()) return false;
+      if (this.pending?.kind === 'shootDrone' && this.pending.droneId === clicked.id) void this.confirm();
+      else {
+        if (this.fireMode !== 'burst') this.fireMode = 'snap';
+        this.pending = { kind: 'shootDrone', droneId: clicked.id };
+      }
+      this.refresh();
+      return true;
+    }
+    const d = this.selectedDrone();
+    if (!d) return false;
+    const own = unitId ? s.units.find((x) => x.id === unitId && x.side === this.viewer && isActive(x)) : undefined;
+    if (own && !this.droneAttackMode) {
+      this.selectUnit(own);
+      return true;
+    }
+    if (!this.isHumanTurn() || !cell) return true;
+    if (this.droneAttackMode) {
+      const target = unitId ? s.units.find((x) => x.id === unitId)?.pos ?? cell : cell;
+      if (this.pending?.kind === 'dattack' && sameCell(this.pending.cell, target)) void this.confirm();
+      else this.pending = { kind: 'dattack', cell: { ...target } };
+      this.refresh();
+      return true;
+    }
+    const cost = moveCost(d, cell.x, cell.y);
+    if (cost > d.ap) {
+      this.toast('Задалеко для залишку AP дрона');
+      return true;
+    }
+    if (this.pending?.kind === 'dmove' && this.pending.x === cell.x && this.pending.y === cell.y) void this.confirm();
+    else this.pending = { kind: 'dmove', x: cell.x, y: cell.y, cost };
+    this.refresh();
+    return true;
+  }
+
+  private droneOverlays(): void {
+    const s = this.s;
+    const r = this.r;
+    const d = this.selectedDrone();
+    r.select(null);
+    r.setGhosts(this.ghostCells());
+    r.setOverlay('reach', []);
+    if (!d) return;
+    const def = droneDef(d.defId);
+    const reach = Math.floor(d.ap / toTenthsUi(def.moveCost));
+    const cells: { cell: Cell; color: [number, number, number] }[] = [];
+    let vision = def.vision;
+    if (!def.thermal && s.scenario.timeOfDay === 'night') vision *= 0.5;
+    for (let y = d.y - Math.max(reach, Math.ceil(vision)); y <= d.y + Math.max(reach, Math.ceil(vision)); y++)
+      for (let x = d.x - Math.max(reach, Math.ceil(vision)); x <= d.x + Math.max(reach, Math.ceil(vision)); x++) {
+        if (x < 0 || y < 0 || x >= s.map.width || y >= s.map.height) continue;
+        const cheb = Math.max(Math.abs(x - d.x), Math.abs(y - d.y));
+        const inVision = Math.hypot(x - d.x, y - d.y) <= vision;
+        const z = (() => {
+          for (let zz = s.map.levels - 1; zz >= 0; zz--) if (s.map.cells[zz][y][x].floor) return zz;
+          return 0;
+        })();
+        if (this.isHumanTurn() && cheb <= reach) cells.push({ cell: { x, y, z }, color: this.droneAttackMode ? [1, 0.4, 0.25] : [0.3, 0.6, 1] });
+        else if (inVision) cells.push({ cell: { x, y, z }, color: [0.4, 0.9, 0.5] });
+      }
+    r.setOverlay('reach', cells, { alpha: 0.32 });
+  }
+
+  private droneMenus(d: DroneState): ActionMenu[] {
+    const def = droneDef(d.defId);
+    const human = this.isHumanTurn() && !this.busy;
+    const out: ActionMenu[] = [
+      {
+        id: 'dfly',
+        label: 'Політ',
+        title: `${def.moveCost} AP дрона за клітинку, над перешкодами`,
+        active: !this.droneAttackMode,
+        items: [{ label: `Літати (AP ${fmtAp(d.ap)})`, disabled: !human, run: () => ((this.droneAttackMode = false), (this.pending = null)) }],
+      },
+    ];
+    if (def.kind === 'fpv')
+      out.push({
+        id: 'dattack',
+        label: 'Атака',
+        title: 'Оберіть ціль у межах досяжності — дрон вибухне (одноразово)',
+        active: this.droneAttackMode,
+        items: [{ label: `Ціль для удару (${def.warhead?.type === 'heat' ? 'кумулятивний' : 'осколковий'})`, disabled: !human, run: () => ((this.droneAttackMode = true), (this.pending = null)) }],
+      });
+    if (def.kind === 'dropper')
+      out.push({
+        id: 'ddrop',
+        label: `Скид (${d.drops})`,
+        title: 'Скид у клітинку під дроном — 2 AP дрона',
+        items: [{ label: 'Скинути зараз', disabled: !human || d.drops <= 0, run: () => (this.pending = { kind: 'ddrop' }) }],
+      });
+    out.push({
+      id: 'dother',
+      label: 'Дрон',
+      title: def.name,
+      items: [
+        { label: `Посадити (над оператором) — ${content().rules.drones.land} AP`, disabled: !human, run: () => void this.exec({ type: 'droneLand', droneId: d.id }).then((ok) => ok && this.afterDroneGone(d.operatorId)) },
+        { label: 'До оператора', run: () => this.afterDroneGone(d.operatorId) },
+      ],
+    });
+    return out;
+  }
+
+  private renderDroneStatus(): void {
+    const d = this.selectedDrone();
+    if (!d) return;
+    const def = droneDef(d.defId);
+    const op = this.s.units.find((u) => u.id === d.operatorId);
+    const row = (k: string, v: string) => [h('span', { class: 'muted' }, k), h('span', {}, v)];
+    this.hud.append(
+      h(
+        'div',
+        { class: 'status panel', 'data-part': 'status' },
+        h('div', { style: 'font-weight:700' }, def.name),
+        h('div', { class: 'muted', style: 'margin-bottom:6px' }, { fpv: 'Ударний (камікадзе)', dropper: 'Розвідка й скид', recon: 'Розвідка' }[def.kind]),
+        h(
+          'div',
+          { class: 'grid2' },
+          ...row('AP', `${fmtAp(d.ap)} / ${def.ap}`),
+          ...row('Батарея', `${d.battery} ход.`),
+          ...row('Огляд', `${def.vision} кл.${def.thermal ? ' · тепловізор' : ''}`),
+          ...(def.kind === 'dropper' ? row('Скиди', String(d.drops)) : []),
+          ...row('Оператор', op ? `${op.callsign} (AP ${fmtAp(op.ap)})` : '—'),
+        ),
+        h('div', { class: 'muted', style: 'font-size:0.85em;margin-top:6px' }, 'Поки дрон у повітрі, оператор має менше AP і не може тримати спостереження. Противник поблизу чує дрон і може його збити.'),
+      ),
+    );
+  }
+
+  private renderDroneHit(): void {
+    const p = this.pending;
+    const d = this.selectedDrone();
+    if (!d || !p) return;
+    let body: HTMLElement | null = null;
+    if (p.kind === 'dmove') body = h('div', {}, h('div', { class: 'muted' }, 'Політ'), h('div', { class: 'big' }, `${fmtAp(p.cost)} AP`), h('div', { class: 'muted' }, 'AP дрона.'));
+    else if (p.kind === 'dattack') body = h('div', {}, h('div', { class: 'muted' }, 'Удар FPV'), h('div', { class: 'big' }, 'Атака'), h('div', { class: 'muted' }, `Дрон буде втрачено. Відхилення можливе (точність дрона й навченість оператора).`));
+    else if (p.kind === 'ddrop') body = h('div', {}, h('div', { class: 'muted' }, 'Скид'), h('div', { class: 'big' }, '2 AP'), h('div', { class: 'muted' }, 'Боєприпас падає в клітинку під дроном.'));
+    if (!body) return;
+    this.hud.append(h('div', { class: 'hitpanel panel', 'data-part': 'hit' }, body, h('div', { class: 'row', style: 'margin-top:6px' }, btn('Підтвердити', () => void this.confirm(), { cls: 'primary' }), btn('Скасувати', () => this.cancel()))));
   }
 
   // ---------- Техніка ----------
@@ -967,6 +1208,7 @@ export class Battle {
     const v = vehicleById(this.s, id);
     if (!v || v.side !== this.viewer) return;
     this.selVehicle = id;
+    this.selDrone = null;
     this.sel = null;
     this.pending = null;
     this.fireMode = null;
@@ -1326,6 +1568,10 @@ export class Battle {
       ...this.lootTargets(u).map((t) => ({ label: `Обшукати: ${t.callsign}${t.side !== u.side ? ' (противник)' : ''}`, disabled: !can, run: () => this.openInventory(t.id) })),
     ];
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
+    if (u.piloting && droneById(s, u.piloting) && !droneById(s, u.piloting)!.destroyed) other.push({ label: 'Керувати дроном', run: () => this.selectDrone(u.piloting!) });
+    else
+      for (const it of droneItems(u))
+        other.push({ label: `Запустити ${it.name.replace(' (дрон)', '')} — ${content().rules.drones.launch} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'droneLaunch', unitId: u.id, index: it.index }).then((ok) => ok && u.piloting && this.selectDrone(u.piloting)) });
     for (const v of vehicles(s))
       if (v.side === u.side && !v.destroyed && u.pos && adjacentToVehicle(v, u.pos) && freeSeats(v) > 0)
         other.push({ label: `Сісти в ${vehicleDef(v.defId).name} — ${content().rules.actions.embark} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'embark', unitId: u.id, vehicleId: v.id }).then((ok) => ok && this.selectVehicle(v.id)) });

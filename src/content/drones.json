@@ -1,0 +1,77 @@
+{
+ "_comment": "Дрони: умовні ігрові характеристики. ap — очки дії дрона за хід, battery — ходів у повітрі, vision — радіус огляду згори.",
+ "drones": [
+  {
+   "id": "fpv7",
+   "name": "FPV 7\"",
+   "kind": "fpv",
+   "ap": 16,
+   "moveCost": 0.4,
+   "battery": 2,
+   "vision": 5,
+   "thermal": false,
+   "accuracy": 0.6,
+   "warhead": {
+    "type": "frag",
+    "damage": 45,
+    "penetration": 3,
+    "blast": {
+     "radius": 1.8,
+     "damage": 42,
+     "fragments": 4,
+     "objectDamage": 0
+    }
+   }
+  },
+  {
+   "id": "fpv10",
+   "name": "FPV 10\"",
+   "kind": "fpv",
+   "ap": 14,
+   "moveCost": 0.45,
+   "battery": 2,
+   "vision": 5,
+   "thermal": false,
+   "accuracy": 0.7,
+   "warhead": {
+    "type": "heat",
+    "damage": 70,
+    "penetration": 8,
+    "blast": {
+     "radius": 1.6,
+     "damage": 40,
+     "fragments": 3,
+     "objectDamage": 350
+    }
+   }
+  },
+  {
+   "id": "mavic3t",
+   "name": "Mavic 3T зі скидом",
+   "kind": "dropper",
+   "ap": 12,
+   "moveCost": 0.6,
+   "battery": 5,
+   "vision": 8,
+   "thermal": true,
+   "drops": 2,
+   "accuracy": 0.5,
+   "dropBlast": {
+    "radius": 1.4,
+    "damage": 34,
+    "fragments": 3,
+    "objectDamage": 0
+   }
+  },
+  {
+   "id": "avata",
+   "name": "Avata (розвідка)",
+   "kind": "recon",
+   "ap": 18,
+   "moveCost": 0.35,
+   "battery": 3,
+   "vision": 7,
+   "thermal": false
+  }
+ ]
+}

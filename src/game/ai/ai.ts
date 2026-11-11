@@ -1,6 +1,6 @@
 import { Rng } from '@/core/rng';
 import { dist2d, sameCell, toTenths, type Cell } from '@/core/grid';
-import { content, hasSkill, itemDef } from '@/content';
+import { content, droneDef, hasSkill, itemDef } from '@/content';
 import { cellsInZone, groundHeight, isIndoor } from '@/game/maps/map';
 import { findItem, findMedical, findReloadMagazine, primaryDef } from '@/game/inventory/inventory';
 import { canSelfApply, treatmentOptions } from '@/game/injuries/injuries';
@@ -9,11 +9,12 @@ import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, uglAm
 import { coverAgainst, effectiveCover, estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, unitReachable } from '@/game/combat/movement';
 import { crewProxy, vehicles } from '@/game/vehicles';
+import { droneItems, drones, moveCost } from '@/game/drones';
 import { losIgnore } from '@/game/visibility/los';
 import { canSeeFrom } from '@/game/visibility/visibility';
 import { isActive, other, sideUnits, type MissionState } from '@/game/simulation/state';
 import type { Command } from '@/game/simulation/commands';
-import type { AiStyle, FireMode, GrenadeDefinition, MedicalDefinition, Unit, VehicleState } from '@/game/types';
+import type { AiStyle, DroneState, FireMode, GrenadeDefinition, MedicalDefinition, Unit, VehicleState } from '@/game/types';
 
 interface Known {
   unit: Unit;
@@ -66,6 +67,18 @@ export class AiPlanner {
       if (cmd.type === 'overwatch') this.done.add(u.id);
       return cmd;
     }
+    // Дрони сторони.
+    for (const d of drones(s)) {
+      if (d.side !== s.turn.side || this.done.has(d.id)) continue;
+      const n = (this.steps.get(d.id) ?? 0) + 1;
+      this.steps.set(d.id, n);
+      const cmd = n > 6 ? null : this.droneDecide(s, d);
+      if (!cmd) {
+        this.done.add(d.id);
+        continue;
+      }
+      return cmd;
+    }
     // Техніка: навідник стріляє з бортової зброї.
     for (const v of vehicles(s)) {
       if (v.side !== s.turn.side || v.destroyed || this.done.has(v.id)) continue;
@@ -77,6 +90,39 @@ export class AiPlanner {
       return cmd;
     }
     return { type: 'endTurn' };
+  }
+
+  private droneDecide(s: MissionState, d: DroneState): Command | null {
+    const def = droneDef(d.defId);
+    const enemies = Object.values(s.contacts[d.side])
+      .filter((c) => c.visible)
+      .map((c) => s.units.find((u) => u.id === c.unitId)!)
+      .filter((u) => u && isActive(u));
+    const reach = (x: number, y: number) => moveCost(d, x, y) <= d.ap;
+    if (def.kind === 'fpv') {
+      // Техніка — пріоритет для кумулятивного дрона.
+      const veh = vehicles(s).filter((v) => v.side !== d.side && !v.destroyed && reach(v.x, v.y));
+      if (def.warhead?.type === 'heat' && veh.length) return { type: 'droneAttack', droneId: d.id, cell: { x: veh[0].x, y: veh[0].y, z: 0 } };
+      const t = enemies.filter((e) => reach(e.pos!.x, e.pos!.y)).sort((a, b) => b.health - a.health)[0];
+      if (t) return { type: 'droneAttack', droneId: d.id, cell: { ...t.pos! } };
+    }
+    if (def.kind === 'dropper' && d.drops > 0) {
+      const t = enemies.find((e) => e.pos!.x === d.x && e.pos!.y === d.y);
+      if (t && d.ap >= 20) return { type: 'droneDrop', droneId: d.id };
+      const near = enemies.filter((e) => moveCost(d, e.pos!.x, e.pos!.y) + 20 <= d.ap)[0];
+      if (near) return { type: 'droneMove', droneId: d.id, x: near.pos!.x, y: near.pos!.y };
+    }
+    // Розвідка: до останньої відомої позиції або в бік противника, не витрачаючи все.
+    const known = Object.values(s.contacts[d.side]).map((c) => c.pos);
+    const zone = s.scenario.sides[other(d.side)].deployZone;
+    const goal = known[0] ?? { x: (zone[0] + zone[2]) >> 1, y: (zone[1] + zone[3]) >> 1, z: 0 };
+    const step = toTenths(def.moveCost);
+    const maxCells = Math.floor((d.ap * 0.6) / step);
+    if (maxCells < 1 || (d.x === goal.x && d.y === goal.y)) return null;
+    const dx = Math.sign(goal.x - d.x) * Math.min(maxCells, Math.abs(goal.x - d.x));
+    const dy = Math.sign(goal.y - d.y) * Math.min(maxCells, Math.abs(goal.y - d.y));
+    if (!dx && !dy) return null;
+    return { type: 'droneMove', droneId: d.id, x: d.x + dx, y: d.y + dy };
   }
 
   private vehicleDecide(s: MissionState, v: VehicleState): Command | null {
@@ -138,6 +184,18 @@ export class AiPlanner {
     const known = this.known(s, u);
     const visible = known.filter((k) => k.visible);
     this.updateStyle(s, u, known);
+
+    // 0. Оператор дрона: запуск ударного дрона по видимій цілі, інакше — розвідника.
+    if (!u.piloting && u.ap >= toTenths(R.drones.launch)) {
+      const items = droneItems(u);
+      if (items.length && known.length) {
+        const pick =
+          (visible.length && vehicles(s).some((v) => v.side !== u.side && !v.destroyed) && items.find((i) => i.defId === 'drone_fpv10')) ||
+          (visible.length && items.find((i) => i.defId.startsWith('drone_fpv'))) ||
+          items.find((i) => i.defId === 'drone_mavic3t' || i.defId === 'drone_avata');
+        if (pick) return { type: 'droneLaunch', unitId: u.id, index: pick.index };
+      }
+    }
 
     // 1. Перезаряджання.
     if (w && (!mag || mag.rounds < Math.max(1, w.burst)) && findReloadMagazine(u)) {

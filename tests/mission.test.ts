@@ -15,6 +15,7 @@ function runAiVsAi(seed: number): MissionState {
     const r = m.dispatch(cmd);
     if (!r.ok && 'unitId' in cmd) ai.reject(cmd.unitId);
     if (!r.ok && 'vehicleId' in cmd) ai.reject(cmd.vehicleId);
+    if (!r.ok && 'droneId' in cmd) ai.reject(cmd.droneId);
     if (!r.ok && cmd.type === 'endTurn') throw new Error(r.error);
   }
   return m.state;

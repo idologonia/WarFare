@@ -102,6 +102,7 @@ describe('техніка', () => {
       const r = m.dispatch(c);
       if (!r.ok && 'unitId' in c) ai.reject(c.unitId);
       if (!r.ok && 'vehicleId' in c) ai.reject(c.vehicleId);
+      if (!r.ok && 'droneId' in c) ai.reject(c.droneId);
     }
     expect(m.state.turn.phase).toBe('ended');
   }, 60000);

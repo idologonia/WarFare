@@ -1014,6 +1014,50 @@
    "ap": 3,
    "uses": 4,
    "medicOnly": true
+  },
+  {
+   "id": "drone_fpv7",
+   "kind": "drone",
+   "drone": "fpv7",
+   "name": "FPV 7\" (дрон)",
+   "weight": 1.2,
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "id": "drone_fpv10",
+   "kind": "drone",
+   "drone": "fpv10",
+   "name": "FPV 10\" (дрон)",
+   "weight": 2.4,
+   "size": [
+    3,
+    2
+   ]
+  },
+  {
+   "id": "drone_mavic3t",
+   "kind": "drone",
+   "drone": "mavic3t",
+   "name": "Mavic 3T (дрон)",
+   "weight": 1.0,
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "id": "drone_avata",
+   "kind": "drone",
+   "drone": "avata",
+   "name": "Avata (дрон)",
+   "weight": 0.5,
+   "size": [
+    2,
+    1
+   ]
   }
  ]
 }

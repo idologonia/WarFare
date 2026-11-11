@@ -214,5 +214,16 @@
       "fragments": 3,
       "objectDamage": 0
     }
+  },
+  "drones": {
+    "_comment": "Дрони: умовні ігрові правила.",
+    "launch": 3,
+    "land": 1,
+    "operatorApPenalty": 3,
+    "hearRange": 10,
+    "shootBase": 22,
+    "shootTrainingFactor": 0.3,
+    "shootRangePenalty": 1.2,
+    "altitude": 0.6
   }
 }

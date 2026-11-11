@@ -32,6 +32,10 @@
         {
           "classId": "medic",
           "count": 1
+        },
+        {
+          "classId": "droneOperator",
+          "count": 1
         }
       ],
       "deployZone": [

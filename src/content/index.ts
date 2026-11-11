@@ -11,6 +11,7 @@ import nightRaid from './scenarios/night_raid.json';
 import armorAssault from './scenarios/armor_assault.json';
 import modsJson from './mods.json';
 import vehiclesJson from './vehicles.json';
+import dronesJson from './drones.json';
 import type {
   ItemDefinition,
   MapDefinition,
@@ -18,6 +19,7 @@ import type {
   Scenario,
   TerrainDefinition,
   UnitStats,
+  DroneDefinition,
   VehicleDefinition,
   WeaponModDefinition,
 } from '@/game/types';
@@ -62,6 +64,7 @@ export interface ContentDb {
   factions: { id: string; name: string; classes: string[] }[];
   mods: Map<string, WeaponModDefinition>;
   vehicles: Map<string, VehicleDefinition>;
+  drones: Map<string, DroneDefinition>;
 }
 
 function byId<T extends { id: string }>(list: T[]): Map<string, T> {
@@ -81,6 +84,7 @@ export function loadContent(): ContentDb {
     factions: factionsJson.factions,
     mods: byId(modsJson.mods as WeaponModDefinition[]),
     vehicles: byId(vehiclesJson.vehicles as unknown as VehicleDefinition[]),
+    drones: byId(dronesJson.drones as unknown as DroneDefinition[]),
   };
 }
 
@@ -137,4 +141,10 @@ export function vehicleDef(id: string): VehicleDefinition {
 
 export function hasSkill(classId: string, skill: string): boolean {
   return !!content().classes.get(classId)?.skills?.includes(skill);
+}
+
+export function droneDef(id: string): DroneDefinition {
+  const d = content().drones.get(id);
+  if (!d) throw new Error(`Невідомий дрон: ${id}`);
+  return d;
 }

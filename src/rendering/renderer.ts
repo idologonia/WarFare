@@ -3,7 +3,7 @@ import { cellAt, groundHeight } from '@/game/maps/map';
 import type { MissionState, SimEvent } from '@/game/simulation/state';
 import { sideSees } from '@/game/visibility/visibility';
 import type { Point } from '@/game/visibility/los';
-import type { SideId, Unit, VehicleState } from '@/game/types';
+import type { DroneState, SideId, Unit, VehicleState } from '@/game/types';
 import {
   ArcRotateCamera,
   Camera,
@@ -28,6 +28,8 @@ import { GeoBuilder, hash2, hex, type RGB } from './geo';
 import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
+import { buildDroneModel, type DroneModel } from './droneView';
+import { droneAltitude, droneNoticedBy } from '@/game/drones';
 import { vehicleDef } from '@/content';
 import { vehicleSeenBy } from '@/game/visibility/visibility';
 import { camoMaterial } from './camo';
@@ -130,6 +132,7 @@ export class Renderer {
 
     scene.onBeforeRenderObservable.add(() => {
       this.applyKeys(Math.min(50, this.engine.getDeltaTime()));
+      this.spinRotors();
       this.updateOrtho();
       if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
     });
@@ -249,6 +252,10 @@ export class Renderer {
     this.beams.clear();
     for (const m of this.vehicleModels.values()) m.root.dispose();
     this.vehicleModels.clear();
+    for (const m of this.droneModels.values()) m.root.dispose();
+    this.droneModels.clear();
+    for (const m of this.droneShadows.values()) m.dispose();
+    this.droneShadows.clear();
     this.applyEnvironment(state);
     this.map?.dispose();
     for (const o of this.overlays.values()) o.dispose();
@@ -282,6 +289,7 @@ export class Renderer {
   sync(): void {
     const s = this.state;
     this.syncVehicles();
+    this.syncDrones();
     for (const u of s.units) {
       const m = this.ensureUnit(u);
       const visible = u.pos !== null && (u.side === this.viewSide || sideSees(s, this.viewSide, u.id) || u.status === 'dead') && u.pos.z <= this.viewLevel;
@@ -485,13 +493,107 @@ export class Renderer {
   // ---------- Вибір ----------
 
   pickUnit(x: number, y: number): string | null {
-    const r = this.scene.pick(x, y, (m) => !!m.metadata?.hitbox && !m.metadata.vehicle && m.isEnabled());
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.hitbox && !m.metadata.vehicle && !m.metadata.drone && m.isEnabled());
     return r?.hit ? (r.pickedMesh!.metadata.unitId as string) : null;
   }
 
   pickVehicle(x: number, y: number): string | null {
     const r = this.scene.pick(x, y, (m) => !!m.metadata?.vehicle && m.isEnabled());
     return r?.hit ? (r.pickedMesh!.metadata.vehicleId as string) : null;
+  }
+
+  pickDrone(x: number, y: number): string | null {
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.drone && m.isEnabled());
+    return r?.hit ? (r.pickedMesh!.metadata.droneId as string) : null;
+  }
+
+  // ---------- Дрони ----------
+
+  private droneModels = new Map<string, DroneModel>();
+  private droneShadows = new Map<string, Mesh>();
+
+  /** Візуальна висота дрона: над найвищою підлогою під ним (щоб лишався в кадрі). */
+  private dronePos(d: DroneState, x = d.x, y = d.y) {
+    const m = this.state.map;
+    let top = 0;
+    for (let z = m.levels - 1; z >= 0; z--)
+      if (m.cells[z][y]?.[x]?.floor) {
+        top = z + (z === 0 ? m.cells[0][y][x].elevation : 0);
+        break;
+      }
+    void droneAltitude;
+    return world(x + 0.5, y + 0.5, top + 1.25);
+  }
+
+  syncDrones(): void {
+    const s = this.state;
+    const live = new Set((s.drones ?? []).filter((d) => !d.destroyed).map((d) => d.id));
+    for (const [id, m] of this.droneModels)
+      if (!live.has(id)) {
+        m.root.dispose();
+        this.droneModels.delete(id);
+        this.droneShadows.get(id)?.dispose();
+        this.droneShadows.delete(id);
+      }
+    for (const d of s.drones ?? []) {
+      if (d.destroyed) continue;
+      let m = this.droneModels.get(d.id);
+      if (!m) {
+        m = buildDroneModel(this.scene, this.unitMat2(), d, hex(SIDE_COLOR[d.side]));
+        this.droneModels.set(d.id, m);
+        const sh = new GeoBuilder().box(0, 0, 0, 0.5, 0.01, 0.5, [0, 0, 0], 0.35).build('dshadow', this.scene, this.overlayMat);
+        sh.hasVertexAlpha = true;
+        sh.isPickable = false;
+        this.droneShadows.set(d.id, sh);
+      }
+      m.root.position = this.dronePos(d);
+      const seen = droneNoticedBy(s, this.viewSide, d);
+      m.root.setEnabled(seen);
+      const sh = this.droneShadows.get(d.id)!;
+      sh.position = world(d.x + 0.5, d.y + 0.5, groundHeight(s.map, { x: d.x, y: d.y, z: 0 }) + 0.02);
+      sh.setEnabled(seen);
+    }
+  }
+
+  private plainMat: StandardMaterial | null = null;
+  private unitMat2(): StandardMaterial {
+    return (this.plainMat ??= makeMaterial(this.scene, 'droneMat'));
+  }
+
+  private spinRotors(): void {
+    for (const m of this.droneModels.values()) for (const r of m.rotors) r.rotation.y += 0.9;
+  }
+
+  private async animateDrone(e: Extract<SimEvent, { t: 'drone' }>): Promise<void> {
+    const m = this.droneModels.get(e.droneId);
+    const d = this.state.drones?.find((x) => x.id === e.droneId);
+    if (!m || !d) {
+      this.syncDrones();
+      return;
+    }
+    if (e.path && e.path.length > 1 && m.root.isEnabled()) {
+      for (let i = 1; i < e.path.length; i++) {
+        const a = this.dronePos(d, e.path[i - 1].x, e.path[i - 1].y);
+        const b = this.dronePos(d, e.path[i].x, e.path[i].y);
+        m.root.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+        await this.anim.tween(70, (t) => (m.root.position = Vector3.Lerp(a, b, t)));
+      }
+    }
+    if (e.attack) {
+      const a = m.root.position.clone();
+      const b = cellWorld(e.attack, groundHeight(this.state.map, e.attack) + 0.3);
+      m.root.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      m.root.rotation.x = 0.8;
+      await this.anim.tween(420, (t) => (m.root.position = Vector3.Lerp(a, b, t * t)));
+    } else if (e.lost && m.root.isEnabled()) {
+      const a = m.root.position.clone();
+      const ground = world(a.x, -a.z, 0);
+      await this.anim.tween(450, (t) => {
+        m.root.position = Vector3.Lerp(a, ground, t * t);
+        m.root.rotation.z = t * 3;
+      });
+    }
+    this.syncDrones();
   }
 
   // ---------- Техніка ----------
@@ -633,6 +735,9 @@ export class Renderer {
         case 'vehicle':
           if (e.path && this.vehicleModels.get(e.vehicleId)?.root.isEnabled()) await this.animateVehicle(e.vehicleId, e.path);
           this.syncVehicles();
+          break;
+        case 'drone':
+          await this.animateDrone(e);
           break;
         case 'vehicleHit':
           await this.animateVehicleHit(e.vehicleId, e.penetrated);

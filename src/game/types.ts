@@ -58,7 +58,7 @@ export interface MapObjectDefinition {
 
 // ---------- Контент: спорядження ----------
 
-export type ItemKind = 'weapon' | 'magazine' | 'grenade' | 'medical' | 'armor' | 'helmet' | 'rig' | 'backpack' | 'helmetMount';
+export type ItemKind = 'weapon' | 'magazine' | 'grenade' | 'medical' | 'armor' | 'helmet' | 'rig' | 'backpack' | 'helmetMount' | 'drone';
 
 export interface ItemDefinitionBase {
   id: string;
@@ -194,6 +194,12 @@ export interface HelmetMountDefinition extends ItemDefinitionBase {
   nightHitPenalty?: number;
 }
 
+export interface DroneItemDefinition extends ItemDefinitionBase {
+  kind: 'drone';
+  /** Який дрон (content/drones.json). */
+  drone: string;
+}
+
 export interface BackpackDefinition extends ItemDefinitionBase {
   kind: 'backpack';
   grid: [number, number];
@@ -207,7 +213,8 @@ export type ItemDefinition =
   | ArmorDefinition
   | RigDefinition
   | BackpackDefinition
-  | HelmetMountDefinition;
+  | HelmetMountDefinition
+  | DroneItemDefinition;
 
 // ---------- Екземпляри ----------
 
@@ -354,6 +361,8 @@ export interface Unit {
   lightOn?: boolean;
   /** Боєць у техніці (id машини); pos при цьому null. */
   inVehicle?: string;
+  /** Оператор керує дроном (id дрона). */
+  piloting?: string;
   aiStyle?: AiStyle;
   stats_mission: UnitMissionStats;
   /** Хід, на якому має з'явитися підкріплення (для резерву). */
@@ -547,5 +556,41 @@ export interface VehicleState {
   passengers: string[];
   weapon: WeaponInstance | null;
   ammoStock: number;
+  destroyed: boolean;
+}
+
+// ---------- Дрони ----------
+
+export interface DroneDefinition {
+  id: string;
+  name: string;
+  /** fpv — камікадзе, dropper — зі скидом, recon — розвідка. */
+  kind: 'fpv' | 'dropper' | 'recon';
+  ap: number;
+  moveCost: number;
+  battery: number;
+  vision: number;
+  /** Тепловізор: бачить уночі й крізь дим/рослинність. */
+  thermal: boolean;
+  /** Точність ураження (0..1): менше — більше відхилення. */
+  accuracy?: number;
+  warhead?: Warhead;
+  drops?: number;
+  dropBlast?: Warhead['blast'];
+}
+
+export interface DroneState {
+  id: string;
+  defId: string;
+  side: SideId;
+  operatorId: string;
+  /** Предмет, з якого запущено (для посадки назад). */
+  itemDefId: string;
+  x: number;
+  y: number;
+  /** AP у десятих. */
+  ap: number;
+  battery: number;
+  drops: number;
   destroyed: boolean;
 }

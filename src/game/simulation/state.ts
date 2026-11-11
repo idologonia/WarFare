@@ -16,6 +16,7 @@ import type {
   Unit,
   UnitStatus,
   VehicleState,
+  DroneState,
 } from '@/game/types';
 
 /** Повний серіалізований стан місії (звичайний JSON). */
@@ -36,6 +37,8 @@ export interface MissionState {
   result: MissionResult | null;
   /** Техніка (у старих збереженнях відсутня). */
   vehicles?: VehicleState[];
+  /** Дрони в повітрі. */
+  drones?: DroneState[];
 }
 
 /** Події симуляції для рендерингу/UI (не бойова стрічка: лише для анімацій і спливаючих підказок). */
@@ -51,6 +54,7 @@ export type SimEvent =
   | { t: 'rocket'; unitId: string; from: Point; to: Point }
   | { t: 'smoke'; cells: Cell[] }
   | { t: 'vehicle'; vehicleId: string; path?: Cell[] }
+  | { t: 'drone'; droneId: string; path?: { x: number; y: number }[]; attack?: Cell; lost?: boolean }
   | { t: 'vehicleHit'; vehicleId: string; component: string | null; penetrated: boolean }
   | { t: 'explosion'; at: Point; radius: number }
   | { t: 'reload'; unitId: string }

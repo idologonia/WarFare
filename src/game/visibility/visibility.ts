@@ -6,6 +6,7 @@ import { isActive, onField, other, type Ctx, type MissionState } from '@/game/si
 import type { SideId, Stance, Unit, VehicleState } from '@/game/types';
 import { cellCenter, losIgnore, trace, type Point } from './los';
 import { crew, crewProxy, vehicleCenter, vehicles } from '@/game/vehicles';
+import { droneSees, drones } from '@/game/drones';
 
 export function eyePoint(s: MissionState, cell: Cell, stance: Stance): Point {
   return cellCenter(cell, groundHeight(s.map, cell) + content().rules.vision.eyeHeight[stance]);
@@ -124,6 +125,12 @@ export function updateContacts(ctx: Ctx): void {
           if (r.identified) identified = true;
           if (identified) break;
         }
+      }
+      // Розвідка з дронів сторони (згори; тепловізор бачить уночі й крізь дим).
+      if (!seen) for (const d of drones(s)) if (d.side === side && droneSees(s, d, target)) {
+        seen = true;
+        identified = true;
+        break;
       }
       const prev = known[target.id];
       if (seen) {

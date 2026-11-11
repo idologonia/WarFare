@@ -18,6 +18,11 @@ export type Command =
   | { type: 'launch'; unitId: string; kind: 'rpg' | 'ugl' | 'disposable'; cell: Cell }
   | { type: 'reloadLauncher'; unitId: string; ammo?: string }
   | { type: 'toggleLight'; unitId: string }
+  | { type: 'droneLaunch'; unitId: string; index: number }
+  | { type: 'droneMove'; droneId: string; x: number; y: number }
+  | { type: 'droneAttack'; droneId: string; cell: Cell }
+  | { type: 'droneDrop'; droneId: string }
+  | { type: 'droneLand'; droneId: string }
   | { type: 'moveItem'; unitId: string; from: ItemRef; to: ItemDest }
   | { type: 'embark'; unitId: string; vehicleId: string; seat?: 'driver' | 'gunner' | 'passenger' }
   | { type: 'disembark'; unitId: string; cell: Cell }

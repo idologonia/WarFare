@@ -134,6 +134,8 @@ function flyBullet(ctx: Ctx, shooter: Unit, from: Point, to: Point, exclude: Set
 export interface FireTarget {
   unitId?: string;
   cell?: Cell;
+  /** Постріл по дрону в повітрі. */
+  droneId?: string;
 }
 
 /** Постріл (одиночний, черга, прицільний, наосліп) у бійця або вільно в точку. AP списує команда. */

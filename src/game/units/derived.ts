@@ -32,6 +32,7 @@ export function computeApMax(u: Unit): ApBreakdown {
   const supp = Math.floor(u.suppression / r.ap.suppressionPerAp);
   if (supp) parts.push({ label: 'Придушення', value: -supp });
   if (u.carrying) parts.push({ label: 'Несе пораненого', value: -r.ap.carryingPenalty });
+  if (u.piloting) parts.push({ label: 'Керує дроном', value: -R().drones.operatorApPenalty });
   let legs = 0;
   let pneumo = 0;
   for (const inj of u.injuries) {

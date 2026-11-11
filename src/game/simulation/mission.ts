@@ -5,6 +5,8 @@ import { content, hasSkill, itemDef, vehicleDef } from '@/content';
 import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
 import { adjacentToVehicle, canPlace, crewProxy, embark, exitCells, leaveSeat, moveVehicle, spawnVehicle, vehicleById, vehiclePath, vehicleReachable } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
+import { destroyDrone, droneById, droneDrop, droneNoticedBy, dronePoint, flyDrone, fpvAttack, landDrone, launchDrone, shootDroneChance, tickDrones } from '@/game/drones';
+import { eyePoint } from '@/game/visibility/visibility';
 import { applyMove, validateMove } from '@/game/inventory/transfer';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
@@ -234,6 +236,17 @@ export class Mission {
 
     const R0 = content().rules;
     if (cmd.type === 'vehicleMove' || cmd.type === 'vehicleFire' || cmd.type === 'vehicleReload') return this.vehicleCommand(ctx, cmd);
+    if (cmd.type === 'droneMove' || cmd.type === 'droneAttack' || cmd.type === 'droneDrop' || cmd.type === 'droneLand') {
+      const d = droneById(s, cmd.droneId);
+      if (!d || d.destroyed) return 'Дрона немає';
+      if (d.side !== s.turn.side) return 'Зараз хід іншої сторони';
+      const op = unitById(s, d.operatorId);
+      if (op.status !== 'active' || op.panicked) return 'Оператор не може керувати';
+      if (cmd.type === 'droneMove') return flyDrone(ctx, d, cmd.x, cmd.y);
+      if (cmd.type === 'droneAttack') return fpvAttack(ctx, d, cmd.cell);
+      if (cmd.type === 'droneDrop') return droneDrop(ctx, d);
+      return landDrone(ctx, d);
+    }
     if (cmd.type === 'disembark') {
       const u0 = unitById(s, cmd.unitId);
       if (u0.side !== s.turn.side) return 'Зараз хід іншої сторони';
@@ -305,6 +318,35 @@ export class Mission {
         if (u.carrying) return 'Руки зайняті пораненим';
         if (!wd.modes.includes(cmd.mode)) return 'Цей режим недоступний для зброї';
         if (!w.magazine || w.magazine.rounds <= 0) return 'Магазин порожній — перезарядіть';
+        if (cmd.target.droneId) {
+          const d = droneById(s, cmd.target.droneId);
+          if (!d || d.destroyed) return 'Дрона немає';
+          if (!droneNoticedBy(s, u.side, d)) return 'Дрон не помічено';
+          if (cmd.mode === 'blind' || cmd.mode === 'aimed') return 'По дрону — навскид або чергою';
+          const cost0 = fireApCost(u, cmd.mode);
+          if (u.ap < cost0) return 'Недостатньо AP';
+          u.ap -= cost0;
+          const shots = Math.min(w.magazine.rounds, cmd.mode === 'burst' ? wd.burst : 1);
+          const chance = shootDroneChance(u, d);
+          const from = eyePoint(s, u.pos!, u.stance);
+          const to = dronePoint(s, d);
+          const fired: { to: typeof to; hitUnit: string | null }[] = [];
+          let down = false;
+          for (let i = 0; i < shots; i++) {
+            w.magazine.rounds--;
+            u.stats_mission.shots++;
+            u.stats_mission.roundsUsed++;
+            fired.push({ to: { x: to.x + (ctx.rng.next() - 0.5) * 0.6, y: to.y + (ctx.rng.next() - 0.5) * 0.6, h: to.h }, hitUnit: null });
+            if (!down && ctx.rng.chance(chance)) down = true;
+          }
+          ctx.ev.push({ t: 'fired', unitId: u.id, from, shots: fired, targetUnit: null });
+          if (down) {
+            u.stats_mission.hits++;
+            destroyDrone(ctx, d, true);
+            float(ctx, u.id, 'Дрон збито!', 'good');
+          } else float(ctx, u.id, 'Промах по дрону', 'info');
+          return null;
+        }
         const t = cmd.target.unitId ? unitById(s, cmd.target.unitId) : null;
         if (t) {
           if (!t.pos) return 'Ціль недоступна';
@@ -397,6 +439,15 @@ export class Mission {
         return null;
       }
 
+      case 'droneLaunch': {
+        if (u.carrying) return 'Руки зайняті пораненим';
+        if (u.ap < toTenths(R.drones.launch)) return 'Недостатньо AP';
+        const res = launchDrone(ctx, u, cmd.index);
+        if (typeof res === 'string') return res;
+        u.ap -= toTenths(R.drones.launch);
+        return null;
+      }
+
       case 'toggleLight': {
         if (!helmetMount(u, 'light')) return 'Немає ліхтаря';
         u.lightOn = !u.lightOn;
@@ -422,6 +473,7 @@ export class Mission {
         if (u.ap < toTenths(R.actions.overwatchMin)) return `Потрібно щонайменше ${R.actions.overwatchMin} AP`;
         if (!u.inventory.primary?.magazine?.rounds) return 'Магазин порожній';
         if (u.carrying) return 'Руки зайняті пораненим';
+        if (u.piloting) return 'Оператор керує дроном — спостереження неможливе';
         u.overwatch = u.ap;
         u.ap = 0;
         ctx.ev.push({ t: 'overwatch', unitId: u.id });
@@ -620,7 +672,7 @@ export class Mission {
     const O = content().rules.overwatch;
     let any = false;
     for (const o of s.units) {
-      if (o.side === mover.side || !isActive(o) || o.overwatch <= 0 || o.panicked || !isActive(mover)) continue;
+      if (o.side === mover.side || !isActive(o) || o.overwatch <= 0 || o.panicked || o.piloting || !isActive(mover)) continue;
       const cost = fireApCost(o, 'snap');
       if (o.overwatch < cost || !o.inventory.primary?.magazine?.rounds) continue;
       const sight = canSee(s, o, mover);
@@ -651,6 +703,7 @@ export class Mission {
     const R = content().rules;
     s.turn.side = side;
     if (side === 'blue') decaySmoke(ctx);
+    tickDrones(ctx, side);
     // Підкріплення.
     for (const r of sideUnits(s, side)) {
       if (r.status !== 'reserve' || (r.reserveTurn ?? 0) > s.turn.turn) continue;
