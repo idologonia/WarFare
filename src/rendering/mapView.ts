@@ -213,7 +213,7 @@ export class MapView {
 
   rebuildObject(c: Cell): void {
     const key = cellKey(c);
-    for (const k of [key, `e:${key}`]) {
+    for (const k of [key, `e:${key}`, `eg:${key}`]) {
       const old = this.objects.get(k);
       if (old) {
         old.mesh.dispose();
@@ -237,13 +237,14 @@ export class MapView {
     }
     if (cell.edges && Object.keys(cell.edges).length) {
       const g = new GeoBuilder();
+      const gg = new GeoBuilder();
       let wall = false;
       let glass = false;
       let building = cell.buildingId;
       for (const side of Object.keys(cell.edges) as EdgeSide[]) {
         const e = cell.edges[side]!;
         const o = objectDef(e.defId);
-        buildEdge(g, o, c.x, c.y, c.z, side, c.z);
+        buildEdge(g, o, c.x, c.y, c.z, side, c.z, gg);
         if (o.wall || o.id === 'parapet') wall = true;
         if (o.window) glass = true;
         if (building === undefined) {
@@ -251,10 +252,16 @@ export class MapView {
           if (n && n.x >= 0 && n.y >= 0) building = this.map.cells[c.z][n.y][n.x].buildingId;
         }
       }
-      const mesh = g.build(`edge_${key}`, this.scene, glass ? this.glass : this.solid);
+      const mesh = g.build(`edge_${key}`, this.scene, this.solid);
       mesh.isPickable = false;
       this.onMesh(mesh, false);
-      this.objects.set(`e:${key}`, { mesh, level: c.z, buildingId: building, wall, glass });
+      this.objects.set(`e:${key}`, { mesh, level: c.z, buildingId: building, wall, glass: false });
+      if (glass && gg.positions.length > 0) {
+        const gm = gg.build(`edgeg_${key}`, this.scene, this.glass);
+        gm.isPickable = false;
+        this.onMesh(gm, false);
+        this.objects.set(`eg:${key}`, { mesh: gm, level: c.z, buildingId: building, wall, glass: true });
+      }
     }
   }
 
@@ -274,7 +281,7 @@ export class MapView {
  * Тонкий об'єкт уздовж межі клітинки. Будується в локальних координатах:
  * a — уздовж межі (−0.5..0.5), b — поперек (товщина), y — висота.
  */
-function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, _z: number, side: EdgeSide, base: number): void {
+function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, _z: number, side: EdgeSide, base: number, gGlass: GeoBuilder = g): void {
   const L = LH();
   const b0 = base * L;
   const col = hex(o.color);
@@ -283,12 +290,13 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
   const ex = side === 'w' ? x : side === 'e' ? x + 1 : x + 0.5;
   const ez = side === 'n' ? -y : side === 's' ? -(y + 1) : -(y + 0.5);
   const put = (a: number, yy: number, b: number, sa: number, sy: number, sb: number, c: RGB, alpha = 1) => {
-    if (horizontal) g.box(ex + a, b0 + yy, ez + b, sa, sy, sb, c, alpha);
-    else g.box(ex + b, b0 + yy, ez - a, sb, sy, sa, c, alpha);
+    const t = alpha < 1 ? gGlass : g;
+    if (horizontal) t.box(ex + a, b0 + yy, ez + b, sa, sy, sb, c, alpha);
+    else t.box(ex + b, b0 + yy, ez - a, sb, sy, sa, c, alpha);
   };
   const T = 0.16;
   // Пн/пд стіни — на всю довжину з кутами, зх/сх — між ними (без накладання граней у кутах).
-  const LEN = horizontal ? 1 + T : 1 - T;
+  const LEN = horizontal ? 1 + T : 1.002;
   const n = hash2(x * 3 + (horizontal ? 1 : 2), y, _z);
   switch (o.id) {
     case 'fence':
