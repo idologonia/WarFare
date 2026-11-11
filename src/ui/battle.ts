@@ -12,7 +12,7 @@ import { cellAt, cellsInZone, inZone, isIndoor } from '@/game/maps/map';
 import { computeApMax } from '@/game/units/derived';
 import { Mission } from '@/game/simulation/mission';
 import type { Command } from '@/game/simulation/commands';
-import { isActive, type SimEvent } from '@/game/simulation/state';
+import { isActive, type MissionState, type SimEvent } from '@/game/simulation/state';
 import type { DroneState, FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
 import type { Renderer } from '@/rendering/renderer';
 import { bar, btn, h, keyName, modal } from './dom';
@@ -24,7 +24,7 @@ import { losIgnore } from '@/game/visibility/los';
 import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId } from '@/game/logistics';
 import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
-export type BattleMode = 'ai' | 'hotseat' | 'test';
+export type BattleMode = 'ai' | 'hotseat' | 'test' | 'online';
 
 type Pending =
   | { kind: 'move'; cell: Cell; path: Cell[]; cost: number }
@@ -50,6 +50,8 @@ export interface BattleHooks {
   onEnd: (m: Mission) => void;
   onMenu: () => void;
   autosave: (m: Mission) => void;
+  /** Мережева гра: своя сторона й відправлення прийнятих локально команд на сервер. */
+  net?: { side: SideId; send: (cmd: Command) => void };
 }
 
 export class Battle {
@@ -90,7 +92,16 @@ export class Battle {
     private mode: BattleMode,
     private hooks: BattleHooks,
   ) {
-    this.viewer = mode === 'ai' ? (m.s.controllers.blue === 'human' ? 'blue' : 'red') : m.s.turn.side;
+    this.viewer = mode === 'online' && hooks.net ? hooks.net.side : mode === 'ai' ? (m.s.controllers.blue === 'human' ? 'blue' : 'red') : m.s.turn.side;
+    if (mode === 'online' && hooks.net) {
+      const net = hooks.net;
+      const orig = m.dispatch.bind(m);
+      m.dispatch = (cmd: Command) => {
+        const res = orig(cmd);
+        if (res.ok && !this.applyingRemote) net.send(cmd);
+        return res;
+      };
+    }
     this.hud = h('div', { class: 'layer hud' });
     this.floats = h('div', { class: 'layer', style: 'pointer-events:none' });
     root.append(this.hud, this.floats);
@@ -188,6 +199,50 @@ export class Battle {
     return true;
   }
 
+  private applyingRemote = false;
+  private remoteQueue: Promise<void> = Promise.resolve();
+
+  /** Команда суперника з сервера: виконати так само (симуляція детермінована) і показати. */
+  applyRemote(cmd: Command): void {
+    this.remoteQueue = this.remoteQueue.then(async () => {
+      if (this.disposed) return;
+      this.applyingRemote = true;
+      const res = this.m.dispatch(cmd);
+      this.applyingRemote = false;
+      if (!res.ok) return;
+      this.busy = true;
+      await this.r.play(res.events, this.float);
+      this.busy = false;
+      if (this.disposed) return;
+      if (res.events.some((e) => e.t === 'missionEnd')) {
+        this.refresh();
+        setTimeout(() => this.hooks.onEnd(this.m), 900);
+        return;
+      }
+      if (this.isHumanTurn() && cmd.type === 'endTurn') {
+        this.sel = this.myUnits().find((u) => isActive(u))?.id ?? null;
+        this.toast('Ваш хід');
+      }
+      this.refresh();
+    });
+  }
+
+  /** Повна синхронізація стану від сервера. */
+  syncState(state: MissionState, error?: string): void {
+    this.m.state = state;
+    this.r.load(state, this.viewer, true);
+    if (error) this.toast(`Сервер: ${error}`);
+    this.refresh();
+  }
+
+  get viewerSide(): SideId {
+    return this.viewer;
+  }
+
+  netNotice(text: string): void {
+    this.toast(text);
+  }
+
   private async endTurn(): Promise<void> {
     if (!this.isHumanTurn() || this.busy) return;
     this.fireMode = null;
@@ -195,7 +250,10 @@ export class Battle {
     this.launchMode = null;
     await this.exec({ type: 'endTurn' });
     if (this.s.turn.phase !== 'battle') return;
-    if (this.isAiTurn()) await this.runAi();
+    if (this.mode === 'online') {
+      this.toast('Хід суперника…');
+      this.refresh();
+    } else if (this.isAiTurn()) await this.runAi();
     else if (this.mode !== 'ai') this.startHandover();
   }
 

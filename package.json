@@ -9,12 +9,16 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:server": "vite build --ssr server/index.ts --outDir dist-server --emptyOutDir",
+    "server": "node dist-server/index.js"
   },
   "dependencies": {
-    "@babylonjs/core": "9.32.0"
+    "@babylonjs/core": "9.32.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.12",
     "typescript": "5.9.3",
     "vite": "8.3.5",
     "vitest": "4.1.12"
