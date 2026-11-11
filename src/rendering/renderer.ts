@@ -30,6 +30,8 @@ import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitVie
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
 import { buildDroneModel, type DroneModel } from './droneView';
 import { sfx } from './sound';
+import { visibleCells } from '@/game/visibility/visibility';
+import { facingOf, facingRotation } from '@/game/units/facing';
 import { droneAltitude, droneNoticedBy } from '@/game/drones';
 import { vehicleDef } from '@/content';
 import { vehicleSeenBy } from '@/game/visibility/visibility';
@@ -280,7 +282,6 @@ export class Renderer {
         this.shadowGen?.addShadowCaster(mesh);
         mesh.metadata = { ...mesh.metadata, caster: true };
       }
-      if (u.side === 'red') m.root.rotation.y = Math.PI;
       this.units.set(u.id, m);
     }
     return m;
@@ -289,6 +290,7 @@ export class Renderer {
   /** Розміщення моделей за станом (без анімації), видимість противника. */
   sync(): void {
     const s = this.state;
+    this.refreshFog();
     this.syncVehicles();
     this.syncDrones();
     for (const u of s.units) {
@@ -298,6 +300,7 @@ export class Renderer {
       m.root.setEnabled(visible || (seenEnemyDead && u.pos !== null && u.pos.z <= this.viewLevel));
       if (!u.pos) continue;
       m.root.position = cellWorld(u.pos, groundHeight(s.map, u.pos));
+      m.root.rotation.y = facingRotation(facingOf(u));
       applyPose(m, u.stance, u.weaponState, u.status);
       this.updateBeam(u, m);
       const identified = u.side === this.viewSide || s.revealAll || s.contacts[this.viewSide][u.id]?.identified;
@@ -334,7 +337,7 @@ export class Renderer {
       return;
     }
     if (!beam) {
-      beam = CreateCylinder('beam', { height: 3.2, diameterTop: 0.08, diameterBottom: 1.6, tessellation: 12 }, this.scene);
+      beam = CreateCylinder('beam', { height: 3.2, diameterTop: 1.6, diameterBottom: 0.08, tessellation: 12 }, this.scene);
       beam.material = this.beamMat;
       beam.isPickable = false;
       beam.rotation.x = Math.PI / 2;
@@ -370,6 +373,48 @@ export class Renderer {
     mesh.isPickable = false;
     mesh.hasVertexAlpha = true;
     this.overlays.set('smoke', mesh);
+  }
+
+  private fogKey = '';
+
+  /** Затемнення клітинок, яких не бачить жоден свій боєць (як у X-COM). */
+  refreshFog(force = false): void {
+    const s = this.state;
+    if (!s?.map || s.revealAll || s.turn.phase === 'deploy') {
+      this.overlays.get('fog')?.dispose();
+      this.overlays.delete('fog');
+      this.fogKey = '';
+      return;
+    }
+    const key =
+      this.viewSide + this.viewLevel + '|' +
+      s.units.filter((u) => u.side === this.viewSide && u.pos && u.status === 'active').map((u) => `${u.pos!.x},${u.pos!.y},${u.pos!.z},${u.facing},${u.stance},${u.lightOn ? 1 : 0}`).join(';') +
+      '|' + (s.vehicles ?? []).filter((v) => v.side === this.viewSide).map((v) => `${v.x},${v.y}`).join(';');
+    if (!force && key === this.fogKey) return;
+    this.fogKey = key;
+    const seen = visibleCells(s, this.viewSide);
+    const g = new GeoBuilder();
+    const m = s.map;
+    for (let y = 0; y < m.height; y++)
+      for (let x = 0; x < m.width; x++) {
+        let z = 0;
+        for (let k = Math.min(this.viewLevel, m.levels - 1); k > 0; k--)
+          if (m.cells[k][y][x].floor) {
+            z = k;
+            break;
+          }
+        if (seen.has(`${x},${y},${z}`)) continue;
+        const c = { x, y, z };
+        const p = cellWorld(c, groundHeight(m, c));
+        g.box(p.x, p.y + 0.07, p.z, 1, 0.02, 1, [0.01, 0.015, 0.03], 0.68);
+      }
+    this.overlays.get('fog')?.dispose();
+    this.overlays.delete('fog');
+    if (g.empty) return;
+    const mesh = g.build('ov_fog', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('fog', mesh);
   }
 
   refreshVisibility(): void {

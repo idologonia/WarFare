@@ -2,6 +2,7 @@ import { dist2d, type Cell } from '@/core/grid';
 import { content } from '@/content';
 import { groundHeight, objAt } from '@/game/maps/map';
 import { visionRange } from '@/game/units/derived';
+import { offAxis } from '@/game/units/facing';
 import { isActive, onField, other, type Ctx, type MissionState } from '@/game/simulation/state';
 import type { SideId, Stance, Unit, VehicleState } from '@/game/types';
 import { cellCenter, losIgnore, trace, type Point } from './los';
@@ -33,7 +34,11 @@ export interface SightResult {
 export function canSeeFrom(s: MissionState, observer: Unit, from: Cell, fromStance: Stance, target: Unit): SightResult {
   const to = target.pos!;
   const distance = dist2d(from, to) + Math.abs(from.z - to.z) * 0.5;
-  let range = visionRange(s, observer);
+  // Сектор огляду: позаду й збоку — лише впритул (чути/боковий зір). Екіпаж техніки бачить навколо.
+  const V = content().rules.vision;
+  const off = observer.inVehicle ? 0 : offAxis(observer, from, to);
+  if (off > V.fov / 2 && distance > V.peripheralRange) return { seen: false, identified: false, concealment: 0, distance };
+  let range = visionRange(s, observer, off <= V.flashlightCone / 2);
   // Увімкнений ліхтар уночі видно здалеку (якщо є пряма видимість).
   if (s.scenario.timeOfDay === 'night' && target.lightOn) range = Math.max(range, content().rules.vision.lightVisibleRange);
   const none = { seen: false, identified: false, concealment: 0, distance };
@@ -158,3 +163,40 @@ export function sideSees(s: MissionState, side: SideId, unitId: string): boolean
 }
 
 export const enemySide = other;
+
+/**
+ * Клітинки, які бачить сторона (для затемнення, як у X-COM). Ключ — "x,y,z".
+ * Перевірка — сектор огляду + лінія видимості до центру клітинки на висоті пояса.
+ */
+export function visibleCells(s: MissionState, side: SideId): Set<string> {
+  const out = new Set<string>();
+  const V = content().rules.vision;
+  const m = s.map;
+  for (const o of observersOf(s, side)) {
+    const u = o.u;
+    if (!u.pos) continue;
+    const range = Math.ceil(visionRange(s, u));
+    const eye = eyePoint(s, u.pos, u.stance);
+    if (o.vehicle) losIgnore.ids.add(o.vehicle);
+    for (let z = 0; z < m.levels; z++)
+      for (let y = Math.max(0, u.pos.y - range); y <= Math.min(m.height - 1, u.pos.y + range); y++)
+        for (let x = Math.max(0, u.pos.x - range); x <= Math.min(m.width - 1, u.pos.x + range); x++) {
+          const key = `${x},${y},${z}`;
+          if (out.has(key)) continue;
+          const c = { x, y, z };
+          if (z > 0 && !m.cells[z][y][x].floor) continue;
+          const d = dist2d(u.pos, c) + Math.abs(z - u.pos.z) * 0.5;
+          const off = o.vehicle ? 0 : offAxis(u, u.pos, c);
+          if (d <= 1.5 && z === u.pos.z) {
+            out.add(key);
+            continue;
+          }
+          if (off > V.fov / 2 && d > V.peripheralRange) continue;
+          if (d > visionRange(s, u, off <= V.flashlightCone / 2)) continue;
+          const p = cellCenter(c, groundHeight(m, c) + 0.3);
+          if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c }).blocked) out.add(key);
+        }
+    if (o.vehicle) losIgnore.ids.delete(o.vehicle);
+  }
+  return out;
+}

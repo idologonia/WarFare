@@ -48,13 +48,13 @@ export function computeApMax(u: Unit): ApBreakdown {
 /**
  * Дальність огляду: день/ніч, ПНБ (множник уночі), ліхтар (+ уночі), туман (обмеження), дощ (−), сприйняття.
  */
-export function visionRange(s: MissionState, u: Unit): number {
+export function visionRange(s: MissionState, u: Unit, inBeam = true): number {
   const v = R().vision;
   let base = v.dayRange;
   if (s.scenario.timeOfDay === 'night') {
     const nvg = helmetMount(u, 'nvg');
     base = Math.min(v.dayRange, v.nightRange * (nvg?.nightFactor ?? 1));
-    if (u.lightOn && !nvg) base += v.flashlightBonus;
+    if (u.lightOn && !nvg && inBeam) base += v.flashlightBonus;
   }
   if (s.scenario.weather === 'rain') base -= v.rainPenalty;
   if (s.scenario.weather === 'fog') base = Math.min(base, v.fogRange);

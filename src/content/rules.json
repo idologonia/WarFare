@@ -48,7 +48,8 @@
     "disembark": 2,
     "vehicleReload": 3,
     "loot": 1,
-    "rearrange": 0.5
+    "rearrange": 0.5,
+    "turn": 0.5
   },
   "fire": {
     "apCost": {
@@ -173,7 +174,10 @@
     "flashlightBonus": 4,
     "lightVisibleRange": 20,
     "rainPenalty": 2,
-    "smokePerCell": 6
+    "smokePerCell": 6,
+    "fov": 150,
+    "peripheralRange": 2.5,
+    "flashlightCone": 50
   },
   "overwatch": {
     "baseChance": 45,

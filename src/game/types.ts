@@ -359,6 +359,8 @@ export interface Unit {
   carriedBy: string | null;
   /** Ліхтар увімкнено (вночі видно далі, але й самого видно здалеку). */
   lightOn?: boolean;
+  /** Напрямок погляду 0..7 (див. units/facing.ts). */
+  facing?: number;
   /** Боєць у техніці (id машини); pos при цьому null. */
   inVehicle?: string;
   /** Оператор керує дроном (id дрона). */

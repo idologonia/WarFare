@@ -8,6 +8,7 @@ import { losIgnore } from '@/game/visibility/los';
 import { changeAltitude, destroyDrone, droneById, droneDrop, droneNoticedBy, dronePoint, flyDrone, fpvAttack, landDrone, launchDrone, shootDroneChance, tickDrones } from '@/game/drones';
 import { eyePoint } from '@/game/visibility/visibility';
 import { applyMove, itemAt, removeAt, validateMove } from '@/game/inventory/transfer';
+import { faceToward, facingOf } from '@/game/units/facing';
 import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId, stockFor, TRANSFERABLE } from '@/game/logistics';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
@@ -191,6 +192,20 @@ function autoDeploy(ctx: Ctx, side: SideId): void {
 }
 
 /** Обгортка над станом: валідує команди, застосовує, збирає події. */
+/** Напрямок погляду: після руху — за останнім кроком, після пострілу/кидка — на ціль. */
+function applyFacingFromEvents(s: MissionState, ev: SimEvent[]): void {
+  for (const e of ev) {
+    const u = 'unitId' in e ? s.units.find((x) => x.id === e.unitId) : undefined;
+    if (!u?.pos) continue;
+    if (e.t === 'moved' && e.path.length > 1) {
+      const a = e.path[e.path.length - 2];
+      const b = e.path[e.path.length - 1];
+      faceToward(u, a, b);
+    } else if (e.t === 'fired' && e.shots[0]) faceToward(u, u.pos, { x: Math.floor(e.shots[0].to.x), y: Math.floor(e.shots[0].to.y) });
+    else if ((e.t === 'grenade' || e.t === 'rocket') && e.to) faceToward(u, u.pos, { x: Math.floor(e.to.x), y: Math.floor(e.to.y) });
+  }
+}
+
 export class Mission {
   constructor(public state: MissionState) {}
 
@@ -208,6 +223,7 @@ export class Mission {
       this.state.rng = rng.state;
     }
     if (err) return { ok: false, error: err, events: [] };
+    applyFacingFromEvents(this.state, ctx.ev);
     if (this.state.turn.phase === 'battle') {
       updateContacts(ctx);
       this.checkVictory(ctx);
@@ -513,6 +529,17 @@ export class Mission {
         const res = launchDrone(ctx, u, cmd.index);
         if (typeof res === 'string') return res;
         u.ap -= toTenths(R.drones.launch);
+        return null;
+      }
+
+      case 'turn': {
+        const f = ((Math.round(cmd.facing) % 8) + 8) % 8;
+        if (facingOf(u) === f) return null;
+        if (u.inVehicle) return 'У техніці не повернутися';
+        const e = spend(R.actions.turn);
+        if (e) return e;
+        u.facing = f;
+        ctx.ev.push({ t: 'pose', unitId: u.id });
         return null;
       }
 

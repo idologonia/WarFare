@@ -22,6 +22,7 @@ import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
 import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId } from '@/game/logistics';
+import { DIR8_NAMES, dirTo, facingOf } from '@/game/units/facing';
 import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test' | 'online';
@@ -520,6 +521,13 @@ export class Battle {
         return;
       }
     }
+    if (s.turn.phase === 'battle' && this.turnMode && cell) {
+      const u = this.selected();
+      this.turnMode = false;
+      if (u?.pos && this.isHumanTurn() && !(cell.x === u.pos.x && cell.y === u.pos.y)) void this.exec({ type: 'turn', unitId: u.id, facing: dirTo(cell.x - u.pos.x, cell.y - u.pos.y) });
+      else this.refresh();
+      return;
+    }
     if (s.turn.phase === 'battle' && this.droneClick(this.r.pickDrone(x, y) ?? this.droneAtCell(cell), unitId, cell)) return;
     const vehId = this.r.pickVehicle(x, y);
     const clickedVeh = vehId ? vehicleById(s, vehId) : undefined;
@@ -617,7 +625,10 @@ export class Battle {
     this.refresh();
   }
 
+  private turnMode = false;
+
   private cancel(): void {
+    this.turnMode = false;
     this.closeCtx();
     this.openMenu = null;
     if (this.pending) this.pending = null;
@@ -1684,6 +1695,22 @@ export class Battle {
     else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
     if (inZone(u.pos ?? { x: -1, y: -1, z: 0 }, s.scenario.evacZone))
       other.push({ label: u.carrying ? 'Евакуювати пораненого' : 'Евакуюватися', disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
+    const f = facingOf(u);
+    const ta = content().rules.actions.turn;
+    const turn = (nf: number) => run({ type: 'turn', unitId: u.id, facing: (nf + 8) % 8 });
+    out.push({
+      id: 'turn',
+      label: `Огляд: ${DIR8_NAMES[f]}`,
+      title: `Поворот — ${ta} AP. Боєць бачить сектор ${content().rules.vision.fov}° перед собою, позаду — лише впритул. Ліхтар світить туди, куди дивиться боєць.`,
+      items: [
+        { label: 'Дивитися на клітинку (клік на карті)', on: this.turnMode, disabled: !can, run: () => ((this.turnMode = !this.turnMode), this.refresh()) },
+        { label: 'Ліворуч на 45°', disabled: !can, run: turn(f - 1) },
+        { label: 'Праворуч на 45°', disabled: !can, run: turn(f + 1) },
+        { label: 'Ліворуч на 90°', disabled: !can, run: turn(f - 2) },
+        { label: 'Праворуч на 90°', disabled: !can, run: turn(f + 2) },
+        { label: 'Кругом', disabled: !can, run: turn(f + 4) },
+      ],
+    });
     out.push({ id: 'other', label: 'Дії', title: 'Інші дії', items: other });
     return out;
   }
