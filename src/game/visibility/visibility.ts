@@ -172,8 +172,16 @@ export const enemySide = other;
  * Клітинки, які бачить сторона (для затемнення, як у X-COM). Ключ — "x,y,z".
  * Перевірка — сектор огляду + лінія видимості до центру клітинки на висоті пояса.
  */
-export function visibleCells(s: MissionState, side: SideId): Set<string> {
-  const out = new Set<string>();
+export type SeenBy = 'eye' | 'light' | 'nvg';
+const SEEN_RANK: Record<SeenBy, number> = { eye: 0, light: 1, nvg: 2 };
+
+export function visibleCells(s: MissionState, side: SideId): Map<string, SeenBy> {
+  const out = new Map<string, SeenBy>();
+  const night = s.scenario.timeOfDay === 'night';
+  const put = (key: string, k: SeenBy) => {
+    const prev = out.get(key);
+    if (prev === undefined || SEEN_RANK[k] > SEEN_RANK[prev]) out.set(key, k);
+  };
   const V = content().rules.vision;
   const m = s.map;
   for (const o of observersOf(s, side)) {
@@ -181,24 +189,29 @@ export function visibleCells(s: MissionState, side: SideId): Set<string> {
     if (!u.pos) continue;
     const range = Math.ceil(visionRange(s, u));
     const eye = eyePoint(s, u.pos, u.stance);
+    const nvg = night && !o.vehicle && !!activeNvg(u);
+    const light = night && !o.vehicle && !nvg && !!u.lightOn;
     if (o.vehicle) losIgnore.ids.add(o.vehicle);
     for (let z = 0; z < m.levels; z++)
       for (let y = Math.max(0, u.pos.y - range); y <= Math.min(m.height - 1, u.pos.y + range); y++)
         for (let x = Math.max(0, u.pos.x - range); x <= Math.min(m.width - 1, u.pos.x + range); x++) {
           const key = `${x},${y},${z}`;
-          if (out.has(key)) continue;
+          const prev = out.get(key);
+          if (prev === 'nvg' || (prev && !nvg && !light)) continue;
           const c = { x, y, z };
           if (z > 0 && !m.cells[z][y][x].floor) continue;
           const d = dist2d(u.pos, c) + Math.abs(z - u.pos.z) * 0.5;
           const off = o.vehicle ? 0 : offAxis(u, u.pos, c);
+          const inBeam = off <= V.flashlightCone / 2;
+          const kind: SeenBy = nvg && off <= V.fov / 2 ? 'nvg' : light && inBeam ? 'light' : 'eye';
           if (d <= 1.5 && z === u.pos.z) {
-            out.add(key);
+            put(key, kind);
             continue;
           }
           if (off > V.fov / 2 && d > V.peripheralRange) continue;
-          if (d > visionRange(s, u, off <= V.flashlightCone / 2)) continue;
+          if (d > visionRange(s, u, inBeam)) continue;
           const p = cellCenter(c, groundHeight(m, c) + 0.3);
-          if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c }).blocked) out.add(key);
+          if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c }).blocked) put(key, kind);
         }
     if (o.vehicle) losIgnore.ids.delete(o.vehicle);
   }

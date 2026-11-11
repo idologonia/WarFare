@@ -853,7 +853,7 @@
     1
    ],
    "mount": "nvg",
-   "nightFactor": 1.7,
+   "nightFactor": 1.85,
    "nightHitPenalty": 8
   },
   {

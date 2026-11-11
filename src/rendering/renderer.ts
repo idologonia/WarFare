@@ -464,7 +464,8 @@ export class Renderer {
   /** Затемнення клітинок, яких не бачить жоден свій боєць (як у X-COM). */
   refreshFog(force = false): void {
     const s = this.state;
-    if (!s?.map || s.revealAll || s.turn.phase === 'deploy') {
+    const night = s?.scenario?.timeOfDay === 'night';
+    if (!s?.map || (s.revealAll && !night) || s.turn.phase === 'deploy') {
       this.overlays.get('fog')?.dispose();
       this.overlays.delete('fog');
       this.fogKey = '';
@@ -472,12 +473,13 @@ export class Renderer {
     }
     const key =
       this.viewSide + this.viewLevel + '|' +
-      s.units.filter((u) => u.side === this.viewSide && u.pos && u.status === 'active').map((u) => `${u.pos!.x},${u.pos!.y},${u.pos!.z},${u.facing},${u.stance},${u.lightOn ? 1 : 0}`).join(';') +
+      s.units.filter((u) => u.side === this.viewSide && u.pos && u.status === 'active').map((u) => `${u.pos!.x},${u.pos!.y},${u.pos!.z},${u.facing},${u.stance},${u.lightOn ? 1 : 0},${u.nvgUp ? 1 : 0}`).join(';') +
       '|' + (s.vehicles ?? []).filter((v) => v.side === this.viewSide).map((v) => `${v.x},${v.y}`).join(';');
     if (!force && key === this.fogKey) return;
     this.fogKey = key;
     const seen = visibleCells(s, this.viewSide);
     const g = new GeoBuilder();
+    const lit = new GeoBuilder();
     const m = s.map;
     for (let y = 0; y < m.height; y++)
       for (let x = 0; x < m.width; x++) {
@@ -487,13 +489,25 @@ export class Renderer {
             z = k;
             break;
           }
-        if (seen.has(`${x},${y},${z}`)) continue;
         const c = { x, y, z };
         const p = cellWorld(c, groundHeight(m, c));
+        const k = seen.get(`${x},${y},${z}`);
+        // Уночі: що бачить ПНБ — зеленувато підсвічене, промінь ліхтаря — тепле світло.
+        if (k === 'nvg') lit.box(p.x, p.y + 0.06, p.z, 1, 0.02, 1, [0.45, 0.95, 0.5], 0.2);
+        else if (k === 'light') lit.box(p.x, p.y + 0.06, p.z, 1, 0.02, 1, [1, 0.88, 0.6], 0.24);
+        if (k || s.revealAll) continue;
         g.box(p.x, p.y + 0.07, p.z, 1, 0.02, 1, [0.01, 0.015, 0.03], 0.68);
       }
     this.overlays.get('fog')?.dispose();
     this.overlays.delete('fog');
+    this.overlays.get('nightvis')?.dispose();
+    this.overlays.delete('nightvis');
+    if (!lit.empty) {
+      const lm = lit.build('ov_nightvis', this.scene, this.overlayMat);
+      lm.isPickable = false;
+      lm.hasVertexAlpha = true;
+      this.overlays.set('nightvis', lm);
+    }
     if (g.empty) return;
     const mesh = g.build('ov_fog', this.scene, this.overlayMat);
     mesh.isPickable = false;
