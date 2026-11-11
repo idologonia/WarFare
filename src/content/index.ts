@@ -44,6 +44,8 @@ export interface ClassDefinition {
   id: string;
   name: string;
   planned?: boolean;
+  /** Особливі вміння класу (medic — повна медична допомога). */
+  skills?: string[];
   statMods: Partial<UnitStats>;
   kit: ClassKit | null;
 }
@@ -131,4 +133,8 @@ export function vehicleDef(id: string): VehicleDefinition {
   const d = content().vehicles.get(id);
   if (!d) throw new Error(`Невідома техніка: ${id}`);
   return d;
+}
+
+export function hasSkill(classId: string, skill: string): boolean {
+  return !!content().classes.get(classId)?.skills?.includes(skill);
 }

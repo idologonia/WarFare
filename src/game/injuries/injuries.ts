@@ -202,8 +202,11 @@ const MARCH_ORDER = { M: 0, R: 1, C: 2, H: 3 } as const;
  * Доречна допомога пацієнту за протоколом MARCH (комбіноване лікування — кілька засобів на одну травму).
  * Тампонада — лише рани кінцівок (м'язи); тулуб і голову не тампонують.
  */
-export function treatmentOptions(patient: Unit): TreatmentOption[] {
+export function treatmentOptions(patient: Unit, medicSkill = false): TreatmentOption[] {
   const out: TreatmentOption[] = [];
+  // Медик: стабілізація будь-якої травми (зокрема кровотечі тулуба) і приведення до тями.
+  if (medicSkill && (patient.injuries.some((i) => i.bleeding !== 'none' || (i.type === 'pneumothorax' && !i.sealed)) || patient.status === 'down'))
+    out.push({ effect: 'stabilize', injuryId: null, label: 'Набір медика: стабілізувати', march: 'M' });
   for (const i of patient.injuries) {
     const where = PART_NAMES[i.part];
     if (i.bleeding === 'massive' && isLimb(i.part) && !i.tourniquet) out.push({ effect: 'tourniquet', injuryId: i.id, label: `Турнікет: ${where}`, march: 'M' });
@@ -243,6 +246,14 @@ export function applyTreatment(ctx: Ctx, patient: Unit, effect: MedicalEffect, i
     case 'needle':
       if (!i || i.type !== 'pneumothorax') return 'Голка — лише при пневмотораксі';
       i.sealed = true;
+      break;
+    case 'stabilize':
+      // Набір медика: зупиняє всі кровотечі, закриває рани тулуба, знімає напружений пневмоторакс.
+      for (const x of patient.injuries) {
+        x.bleeding = 'none';
+        if (x.part === 'torso') x.sealed = true;
+      }
+      patient.health = Math.min(patient.stats.health, Math.max(patient.health + 12, content().rules.damage.downThreshold + 5));
       break;
     case 'pills':
       patient.health = Math.min(patient.stats.health, patient.health + 6);

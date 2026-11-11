@@ -1000,6 +1000,20 @@
    ],
    "caliber": "hmg",
    "capacity": 100
+  },
+  {
+   "id": "med_kit_medic",
+   "kind": "medical",
+   "name": "Набір медика",
+   "weight": 1.5,
+   "size": [
+    2,
+    2
+   ],
+   "effect": "stabilize",
+   "ap": 3,
+   "uses": 4,
+   "medicOnly": true
   }
  ]
 }

@@ -46,7 +46,9 @@
     "carryRaise": 1,
     "embark": 2,
     "disembark": 2,
-    "vehicleReload": 3
+    "vehicleReload": 3,
+    "loot": 1,
+    "rearrange": 0.5
   },
   "fire": {
     "apCost": {

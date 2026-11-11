@@ -1,10 +1,11 @@
 import { Rng } from '@/core/rng';
 import { cellKey, sameCell, toTenths, type Cell } from '@/core/grid';
 import { GAME_VERSION, SCHEMA_VERSION } from '@/core/version';
-import { content, itemDef, vehicleDef } from '@/content';
+import { content, hasSkill, itemDef, vehicleDef } from '@/content';
 import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
 import { adjacentToVehicle, canPlace, crewProxy, embark, exitCells, leaveSeat, moveVehicle, spawnVehicle, vehicleById, vehiclePath, vehicleReachable } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
+import { applyMove, validateMove } from '@/game/inventory/transfer';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
@@ -378,6 +379,24 @@ export class Mission {
         return null;
       }
 
+      case 'moveItem': {
+        const src = unitById(s, cmd.from.owner);
+        if (cmd.to.owner !== u.id) return 'Класти можна лише у своє спорядження';
+        const looting = src.id !== u.id;
+        if (looting) {
+          if (src.status !== 'dead' && src.status !== 'down') return 'Обшукати можна лише загиблого або непритомного';
+          if (!src.pos || !(adjacent(src.pos, u.pos!) || sameCell(src.pos, u.pos!))) return 'Підійдіть упритул';
+        }
+        const err = validateMove(src, u, cmd.from, cmd.to);
+        if (err) return err;
+        const cost = looting ? R.actions.loot : R.actions.rearrange;
+        const e = spend(cost);
+        if (e) return e;
+        applyMove(src, u, cmd.from, cmd.to);
+        ctx.ev.push({ t: 'pose', unitId: u.id });
+        return null;
+      }
+
       case 'toggleLight': {
         if (!helmetMount(u, 'light')) return 'Немає ліхтаря';
         u.lightOn = !u.lightOn;
@@ -419,7 +438,10 @@ export class Mission {
         const loc = findMedical(u, cmd.effect);
         if (!loc) return 'Немає потрібного засобу';
         const md = itemDef<MedicalDefinition>(loc.item.defId);
-        const cost = md.ap + (loc.where === 'backpack' ? 2 : 0);
+        const medic = hasSkill(u.classId, 'medic');
+        if (md.medicOnly && !medic) return 'Набір медика використовує лише бойовий медик';
+        // Медик працює швидше.
+        const cost = Math.max(1, md.ap + (loc.where === 'backpack' ? 2 : 0) - (medic ? 1 : 0));
         if (u.ap < toTenths(cost)) return 'Недостатньо AP';
         const e = applyTreatment(ctx, p, cmd.effect, cmd.injuryId);
         if (e) return e;

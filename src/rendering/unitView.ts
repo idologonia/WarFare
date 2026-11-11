@@ -8,7 +8,7 @@ const SKIN = ['#e8c39e', '#d4a373', '#a87449', '#7a4e2d'];
 const HAIR = ['#2b2118', '#4a3524', '#7a5a35', '#1a1a1a', '#8a7a6a'];
 export const SIDE_COLOR: Record<string, string> = { blue: '#3d82e8', red: '#e5463b' };
 /** Колір спорядження (плитоноска, підсумки, рюкзак) за стороною. */
-const GEAR: Record<string, string> = { blue: '#4b5436', red: '#8d7550' };
+const GEAR: Record<string, string> = { blue: '#7d6847', red: '#4f5438' };
 const CAMO_SCALE = 1.15;
 
 /** Частина моделі: сітка з точкою обертання у початку координат вузла. */
@@ -157,8 +157,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
       // Шия й голова.
       g.box(0, 0.45, 0.0, 0.1, 0.05, 0.1, skin);
       g.box(0, 0.56, 0.01, 0.2, 0.2, 0.19, skin);
-      g.box(-0.045, 0.575, 0.104, 0.035, 0.02, 0.01, black); // очі
-      g.box(0.045, 0.575, 0.104, 0.035, 0.02, 0.01, black);
+      g.box(-0.045, 0.575, 0.102, 0.03, 0.016, 0.006, [0.16, 0.13, 0.1]); // очі
+      g.box(0.045, 0.575, 0.102, 0.03, 0.016, 0.006, [0.16, 0.13, 0.1]);
       g.box(0, 0.6, 0.104, 0.13, 0.014, 0.008, shade(hair, 1)); // брови
       if (u.appearance.face % 3 === 0) g.box(0, 0.495, 0.07, 0.19, 0.07, 0.07, hair); // борода
       else if (u.appearance.face % 3 === 1) g.box(0, 0.523, 0.103, 0.09, 0.02, 0.01, hair); // вуса
@@ -203,6 +203,12 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         g.box(0, -0.27, 0, 0.105, 0.18, 0.115, WHITE);
         camo(g, false);
         g.box(0, -0.06, 0, 0.122, 0.06, 0.132, side); // пов'язка сторони
+        if (u.classId === 'medic') {
+          // Нашивка медика: білий квадрат із червоним хрестом.
+          g.box(x > 0 ? 0.061 : -0.061, -0.13, 0, 0.004, 0.07, 0.07, [0.92, 0.92, 0.9]);
+          g.box(x > 0 ? 0.064 : -0.064, -0.13, 0, 0.004, 0.05, 0.016, [0.8, 0.1, 0.1]);
+          g.box(x > 0 ? 0.064 : -0.064, -0.13, 0, 0.004, 0.016, 0.05, [0.8, 0.1, 0.1]);
+        }
         if (u.inventory.extraArmor?.some((a) => a.defId === 'shoulder_guards')) g.box(0, -0.02, 0, 0.14, 0.12, 0.15, gear);
         g.box(0, -0.39, 0.0, 0.1, 0.08, 0.1, gloves); // рукавиця
       }),

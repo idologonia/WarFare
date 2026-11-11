@@ -13,12 +13,33 @@
       "factionId": "test",
       "controller": "human",
       "squad": [
-        { "classId": "rifleman", "count": 1 },
-        { "classId": "marksman", "count": 1 },
-        { "classId": "mg1", "count": 1 },
-        { "classId": "scout", "count": 1 }
+        {
+          "classId": "rifleman",
+          "count": 1
+        },
+        {
+          "classId": "marksman",
+          "count": 1
+        },
+        {
+          "classId": "mg1",
+          "count": 1
+        },
+        {
+          "classId": "scout",
+          "count": 1
+        },
+        {
+          "classId": "medic",
+          "count": 1
+        }
       ],
-      "deployZone": [0, 26, 23, 31],
+      "deployZone": [
+        0,
+        26,
+        23,
+        31
+      ],
       "manualDeploy": true
     },
     "red": {
@@ -26,19 +47,43 @@
       "factionId": "test",
       "controller": "ai",
       "squad": [
-        { "classId": "rifleman", "count": 3 },
-        { "classId": "marksman", "count": 1 },
-        { "classId": "mg1", "count": 1 },
-        { "classId": "mg2", "count": 1 }
+        {
+          "classId": "rifleman",
+          "count": 3
+        },
+        {
+          "classId": "marksman",
+          "count": 1
+        },
+        {
+          "classId": "mg1",
+          "count": 1
+        },
+        {
+          "classId": "mg2",
+          "count": 1
+        }
       ],
-      "deployZone": [9, 0, 23, 10],
+      "deployZone": [
+        9,
+        0,
+        23,
+        10
+      ],
       "manualDeploy": false,
       "aiStyle": "cautious"
     }
   },
-  "evacZone": [0, 29, 4, 31],
+  "evacZone": [
+    0,
+    29,
+    4,
+    31
+  ],
   "reinforcementDelay": 3,
-  "victory": { "type": "eliminate" },
+  "victory": {
+    "type": "eliminate"
+  },
   "randomEvents": false,
   "mapPreview": true,
   "maxTurns": 40

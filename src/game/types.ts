@@ -155,13 +155,15 @@ export interface GrenadeDefinition extends ItemDefinitionBase {
   smoke?: { radius: number; turns: number };
 }
 
-export type MedicalEffect = 'tourniquet' | 'packing' | 'bandage' | 'chestSeal' | 'needle' | 'pills';
+export type MedicalEffect = 'tourniquet' | 'packing' | 'bandage' | 'chestSeal' | 'needle' | 'pills' | 'stabilize';
 
 export interface MedicalDefinition extends ItemDefinitionBase {
   kind: 'medical';
   effect: MedicalEffect;
   ap: number;
   uses: number;
+  /** Лише для бойового медика. */
+  medicOnly?: boolean;
 }
 
 export interface ArmorDefinition extends ItemDefinitionBase {

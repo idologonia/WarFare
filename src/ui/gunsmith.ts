@@ -25,6 +25,8 @@ import { buildWeaponGeo } from '@/rendering/weaponGeo';
 import { Vector3 } from '@/rendering/babylon';
 import { btn, h, modal } from './dom';
 import { Preview3D } from './preview3d';
+import { openInventoryDnD } from './inventoryDnD';
+import { applyMove, validateMove } from '@/game/inventory/transfer';
 
 type Slot = { id: string; title: string; options: string[] };
 
@@ -234,6 +236,21 @@ export function openLoadout(s: MissionState, u: Unit, onChange: () => void): HTM
         countItems(u, (d) => fragIds.includes(d.id))
           ? choice('Осколкові гранати', grenadeTypes().map((g) => [g.id, g.name] as [string, string]), curNade ?? 'rgd5', (v) => setGrenadeType(s, u, v))
           : null,
+        btn('Розкласти рюкзак і підсумки…', () =>
+          document.body.querySelector('#app .layer')?.append(
+            openInventoryDnD({
+              unit: u,
+              costNote: 'До бою — безкоштовно.',
+              move: (from, to) => {
+                const err = validateMove(u, u, from, to);
+                if (err) return err;
+                applyMove(u, u, from, to);
+                return null;
+              },
+              onClose: () => draw(),
+            }),
+          ),
+        ),
         h('div', { class: 'muted', style: 'font-size:0.8em' }, `Броня: ${BODY_ARMOR.map((id) => itemDef(id).name).join(' / ')} — різна місткість підсумків. Зайві магазини переходять у рюкзак.`),
       ),
     );

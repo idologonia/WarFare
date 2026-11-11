@@ -183,7 +183,7 @@ export class MapView {
               for (let i = 0; i < (grass ? 3 : 1); i++) {
                 const a = hash2(x, y, i + 11);
                 const b = hash2(y, x, i + 17);
-                const c2: RGB = grass ? shade(hex(t.color), 1.15 + a * 0.2) : [0.45, 0.42, 0.38];
+                const c2: RGB = grass ? shade(col, 1.04 + a * 0.08) : shade(col, 0.85);
                 g.box(x + 0.15 + a * 0.7, top + (grass ? 0.05 : 0.03), -(y + 0.15 + b * 0.7), grass ? 0.06 : 0.09, grass ? 0.1 : 0.05, grass ? 0.06 : 0.08, c2);
               }
             }

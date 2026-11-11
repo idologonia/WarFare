@@ -74,6 +74,51 @@ export class GeoBuilder {
     return this;
   }
 
+  /**
+   * Призма вздовж локальної осі Z: переріз — многокутник (sides) в еліпсі w×h, довжина len.
+   * rotX — нахил (тангаж), rotY — поворот. Пласкі грані для «рубленого», але не квадратного вигляду.
+   */
+  prism(cx: number, cy: number, cz: number, w: number, h: number, len: number, sides: number, color: RGB, rotX = 0, rotY = 0, alpha = 1): this {
+    const cxr = Math.cos(rotX), sxr = Math.sin(rotX), cyr = Math.cos(rotY), syr = Math.sin(rotY);
+    const tf = (x: number, y: number, z: number): [number, number, number] => {
+      // Нахил навколо X, потім поворот навколо Y.
+      const y1 = y * cxr - z * sxr;
+      const z1 = y * sxr + z * cxr;
+      return [x * cyr + z1 * syr, y1, -x * syr + z1 * cyr];
+    };
+    const ring: [number, number][] = [];
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
+      ring.push([(Math.cos(a) * w) / 2, (Math.sin(a) * h) / 2]);
+    }
+    const push = (pts: [number, number, number][], n: [number, number, number], k: number) => {
+      const base = this.positions.length / 3;
+      const nt = tf(n[0], n[1], n[2]);
+      for (const [x, y, z] of pts) {
+        const p = tf(x, y, z);
+        this.positions.push(cx + p[0], cy + p[1], cz + p[2]);
+        this.normals.push(nt[0], nt[1], nt[2]);
+        this.colors.push(color[0] * k, color[1] * k, color[2] * k, alpha);
+        this.uvs.push(0.02, 0.02);
+      }
+      for (let i = 1; i < pts.length - 1; i++) this.indices.push(base, base + i, base + i + 1);
+    };
+    const hz = len / 2;
+    for (let i = 0; i < sides; i++) {
+      const [x0, y0] = ring[i];
+      const [x1, y1] = ring[(i + 1) % sides];
+      const nx = (y1 - y0) * h;
+      const ny = -(x1 - x0) * w;
+      const nl = Math.hypot(nx, ny) || 1;
+      const ny2 = ny / nl;
+      const k = ny2 > 0.5 ? 1.0 : ny2 < -0.5 ? 0.6 : 0.82;
+      push([[x0, y0, -hz], [x1, y1, -hz], [x1, y1, hz], [x0, y0, hz]], [nx / nl, ny2, 0], k);
+    }
+    push(ring.map(([x, y]) => [x, y, hz] as [number, number, number]), [0, 0, 1], 0.9);
+    push(ring.map(([x, y]) => [x, y, -hz] as [number, number, number]).reverse(), [0, 0, -1], 0.7);
+    return this;
+  }
+
   build(name: string, scene: Scene, material: StandardMaterial): Mesh {
     const mesh = new Mesh(name, scene);
     const vd = new VertexData();

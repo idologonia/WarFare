@@ -32,6 +32,10 @@
         {
           "classId": "grenadier1",
           "count": 1
+        },
+        {
+          "classId": "medic",
+          "count": 1
         }
       ],
       "deployZone": [

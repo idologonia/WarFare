@@ -1,4 +1,4 @@
-import { content, itemDef } from '@/content';
+import { content, hasSkill, itemDef } from '@/content';
 import { fmtAp } from '@/core/grid';
 import { adjacent } from '@/game/combat/movement';
 import { findMedical, pouchCapacity, totalWeight } from '@/game/inventory/inventory';
@@ -57,7 +57,8 @@ export function medicalBody(s: MissionState, medic: Unit, dispatch: (c: Command)
       (p.id === medic.id || p.carriedBy === medic.id || (p.pos && medic.pos && adjacent(p.pos, medic.pos) && (p.status === 'active' || p.status === 'down'))),
   );
   const patient = candidates.find((p) => p.id === patientId) ?? candidates.find((p) => p.injuries.length && p.id !== medic.id) ?? medic;
-  const opts = treatmentOptions(patient);
+  const isMedic = hasSkill(medic.classId, 'medic');
+  const opts = treatmentOptions(patient, isMedic);
   const list = h('div', {});
   if (!patient.injuries.length) list.append(h('p', { class: 'muted' }, 'Травм немає.'));
   for (const i of patient.injuries) {
@@ -73,7 +74,7 @@ export function medicalBody(s: MissionState, medic: Unit, dispatch: (c: Command)
   for (const o of opts) {
     const loc = findMedical(medic, o.effect);
     const def = [...content().items.values()].find((d) => d.kind === 'medical' && (d as MedicalDefinition).effect === o.effect) as MedicalDefinition;
-    const cost = def.ap + (loc?.where === 'backpack' ? 2 : 0);
+    const cost = Math.max(1, def.ap + (loc?.where === 'backpack' ? 2 : 0) - (isMedic ? 1 : 0));
     if (patient.id === medic.id && !canSelfApply(o.effect)) {
       actions.append(btn(`${o.march} · ${o.label} — потрібен інший боєць`, () => {}, { disabled: true, title: 'Цей засіб не можна застосувати самому собі' }));
       continue;

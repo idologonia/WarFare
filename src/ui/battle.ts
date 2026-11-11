@@ -16,7 +16,8 @@ import { isActive, type SimEvent } from '@/game/simulation/state';
 import type { FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
 import type { Renderer } from '@/rendering/renderer';
 import { bar, btn, h, keyName, modal } from './dom';
-import { inventoryBody, medicalBody, statusName } from './panels';
+import { medicalBody, statusName } from './panels';
+import { openInventoryDnD } from './inventoryDnD';
 import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
@@ -649,10 +650,36 @@ export class Battle {
     this.refresh();
   }
 
-  private openInventory(): void {
+  private openInventory(otherId?: string): void {
     const u = this.selected();
     if (!u) return;
-    this.hud.append(modal(`Інвентар — ${u.name}`, inventoryBody(u), () => {}));
+    const other = otherId ? this.s.units.find((x) => x.id === otherId) : undefined;
+    const R = content().rules.actions;
+    const canAct = this.isHumanTurn() && isActive(u);
+    this.hud.append(
+      openInventoryDnD({
+        unit: u,
+        other,
+        costNote: canAct ? `Перекладання свого — ${R.rearrange} AP, взяти з тіла — ${R.loot} AP за предмет.` : 'Зараз не ваш хід — лише перегляд.',
+        move: (from, to) => {
+          if (!canAct) return 'Зараз не ваш хід';
+          const res = this.m.dispatch({ type: 'moveItem', unitId: u.id, from, to });
+          if (!res.ok) return res.error;
+          this.r.sync();
+          return null;
+        },
+        onClose: () => {
+          this.r.load(this.s, this.viewer, true);
+          this.refresh();
+        },
+      }),
+    );
+  }
+
+  /** Тіла й непритомні поруч, яких можна обшукати. */
+  private lootTargets(u: Unit): Unit[] {
+    if (!u.pos) return [];
+    return this.s.units.filter((t) => t !== u && t.pos && (t.status === 'dead' || t.status === 'down') && (adjacent(t.pos, u.pos!) || sameCell(t.pos, u.pos!)));
   }
 
   // ---------- Відображення ----------
@@ -1296,6 +1323,7 @@ export class Battle {
     const other: ActionMenuItem[] = [
       { label: 'Медицина…', run: () => this.openMedical(), disabled: !u.pos },
       { label: 'Інвентар…', run: () => this.openInventory() },
+      ...this.lootTargets(u).map((t) => ({ label: `Обшукати: ${t.callsign}${t.side !== u.side ? ' (противник)' : ''}`, disabled: !can, run: () => this.openInventory(t.id) })),
     ];
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
     for (const v of vehicles(s))

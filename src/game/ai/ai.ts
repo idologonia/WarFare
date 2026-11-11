@@ -1,6 +1,6 @@
 import { Rng } from '@/core/rng';
 import { dist2d, sameCell, toTenths, type Cell } from '@/core/grid';
-import { content, itemDef } from '@/content';
+import { content, hasSkill, itemDef } from '@/content';
 import { cellsInZone, groundHeight, isIndoor } from '@/game/maps/map';
 import { findItem, findMedical, findReloadMagazine, primaryDef } from '@/game/inventory/inventory';
 import { canSelfApply, treatmentOptions } from '@/game/injuries/injuries';
@@ -148,13 +148,13 @@ export class AiPlanner {
     // 2. Допомога за MARCH: собі — лише дозволене самому, товаришу поруч — наліпка, голка та інше.
     const patients = [u, ...sideUnits(s, u.side).filter((p) => p !== u && p.pos && u.pos && adjacent(p.pos, u.pos) && (p.status === 'active' || p.status === 'down'))];
     for (const p of patients) {
-      for (const opt of treatmentOptions(p)) {
+      for (const opt of treatmentOptions(p, hasSkill(u.classId, 'medic'))) {
         if (opt.effect === 'pills') continue;
         if (p === u && !canSelfApply(opt.effect)) continue;
         if (p !== u && opt.march === 'C' && visible.length > 0) continue; // під вогнем бинтувати товариша не зупиняємось
         const loc = findMedical(u, opt.effect);
         if (!loc) continue;
-        const cost = itemDef<MedicalDefinition>(loc.item.defId).ap + (loc.where === 'backpack' ? 2 : 0);
+        const cost = Math.max(1, itemDef<MedicalDefinition>(loc.item.defId).ap + (loc.where === 'backpack' ? 2 : 0) - (hasSkill(u.classId, 'medic') ? 1 : 0));
         if (u.ap >= toTenths(cost) && (opt.effect !== 'bandage' || visible.length === 0 || p.health < p.stats.health * 0.6))
           return { type: 'treat', unitId: u.id, patientId: p.id, effect: opt.effect, injuryId: opt.injuryId };
       }

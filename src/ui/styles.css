@@ -159,3 +159,20 @@ canvas.preview3d { width: 100%; max-width: 560px; aspect-ratio: 560 / 300; borde
 .wcard { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); cursor: pointer; }
 .wcard.sel { border-color: var(--accent); }
 @media (max-width: 860px) { .gs-grid { grid-template-columns: 1fr; } }
+
+/* Інвентар із перетягуванням */
+.invcols { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.invpanel { display: flex; flex-direction: column; gap: 4px; min-width: 260px; flex: 1 1 0; }
+.slotrow { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 6px; background: #0f1216; }
+.islot { width: 70px; height: 42px; border: 1px dashed var(--line); border-radius: 4px; background: #171b21; position: relative; display: flex; }
+.islot.wide { width: 220px; }
+.bpgrid { position: relative; background: #0f1216; border-radius: 6px; }
+.bpcell { position: absolute; box-sizing: border-box; border: 1px solid #222831; }
+.bpcell.ok, .islot.ok, .slotrow.ok { background: rgba(87, 184, 90, 0.35); }
+.bpcell.bad, .islot.bad, .slotrow.bad { background: rgba(224, 74, 58, 0.35); }
+.item { flex: 1; margin: 2px; border-radius: 4px; padding: 2px 4px; font-size: 0.72em; line-height: 1.1; overflow: hidden; cursor: grab; touch-action: none; user-select: none; background: #3a4a2c; border: 1px solid #6d8a47; color: var(--text); }
+.item.kind-magazine { background: #4a3f22; border-color: #9a8340; }
+.item.kind-medical { background: #4a2626; border-color: #a04848; }
+.item.kind-grenade { background: #2f3d2a; border-color: #7a9a5a; }
+.item.kind-weapon { background: #2a2f38; border-color: #5a6878; }
+.item.ghost { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); }

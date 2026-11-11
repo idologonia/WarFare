@@ -1,5 +1,6 @@
 import type { Cell } from '@/core/grid';
 import type { FireTarget } from '@/game/combat/fire';
+import type { ItemDest, ItemRef } from '@/game/inventory/transfer';
 import type { FireMode, MedicalEffect, MoveMode, SideId, Stance, WeaponState } from '@/game/types';
 
 /** Усі зміни стану місії — лише через ці команди (однакові для людини, AI і майбутньої мережі). */
@@ -17,6 +18,7 @@ export type Command =
   | { type: 'launch'; unitId: string; kind: 'rpg' | 'ugl' | 'disposable'; cell: Cell }
   | { type: 'reloadLauncher'; unitId: string; ammo?: string }
   | { type: 'toggleLight'; unitId: string }
+  | { type: 'moveItem'; unitId: string; from: ItemRef; to: ItemDest }
   | { type: 'embark'; unitId: string; vehicleId: string; seat?: 'driver' | 'gunner' | 'passenger' }
   | { type: 'disembark'; unitId: string; cell: Cell }
   | { type: 'vehicleMove'; vehicleId: string; x: number; y: number }

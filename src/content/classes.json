@@ -173,6 +173,52 @@
    }
   },
   {
+   "id": "medic",
+   "name": "Бойовий медик",
+   "statMods": {
+    "training": -4,
+    "perception": 4
+   },
+   "skills": [
+    "medic"
+   ],
+   "kit": {
+    "primary": "ak74",
+    "armor": "plate_carrier",
+    "helmet": "helmet_basic",
+    "rig": "belt_ranger",
+    "backpack": "pack_small",
+    "helmetMounts": [
+     "flashlight"
+    ],
+    "pouches": [
+     "mag_ak545_30",
+     "mag_ak545_30",
+     "med_tourniquet",
+     "med_tourniquet"
+    ],
+    "belt": [
+     "rdg2",
+     "med_tourniquet",
+     "med_bandage",
+     "med_bandage"
+    ],
+    "backpackItems": [
+     "med_kit_medic",
+     "mag_ak545_30",
+     "med_packing",
+     "med_packing",
+     "med_seal",
+     "med_seal",
+     "med_needle",
+     "med_needle",
+     "med_pills",
+     "med_pills",
+     "med_bandage"
+    ]
+   }
+  },
+  {
    "id": "grenadier1",
    "name": "Стрілець-гранатометник №1",
    "statMods": {
