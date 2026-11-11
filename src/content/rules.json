@@ -49,7 +49,7 @@
     "vehicleReload": 3,
     "loot": 1,
     "rearrange": 0.5,
-    "turn": 0.5
+    "turn": 0
   },
   "fire": {
     "apCost": {

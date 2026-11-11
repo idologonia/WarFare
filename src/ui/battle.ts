@@ -1550,11 +1550,15 @@ export class Battle {
   private menuButton(m: ActionMenu): HTMLElement {
     const open = this.openMenu === m.id;
     const wrap = h('div', { class: 'menuwrap' });
+    if (m.toggle) {
+      wrap.append(btn(m.label, m.toggle, { on: !!m.active, disabled: m.disabled, title: m.title }));
+      return wrap;
+    }
     wrap.append(
       btn(`${m.label} ▾`, () => {
         this.openMenu = open ? null : m.id;
         this.refresh();
-      }, { on: open || !!m.active }),
+      }, { on: open || !!m.active, title: m.title }),
     );
     if (open) {
       const pop = h('div', { class: 'menupop panel' }, h('div', { class: 'muted', style: 'font-size:0.8em' }, m.title));
@@ -1589,6 +1593,7 @@ export class Battle {
       title: 'Режим руху (місцевість не змінює AP)',
       items: (['fast', 'standard', 'careful'] as MoveMode[]).map((m) => ({
         label: MOVE[m],
+        title: `${fmtAp(content().rules.move.modeCost[m] * content().rules.move.stanceMul[u.stance] * 10)} AP за клітинку (по діагоналі ×${content().rules.move.diagonalMul})`,
         on: this.moveMode === m,
         disabled: !can || !canUseMode(u, m),
         run: () => {
@@ -1601,13 +1606,13 @@ export class Battle {
       id: 'stance',
       label: STANCE[u.stance],
       title: 'Позиція',
-      items: (['standing', 'crouched', 'prone'] as Stance[]).map((st) => ({ label: STANCE[st], on: u.stance === st, disabled: !can || u.stance === st, run: run({ type: 'stance', unitId: u.id, stance: st }) })),
+      items: (['standing', 'crouched', 'prone'] as Stance[]).map((st) => ({ label: STANCE[st], title: `${content().rules.actions.stance} AP`, on: u.stance === st, disabled: !can || u.stance === st, run: run({ type: 'stance', unitId: u.id, stance: st }) })),
     });
     out.push({
       id: 'wstate',
       label: u.weaponState === 'high' ? 'High ready' : u.weaponState === 'low' ? 'Low ready' : 'Вільно',
       title: 'Стан зброї',
-      items: (['high', 'low', 'carry'] as WeaponState[]).map((ws) => ({ label: WSTATE[ws], on: u.weaponState === ws, disabled: !can || u.weaponState === ws, run: run({ type: 'weaponState', unitId: u.id, state: ws }) })),
+      items: (['high', 'low', 'carry'] as WeaponState[]).map((ws) => ({ label: WSTATE[ws], title: `${content().rules.actions.weaponState} AP`, on: u.weaponState === ws, disabled: !can || u.weaponState === ws, run: run({ type: 'weaponState', unitId: u.id, state: ws }) })),
     });
     out.push({
       id: 'fire',
@@ -1625,8 +1630,8 @@ export class Battle {
             this.fireMode = keep ? null : fm;
           },
         })),
-        { label: 'Перезарядити', disabled: !can, run: run({ type: 'reload', unitId: u.id }) },
-        { label: 'Спостереження (overwatch)', disabled: !can, title: 'Резерв усіх AP для реакції', run: run({ type: 'overwatch', unitId: u.id }) },
+        { label: 'Перезарядити', title: `${content().rules.actions.reloadPouch} AP з підсумка, ${content().rules.actions.reloadBackpack} AP з рюкзака`, disabled: !can, run: run({ type: 'reload', unitId: u.id }) },
+        { label: 'Спостереження (overwatch)', disabled: !can, title: `Резерв усіх AP для реакції (мінімум ${content().rules.actions.overwatchMin} AP)`, run: run({ type: 'overwatch', unitId: u.id }) },
       ],
     });
     // Гранати за типами.
@@ -1641,6 +1646,7 @@ export class Battle {
         active: !!this.throwGrenade,
         items: [...nades].map(([id, n]) => ({
           label: `${itemDef(id).name} ×${n}`,
+          title: `Кидок — ${content().rules.actions.throw} AP (+ з рюкзака дорожче)`,
           on: this.throwGrenade === id,
           disabled: !can,
           run: () => {
@@ -1660,27 +1666,27 @@ export class Battle {
     };
     if (l) {
       const ammo = loadedAmmo(u);
-      lItems.push({ label: `РПГ-7: ${ammo ? itemDef(ammo).name.replace('Постріл ', '') : 'не заряджено'}`, on: this.launchMode === 'rpg', disabled: !can || !l.loaded, run: toggle('rpg') });
+      lItems.push({ title: `Постріл — ${content().rules.launcher.rpgAp} AP`, label: `РПГ-7: ${ammo ? itemDef(ammo).name.replace('Постріл ', '') : 'не заряджено'}`, on: this.launchMode === 'rpg', disabled: !can || !l.loaded, run: toggle('rpg') });
       if (!l.loaded)
         for (const st of rocketStock(u))
           lItems.push({ label: `Зарядити ${st.name.replace('Постріл ', '')} ×${st.count} — ${content().rules.launcher.rpgReload} AP`, disabled: !can || st.count === 0, run: run({ type: 'reloadLauncher', unitId: u.id, ammo: st.id }) });
     }
     const nd = countDisposable(u);
-    if (nd) lItems.push({ label: `Bulspike (одноразовий) ×${nd}`, on: this.launchMode === 'disposable', disabled: !can, run: toggle('disposable') });
-    if (hasUnderbarrel(u)) lItems.push({ label: `Підствольник ×${countItems(u, (d) => d.id === 'vog')}`, on: this.launchMode === 'ugl', disabled: !can || !uglAmmo(u), run: toggle('ugl') });
+    if (nd) lItems.push({ title: `Постріл — ${content().rules.launcher.rpgAp} AP (+1 з рюкзака)`, label: `Bulspike (одноразовий) ×${nd}`, on: this.launchMode === 'disposable', disabled: !can, run: toggle('disposable') });
+    if (hasUnderbarrel(u)) lItems.push({ title: `Постріл — ${content().rules.launcher.uglAp} AP`, label: `Підствольник ×${countItems(u, (d) => d.id === 'vog')}`, on: this.launchMode === 'ugl', disabled: !can || !uglAmmo(u), run: toggle('ugl') });
     if (lItems.length)
       out.push({ id: 'launch', label: this.launchMode ? { rpg: 'РПГ-7', ugl: 'Підствольник', disposable: 'Bulspike' }[this.launchMode] : 'Гранатомет', title: 'Гранатомети', active: !!this.launchMode, items: lItems });
     // Інші дії.
     const other: ActionMenuItem[] = [
-      { label: 'Медицина…', run: () => this.openMedical(), disabled: !u.pos },
-      { label: 'Інвентар…', run: () => this.openInventory() },
-      ...this.lootTargets(u).map((t) => ({ label: `Обшукати: ${t.callsign}${t.side !== u.side ? ' (противник)' : ''}`, disabled: !can, run: () => this.openInventory(t.id) })),
+      { label: 'Медицина…', title: 'Вартість залежить від засобу — показано у вікні медицини', run: () => this.openMedical(), disabled: !u.pos },
+      { label: 'Інвентар…', title: `Перекладання — ${content().rules.actions.rearrange} AP за предмет`, run: () => this.openInventory() },
+      ...this.lootTargets(u).map((t) => ({ label: `Обшукати: ${t.callsign}${t.side !== u.side ? ' (противник)' : ''}`, title: `${content().rules.actions.loot} AP за предмет`, disabled: !can, run: () => this.openInventory(t.id) })),
       ...caches(this.s)
         .filter((c) => cacheReachable(this.s, c, u))
-        .map((c) => ({ label: `${c.name} (${c.items.length})`, disabled: !can, run: () => this.openInventory(c.id) })),
+        .map((c) => ({ label: `${c.name} (${c.items.length})`, title: `${content().rules.actions.loot} AP за предмет`, disabled: !can, run: () => this.openInventory(c.id) })),
       ...this.s.units
         .filter((t) => t !== u && t.side === u.side && isActive(t) && t.pos && u.pos && (adjacent(t.pos, u.pos) || sameCell(t.pos, u.pos)))
-        .map((t) => ({ label: `Передати: ${t.callsign}`, disabled: !can, run: () => this.openInventory(t.id) })),
+        .map((t) => ({ label: `Передати: ${t.callsign}`, title: `${content().rules.actions.loot} AP за предмет`, disabled: !can, run: () => this.openInventory(t.id) })),
     ];
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
     if (u.piloting && droneById(s, u.piloting) && !droneById(s, u.piloting)!.destroyed) other.push({ label: 'Керувати дроном', run: () => this.selectDrone(u.piloting!) });
@@ -1691,26 +1697,11 @@ export class Battle {
       if (v.side === u.side && !v.destroyed && u.pos && adjacentToVehicle(v, u.pos) && freeSeats(v) > 0)
         other.push({ label: `Сісти в ${vehicleDef(v.defId).name} — ${content().rules.actions.embark} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'embark', unitId: u.id, vehicleId: v.id }).then((ok) => ok && this.selectVehicle(v.id)) });
     const pick = this.pickUpTarget(u);
-    if (u.carrying) other.push({ label: 'Покласти пораненого', disabled: !can, run: run({ type: 'drop', unitId: u.id }) });
-    else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
+    if (u.carrying) other.push({ label: 'Покласти пораненого', title: `${content().rules.actions.drop} AP`, disabled: !can, run: run({ type: 'drop', unitId: u.id }) });
+    else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, title: `${content().rules.actions.pickUp} AP`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
     if (inZone(u.pos ?? { x: -1, y: -1, z: 0 }, s.scenario.evacZone))
-      other.push({ label: u.carrying ? 'Евакуювати пораненого' : 'Евакуюватися', disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
-    const f = facingOf(u);
-    const ta = content().rules.actions.turn;
-    const turn = (nf: number) => run({ type: 'turn', unitId: u.id, facing: (nf + 8) % 8 });
-    out.push({
-      id: 'turn',
-      label: `Огляд: ${DIR8_NAMES[f]}`,
-      title: `Поворот — ${ta} AP. Боєць бачить сектор ${content().rules.vision.fov}° перед собою, позаду — лише впритул. Ліхтар світить туди, куди дивиться боєць.`,
-      items: [
-        { label: 'Дивитися на клітинку (клік на карті)', on: this.turnMode, disabled: !can, run: () => ((this.turnMode = !this.turnMode), this.refresh()) },
-        { label: 'Ліворуч на 45°', disabled: !can, run: turn(f - 1) },
-        { label: 'Праворуч на 45°', disabled: !can, run: turn(f + 1) },
-        { label: 'Ліворуч на 90°', disabled: !can, run: turn(f - 2) },
-        { label: 'Праворуч на 90°', disabled: !can, run: turn(f + 2) },
-        { label: 'Кругом', disabled: !can, run: turn(f + 4) },
-      ],
-    });
+      other.push({ label: u.carrying ? 'Евакуювати пораненого' : 'Евакуюватися', title: `${content().rules.actions.evacuate} AP`, disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
+    out.push({ id: 'turn', label: `Огляд: ${DIR8_NAMES[facingOf(u)]}`, title: 'Поворот безкоштовний (0 AP): натисніть і клацніть клітинку, куди дивитися', items: [], toggle: () => ((this.turnMode = !this.turnMode), this.refresh()), active: this.turnMode, disabled: !can });
     out.push({ id: 'other', label: 'Дії', title: 'Інші дії', items: other });
     return out;
   }
@@ -1736,4 +1727,7 @@ interface ActionMenu {
   title: string;
   active?: boolean;
   items: ActionMenuItem[];
+  /** Кнопка-перемикач без випадного списку. */
+  toggle?: () => void;
+  disabled?: boolean;
 }

@@ -21,7 +21,7 @@ describe('напрямок погляду', () => {
     expect(canSee(s, a, b).seen).toBe(false);
     const ap0 = a.ap;
     expect(m.dispatch({ type: 'turn', unitId: a.id, facing: 4 }).ok).toBe(true);
-    expect(ap0 - a.ap).toBe(5);
+    expect(ap0 - a.ap).toBe(0);
     expect(canSee(s, a, b).seen).toBe(true);
     // Рух розвертає бійця за останнім кроком.
     m.dispatch({ type: 'move', unitId: a.id, to: { x: 6, y: 20, z: 0 }, mode: 'standard' });
