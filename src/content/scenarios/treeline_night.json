@@ -1,0 +1,106 @@
+{
+  "id": "treeline_night",
+  "name": "Нічна лісосмуга",
+  "description": "Вночі противник займає окопи вздовж лісосмуги. Підійдіть по полю, використовуйте ПНБ і тепловізор дрона. Біля вогню ПНБ засвічується.",
+  "type": "clear",
+  "mapId": "treeline",
+  "timeOfDay": "night",
+  "weather": "clear",
+  "difficulty": "medium",
+  "sides": {
+    "blue": {
+      "name": "Синя сторона",
+      "factionId": "test",
+      "controller": "human",
+      "squad": [
+        {
+          "classId": "rifleman",
+          "count": 3
+        },
+        {
+          "classId": "marksman",
+          "count": 1
+        },
+        {
+          "classId": "mg1",
+          "count": 1
+        },
+        {
+          "classId": "scout",
+          "count": 1
+        },
+        {
+          "classId": "medic",
+          "count": 1
+        },
+        {
+          "classId": "droneOperator",
+          "count": 1
+        }
+      ],
+      "deployZone": [
+        2,
+        24,
+        34,
+        29
+      ],
+      "manualDeploy": true
+    },
+    "red": {
+      "name": "Червона сторона",
+      "factionId": "test",
+      "controller": "ai",
+      "squad": [
+        {
+          "classId": "rifleman",
+          "count": 4
+        },
+        {
+          "classId": "mg1",
+          "count": 1
+        },
+        {
+          "classId": "marksman",
+          "count": 1
+        },
+        {
+          "classId": "grenadier1",
+          "count": 1
+        }
+      ],
+      "deployZone": [
+        3,
+        6,
+        33,
+        11
+      ],
+      "manualDeploy": false,
+      "aiStyle": "defensive"
+    }
+  },
+  "evacZone": [
+    0,
+    27,
+    2,
+    29
+  ],
+  "reinforcementDelay": 3,
+  "victory": {
+    "type": "eliminate"
+  },
+  "randomEvents": false,
+  "mapPreview": true,
+  "maxTurns": 40,
+  "supplyPoints": [
+    {
+      "x": 4,
+      "y": 26,
+      "side": "blue"
+    },
+    {
+      "x": 17,
+      "y": 7,
+      "side": "red"
+    }
+  ]
+}

@@ -6,6 +6,10 @@ import classesJson from './classes.json';
 import namesJson from './names.json';
 import factionsJson from './factions.json';
 import villageMap from './maps/village.json';
+import industrialMap from './maps/industrial.json';
+import treelineMap from './maps/treeline.json';
+import industrialAssault from './scenarios/industrial_assault.json';
+import treelineNight from './scenarios/treeline_night.json';
 import firstMission from './scenarios/first_mission.json';
 import nightRaid from './scenarios/night_raid.json';
 import armorAssault from './scenarios/armor_assault.json';
@@ -79,8 +83,8 @@ export function loadContent(): ContentDb {
     objects: byId(terrainJson.objects as MapObjectDefinition[]),
     classes: byId(classesJson.classes as ClassDefinition[]),
     names: namesJson,
-    maps: byId([villageMap as unknown as MapDefinition]),
-    scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario, armorAssault as unknown as Scenario]),
+    maps: byId([villageMap, industrialMap, treelineMap] as unknown as MapDefinition[]),
+    scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario, armorAssault as unknown as Scenario, industrialAssault as unknown as Scenario, treelineNight as unknown as Scenario]),
     factions: factionsJson.factions,
     mods: byId(modsJson.mods as WeaponModDefinition[]),
     vehicles: byId(vehiclesJson.vehicles as unknown as VehicleDefinition[]),
@@ -112,7 +116,7 @@ export function terrainDef(id: string): TerrainDefinition {
 }
 
 /** Вбудовані (не користувацькі) карти й сценарії — їх не можна перезаписати з редактора. */
-export const BUILTIN_IDS = new Set(['village', 'first_mission', 'night_raid', 'armor_assault']);
+export const BUILTIN_IDS = new Set(['village', 'industrial', 'treeline', 'first_mission', 'night_raid', 'armor_assault', 'industrial_assault', 'treeline_night']);
 
 /** Додати або оновити користувацьку карту/сценарій у реєстрі контенту. */
 export function registerMap(def: MapDefinition): void {
