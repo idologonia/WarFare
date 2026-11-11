@@ -1,5 +1,5 @@
 import { content, objectDef, terrainDef } from '@/content';
-import { cellKey, type Cell } from '@/core/grid';
+import type { Cell } from '@/core/grid';
 import type { EdgeSide, MapObjectDefinition, MapState } from '@/game/types';
 import { Color3, StandardMaterial, Vector3, type Mesh, type Scene } from './babylon';
 import { GeoBuilder, hash2, hex, shade, type RGB } from './geo';
@@ -170,7 +170,7 @@ export class MapView {
     this.onMesh(this.base, true);
     for (let z = 0; z < m.levels; z++) this.levelMeshes.push(this.buildLevel(z));
     for (let z = 0; z < m.levels; z++)
-      for (let y = 0; y < m.height; y++) for (let x = 0; x < m.width; x++) this.rebuildObject({ x, y, z });
+      for (let cy = 0; cy * MapView.CH < m.height; cy++) for (let cx = 0; cx * MapView.CH < m.width; cx++) this.rebuildChunk(z, cx, cy);
   }
 
   private buildLevel(z: number): Mesh {
@@ -249,57 +249,53 @@ export class MapView {
     this.levelMeshes = [];
   }
 
+  /** Об'єкти карти зібрані блоками CH×CH клітинок на поверх: мало draw calls. */
+  static readonly CH = 8;
+
   rebuildObject(c: Cell): void {
-    const key = cellKey(c);
-    for (const k of [key, `e:${key}`, `eg:${key}`]) {
-      const old = this.objects.get(k);
-      if (old) {
-        old.mesh.dispose();
-        this.objects.delete(k);
-      }
+    this.rebuildChunk(c.z, Math.floor(c.x / MapView.CH), Math.floor(c.y / MapView.CH));
+  }
+
+  private rebuildChunk(z: number, cx: number, cy: number): void {
+    const key = `${z}:${cx}:${cy}`;
+    for (const k of [`ch:${key}`, `chg:${key}`]) {
+      this.objects.get(k)?.mesh.dispose();
+      this.objects.delete(k);
     }
-    const cell = this.map.cells[c.z][c.y][c.x];
-    const base = c.z + (c.z === 0 ? cell.elevation : 0);
-    if (cell.object) {
-      const o = objectDef(cell.object.defId);
-      const g = new GeoBuilder();
-      buildObject(g, o, c.x, c.y, c.z, base);
-      const mesh = g.build(`obj_${key}`, this.scene, o.window ? this.glass : this.solid);
-      if (cell.object.rot) {
-        mesh.setPivotPoint(new Vector3(c.x + 0.5, 0, -(c.y + 0.5)));
-        mesh.rotation.y = (cell.object.rot * Math.PI) / 2;
-      }
-      mesh.isPickable = false;
-      this.onMesh(mesh, false);
-      this.objects.set(key, { mesh, level: c.z, buildingId: cell.buildingId, wall: !!o.wall || o.id === 'parapet', glass: !!o.window });
-    }
-    if (cell.edges && Object.keys(cell.edges).length) {
-      const g = new GeoBuilder();
-      const gg = new GeoBuilder();
-      let wall = false;
-      let glass = false;
-      let building = cell.buildingId;
-      for (const side of Object.keys(cell.edges) as EdgeSide[]) {
-        const e = cell.edges[side]!;
-        const o = objectDef(e.defId);
-        buildEdge(g, o, c.x, c.y, c.z, side, c.z, gg);
-        if (o.wall || o.id === 'parapet') wall = true;
-        if (o.window) glass = true;
-        if (building === undefined) {
-          const n = side === 'n' ? { x: c.x, y: c.y - 1 } : side === 'w' ? { x: c.x - 1, y: c.y } : null;
-          if (n && n.x >= 0 && n.y >= 0) building = this.map.cells[c.z][n.y][n.x].buildingId;
+    const g = new GeoBuilder();
+    const gg = new GeoBuilder();
+    let wall = false;
+    const CH = MapView.CH;
+    for (let y = cy * CH; y < Math.min(this.map.height, (cy + 1) * CH); y++)
+      for (let x = cx * CH; x < Math.min(this.map.width, (cx + 1) * CH); x++) {
+        const cell = this.map.cells[z][y][x];
+        const base = z + (z === 0 ? cell.elevation : 0);
+        if (cell.object) {
+          const o = objectDef(cell.object.defId);
+          const tgt = o.window ? gg : g;
+          const from = tgt.positions.length;
+          buildObject(tgt, o, x, y, z, base);
+          if (cell.object.rot) rotateSince(tgt, from, x + 0.5, -(y + 0.5), (cell.object.rot * Math.PI) / 2);
+          if (o.wall || o.id === 'parapet') wall = true;
         }
+        if (cell.edges)
+          for (const side of Object.keys(cell.edges) as EdgeSide[]) {
+            const o = objectDef(cell.edges[side]!.defId);
+            buildEdge(g, o, x, y, z, side, z, gg);
+            if (o.wall || o.id === 'parapet') wall = true;
+          }
       }
-      const mesh = g.build(`edge_${key}`, this.scene, this.solid);
+    if (!g.empty) {
+      const mesh = g.build(`ch_${key}`, this.scene, this.solid);
       mesh.isPickable = false;
       this.onMesh(mesh, false);
-      this.objects.set(`e:${key}`, { mesh, level: c.z, buildingId: building, wall, glass: false });
-      if (glass && gg.positions.length > 0) {
-        const gm = gg.build(`edgeg_${key}`, this.scene, this.glass);
-        gm.isPickable = false;
-        this.onMesh(gm, false);
-        this.objects.set(`eg:${key}`, { mesh: gm, level: c.z, buildingId: building, wall, glass: true });
-      }
+      this.objects.set(`ch:${key}`, { mesh, level: z, buildingId: undefined, wall, glass: false });
+    }
+    if (!gg.empty) {
+      const mesh = gg.build(`chg_${key}`, this.scene, this.glass);
+      mesh.isPickable = false;
+      this.onMesh(mesh, false);
+      this.objects.set(`chg:${key}`, { mesh, level: z, buildingId: undefined, wall, glass: true });
     }
   }
 
@@ -393,5 +389,21 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
         if (o.material === 'brick') for (let r = 1; r < 5; r++) put(0, (h * r) / 5, 0, LEN - 0.002, 0.025, T + 0.012, shade(col, 0.75));
         put(0, h + 0.02, 0, LEN + (horizontal ? 0.02 : -0.002), 0.04, T + (horizontal ? 0.03 : 0.026), shade(col, 1.15));
       }
+  }
+}
+
+/** Повернути геометрію, додану після позиції from, навколо вертикалі через (px, pz). */
+function rotateSince(g: GeoBuilder, from: number, px: number, pz: number, a: number): void {
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  for (let i = from; i < g.positions.length; i += 3) {
+    const dx = g.positions[i] - px;
+    const dz = g.positions[i + 2] - pz;
+    g.positions[i] = px + dx * c + dz * sn;
+    g.positions[i + 2] = pz - dx * sn + dz * c;
+    const nx = g.normals[i];
+    const nz = g.normals[i + 2];
+    g.normals[i] = nx * c + nz * sn;
+    g.normals[i + 2] = -nx * sn + nz * c;
   }
 }

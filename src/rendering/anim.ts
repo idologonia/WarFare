@@ -12,6 +12,10 @@ export class Animator {
   private tweens: Tween[] = [];
   speed = 1;
 
+  get busy(): boolean {
+    return this.tweens.length > 0;
+  }
+
   constructor(scene: Scene) {
     scene.onBeforeRenderObservable.add(() => this.tick());
   }

@@ -32,6 +32,8 @@ export interface TraceResult {
 }
 
 export interface TraceOptions {
+  /** Крок перевірки (за замовчуванням точний); грубіший — для відображення затемнення. */
+  step?: number;
   /** Ігнорувати клітинки на початку/в кінці (стрілець і ціль). */
   skipStart?: Cell;
   skipEnd?: Cell;
@@ -63,7 +65,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     dh *= k;
     len *= k;
   }
-  const steps = Math.max(1, Math.ceil(len / STEP));
+  const steps = Math.max(1, Math.ceil(len / (opt.step ?? STEP)));
   const cells: Cell[] = [];
   const windows: { cell: Cell; side: EdgeSide }[] = [];
   let concealment = 0;

@@ -101,6 +101,8 @@ export class Renderer {
     if (!this.engine) this.engine = new Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true }, true);
     this.engine.setHardwareScalingLevel(this.gfx.renderScale / Math.min(2, window.devicePixelRatio || 1));
     const scene = (this.scene = new Scene(this.engine));
+    scene.skipPointerMovePicking = true;
+    scene.autoClearDepthAndStencil = true;
     scene.clearColor = new Color4(0.07, 0.08, 0.1, 1);
     scene.ambientColor = new Color3(0.3, 0.3, 0.3);
     this.anim = new Animator(scene);
@@ -167,6 +169,10 @@ export class Renderer {
       this.spinRotors();
       this.updateOrtho();
       if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
+      if (this.shadowGen && (this.shadowsDirty || this.anim.busy || this.camMoved())) {
+        this.shadowGen.getShadowMap()!.resetRefreshCounter();
+        this.shadowsDirty = false;
+      }
       const fm = this.overlays.get('fire');
       if (fm) {
         const t = performance.now() / 120;
@@ -189,6 +195,8 @@ export class Renderer {
       this.shadowGen.filteringQuality = ShadowGenerator.QUALITY_HIGH;
       this.shadowGen.bias = 0.002;
       this.shadowGen.darkness = 0.35;
+      this.shadowGen.getShadowMap()!.refreshRate = 0; // RENDER_ONCE; оновлюємо вручну
+      this.shadowsDirty = true;
       for (const m of this.scene.meshes) if (m.metadata?.caster) this.shadowGen.addShadowCaster(m);
       for (const m of this.scene.meshes) if (m.metadata?.receiver) m.receiveShadows = true;
     } else if (!on && this.shadowGen) {
@@ -206,7 +214,17 @@ export class Renderer {
     m.metadata = { ...(m.metadata ?? {}), caster: !receive, receiver: true };
     m.receiveShadows = true;
     if (!receive && this.shadowGen) this.shadowGen.addShadowCaster(m);
+    // Карта нерухома: не перераховувати матриці й межі щокадру.
+    m.freezeWorldMatrix();
+    m.doNotSyncBoundingInfo = true;
+    this.shadowsDirty = true;
   };
+
+  /** Тіні перемальовуються лише коли щось змінилось (рух, анімація, руйнування). */
+  private shadowsDirty = true;
+  markShadows(): void {
+    this.shadowsDirty = true;
+  }
 
   // ---------- Камера ----------
 
@@ -326,6 +344,7 @@ export class Renderer {
   /** Розміщення моделей за станом (без анімації), видимість противника. */
   sync(): void {
     const s = this.state;
+    this.shadowsDirty = true;
     this.refreshFog();
     this.syncVehicles();
     this.syncDrones();
@@ -477,10 +496,14 @@ export class Renderer {
       '|' + (s.vehicles ?? []).filter((v) => v.side === this.viewSide).map((v) => `${v.x},${v.y}`).join(';');
     if (!force && key === this.fogKey) return;
     this.fogKey = key;
-    const seen = visibleCells(s, this.viewSide);
+    const m = s.map;
+    const topZ = (x: number, y: number) => {
+      for (let k = Math.min(this.viewLevel, m.levels - 1); k > 0; k--) if (m.cells[k][y][x].floor) return k;
+      return 0;
+    };
+    const seen = visibleCells(s, this.viewSide, topZ);
     const g = new GeoBuilder();
     const lit = new GeoBuilder();
-    const m = s.map;
     for (let y = 0; y < m.height; y++)
       for (let x = 0; x < m.width; x++) {
         let z = 0;
@@ -524,6 +547,7 @@ export class Renderer {
       if (b !== undefined && cellAt(s.map, u.pos)!.terrain === 'floor') inside.add(b);
     }
     this.map.applyVisibility(this.viewLevel, inside);
+    this.shadowsDirty = true;
     this.refreshSmoke();
     this.refreshFire();
     for (const u of s.units) {
@@ -1036,6 +1060,16 @@ export class Renderer {
   }
 
   private scars: { p: Vector3; r: number }[] = [];
+  private lastCam = '';
+
+  /** Камера зрушилась (тіні від спрямованого світла залежать від кадру). */
+  private camMoved(): boolean {
+    const c = this.camera;
+    const k = `${c.alpha.toFixed(3)},${c.beta.toFixed(3)},${c.target.x.toFixed(2)},${c.target.z.toFixed(2)},${(c.orthoTop ?? 0).toFixed(2)}`;
+    if (k === this.lastCam) return false;
+    this.lastCam = k;
+    return true;
+  }
 
   /** Вирва й кіптява від вибуху (лишаються на землі до кінця бою). */
   private addScar(p: Vector3, radius: number): void {

@@ -175,7 +175,7 @@ export const enemySide = other;
 export type SeenBy = 'eye' | 'light' | 'nvg';
 const SEEN_RANK: Record<SeenBy, number> = { eye: 0, light: 1, nvg: 2 };
 
-export function visibleCells(s: MissionState, side: SideId): Map<string, SeenBy> {
+export function visibleCells(s: MissionState, side: SideId, zOf?: (x: number, y: number) => number): Map<string, SeenBy> {
   const out = new Map<string, SeenBy>();
   const night = s.scenario.timeOfDay === 'night';
   const put = (key: string, k: SeenBy) => {
@@ -192,9 +192,10 @@ export function visibleCells(s: MissionState, side: SideId): Map<string, SeenBy>
     const nvg = night && !o.vehicle && !!activeNvg(u);
     const light = night && !o.vehicle && !nvg && !!u.lightOn;
     if (o.vehicle) losIgnore.ids.add(o.vehicle);
-    for (let z = 0; z < m.levels; z++)
-      for (let y = Math.max(0, u.pos.y - range); y <= Math.min(m.height - 1, u.pos.y + range); y++)
-        for (let x = Math.max(0, u.pos.x - range); x <= Math.min(m.width - 1, u.pos.x + range); x++) {
+    for (let y = Math.max(0, u.pos.y - range); y <= Math.min(m.height - 1, u.pos.y + range); y++)
+      for (let x = Math.max(0, u.pos.x - range); x <= Math.min(m.width - 1, u.pos.x + range); x++)
+        for (let z = zOf ? zOf(x, y) : 0; z < (zOf ? zOf(x, y) + 1 : m.levels); z++) {
+          if (dist2d(u.pos, { x, y, z: 0 }) > range + 1) continue;
           const key = `${x},${y},${z}`;
           const prev = out.get(key);
           if (prev === 'nvg' || (prev && !nvg && !light)) continue;
@@ -211,7 +212,7 @@ export function visibleCells(s: MissionState, side: SideId): Map<string, SeenBy>
           if (off > V.fov / 2 && d > V.peripheralRange) continue;
           if (d > visionRange(s, u, inBeam)) continue;
           const p = cellCenter(c, groundHeight(m, c) + 0.3);
-          if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c }).blocked) put(key, kind);
+          if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c, step: 0.25 }).blocked) put(key, kind);
         }
     if (o.vehicle) losIgnore.ids.delete(o.vehicle);
   }
