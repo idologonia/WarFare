@@ -4,6 +4,8 @@ export interface Settings {
   buttonSize: number;
   panelSide: 'left' | 'right';
   shadows: boolean;
+  /** Пост-обробка: згладжування, світіння, тонування. */
+  postfx: boolean;
   renderScale: number;
   engine: 'webgl' | 'webgpu';
   animSpeed: number;
@@ -17,6 +19,7 @@ const DEFAULTS: Settings = {
   buttonSize: matchMedia('(pointer: coarse)').matches ? 40 : 38,
   panelSide: 'left',
   shadows: true,
+  postfx: true,
   renderScale: 1,
   engine: 'webgl',
   animSpeed: 1,

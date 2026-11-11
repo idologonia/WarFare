@@ -37,7 +37,7 @@ class App {
     this.music.volume = this.settings.music;
     const canvas = h('canvas', { id: 'view' });
     this.app.append(canvas, this.ui);
-    this.renderer = new Renderer(canvas, { shadows: this.settings.shadows, renderScale: this.settings.renderScale, engine: this.settings.engine, animSpeed: this.settings.animSpeed });
+    this.renderer = new Renderer(canvas, { shadows: this.settings.shadows, renderScale: this.settings.renderScale, engine: this.settings.engine, animSpeed: this.settings.animSpeed, postfx: this.settings.postfx });
     await this.renderer.init();
     window.addEventListener('pointerdown', () => this.music.unlock(), { once: true });
     this.mainMenu();
@@ -414,6 +414,7 @@ class App {
       range('Розмір кнопок (px)', 30, 64, 2, () => s.buttonSize, (v) => (s.buttonSize = v)),
       toggle('Розташування панелей', [['left', 'Список ліворуч'], ['right', 'Список праворуч']], () => s.panelSide, (v) => (s.panelSide = v as Settings['panelSide'])),
       h('h3', {}, 'Графіка'),
+      toggle('Пост-обробка (світіння, згладжування)', [['1', 'Увімк.'], ['0', 'Вимк.']], () => (s.postfx ? '1' : '0'), (v) => (s.postfx = v === '1')),
       toggle('Тіні', [['1', 'Увімк.'], ['0', 'Вимк.']], () => (s.shadows ? '1' : '0'), (v) => (s.shadows = v === '1')),
       toggle('Роздільність рендерингу', [['1', 'Повна'], ['1.5', 'Середня'], ['2', 'Низька']], () => String(s.renderScale), (v) => (s.renderScale = Number(v))),
       toggle('Графічний API (після перезапуску)', [['webgl', 'WebGL2 (стабільно)'], ['webgpu', 'WebGPU (експериментально)']], () => s.engine, (v) => (s.engine = v as Settings['engine'])),

@@ -16,6 +16,8 @@ import {
   Engine,
   HemisphericLight,
   PointLight,
+  DefaultRenderingPipeline,
+  ImageProcessingConfiguration,
   Matrix,
   Scene,
   ShadowGenerator,
@@ -43,6 +45,7 @@ export interface GraphicsSettings {
   renderScale: number;
   engine: 'webgl' | 'webgpu';
   animSpeed: number;
+  postfx?: boolean;
 }
 
 export interface OverlayCell {
@@ -65,6 +68,7 @@ export class Renderer {
   private beams = new Map<string, Mesh>();
   private beamMat!: StandardMaterial;
   private fireMat!: StandardMaterial;
+  private pp: DefaultRenderingPipeline | null = null;
   private fireLights: PointLight[] = [];
   private units = new Map<string, UnitModel>();
   private unitMats: Record<string, StandardMaterial> = {};
@@ -108,6 +112,25 @@ export class Renderer {
     this.anim.speed = this.gfx.animSpeed;
 
     const cam = (this.camera = new ArcRotateCamera('cam', this.alphaFor(0), 0.92, 60, Vector3.Zero(), scene));
+    if (this.gfx.postfx !== false) {
+      // Пост-обробка: згладжування, світіння яскравого (вогонь, спалахи, ліхтарі), кінотонування.
+      const pp = (this.pp = new DefaultRenderingPipeline('pp', true, scene, [cam]));
+      pp.fxaaEnabled = true;
+      pp.bloomEnabled = true;
+      pp.bloomThreshold = 0.82;
+      pp.bloomWeight = 0.45;
+      pp.bloomKernel = 48;
+      pp.bloomScale = 0.5;
+      pp.sharpenEnabled = true;
+      pp.sharpen.edgeAmount = 0.25;
+      pp.imageProcessingEnabled = true;
+      pp.imageProcessing.toneMappingEnabled = true;
+      pp.imageProcessing.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+      pp.imageProcessing.exposure = 1.25;
+      pp.imageProcessing.contrast = 1.15;
+      pp.imageProcessing.vignetteEnabled = true;
+      pp.imageProcessing.vignetteWeight = 1.4;
+    }
     cam.mode = Camera.ORTHOGRAPHIC_CAMERA;
     cam.minZ = 0.1;
     cam.maxZ = 400;
@@ -128,7 +151,7 @@ export class Renderer {
     this.fxMat = makeMaterial(scene, 'fx', 1, true);
     this.beamMat = makeMaterial(scene, 'beam', 0.16, true);
     this.beamMat.emissiveColor = new Color3(1, 0.95, 0.7);
-    this.fireMat = makeMaterial(scene, 'fire', 0.88, true);
+    this.fireMat = makeMaterial(scene, 'fire', 1, true);
 
     this.selRing = CreateTorus('sel', { diameter: 0.8, thickness: 0.05, tessellation: 24 }, scene);
     const ringMat = makeMaterial(scene, 'ring', 1, true);
@@ -328,6 +351,7 @@ export class Renderer {
     this.hemi.diffuse = night ? new Color3(0.45, 0.55, 0.85) : new Color3(1, 1, 1);
     this.hemi.groundColor = night ? new Color3(0.08, 0.08, 0.14) : new Color3(0.32, 0.3, 0.36);
     this.light.intensity = night ? 0.22 : sc.weather === 'rain' ? 0.55 : 0.85;
+    if (this.pp) this.pp.imageProcessing.exposure = night ? 0.85 : 1.25;
     this.light.diffuse = night ? new Color3(0.6, 0.7, 1) : new Color3(1, 0.98, 0.92);
     scene.clearColor = night ? new Color4(0.02, 0.03, 0.06, 1) : new Color4(0.07, 0.08, 0.1, 1);
     if (sc.weather === 'fog' || sc.weather === 'rain') {
@@ -381,14 +405,14 @@ export class Renderer {
             g.box(p.x + a * 0.7, p.y + hgt / 2, p.z + b * 0.7, 0.22, hgt, 0.22, [1, 0.45 + hash2(i, x, y) * 0.2, 0.08], 0.9);
             g.box(p.x + a * 0.7, p.y + hgt * 0.35, p.z + b * 0.7, 0.12, hgt * 0.6, 0.12, [1, 0.9, 0.35], 0.95);
           }
-          g.box(p.x, p.y + 0.015, p.z, 0.95, 0.02, 0.95, [0.14, 0.06, 0.02], 0.45); // згарище
+          g.box(p.x, p.y + 0.015, p.z, 0.95, 0.02, 0.95, [0.16, 0.07, 0.03]); // згарище
         }),
       ),
     );
     if (g.empty) return;
     const mesh = g.build('ov_fire', this.scene, this.fireMat);
     mesh.isPickable = false;
-    mesh.hasVertexAlpha = true;
+    mesh.hasVertexAlpha = false;
     this.overlays.set('fire', mesh);
     if (this.state.scenario.timeOfDay === 'night') {
       // Не більше 3 джерел: центри скупчень вогню.
@@ -870,13 +894,19 @@ export class Renderer {
           this.refreshVisibility();
           break;
         case 'status':
+          if ((e.status === 'dead' || e.status === 'down') && this.isShown(e.unitId)) await this.animateFall(e.unitId);
+          this.syncUnit(e.unitId);
+          await this.anim.wait(150);
+          break;
+        case 'damaged':
+          if (this.isShown(e.unitId)) await this.animateFlinch(e.unitId);
+          break;
         case 'pose':
         case 'deployed':
         case 'reinforcement':
         case 'evacuated':
         case 'carry':
           this.syncUnit(e.unitId);
-          if (e.t === 'status') await this.anim.wait(150);
           break;
         case 'float':
           onFloat(e);
@@ -905,6 +935,28 @@ export class Renderer {
 
   private isShown(id: string): boolean {
     return this.units.get(id)?.root.isEnabled() ?? false;
+  }
+
+  /** Падіння бійця (поранений/загиблий). */
+  private async animateFall(id: string): Promise<void> {
+    const m = this.units.get(id);
+    if (!m) return;
+    const r0 = m.body.rotation.x;
+    const y0 = m.body.position.y;
+    await this.anim.tween(380, (t) => {
+      const k = t * t;
+      m.body.rotation.x = r0 + (-Math.PI / 2 - r0) * k;
+      m.body.position.y = y0 + Math.sin(t * Math.PI) * 0.08;
+    });
+  }
+
+  /** Здригання від влучання. */
+  private async animateFlinch(id: string): Promise<void> {
+    const m = this.units.get(id);
+    if (!m) return;
+    const r0 = m.torso.rotation.x;
+    await this.anim.tween(160, (t) => (m.torso.rotation.x = r0 - Math.sin(t * Math.PI) * 0.35));
+    m.torso.rotation.x = r0;
   }
 
   private syncUnit(id: string): void {
