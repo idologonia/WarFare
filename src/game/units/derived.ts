@@ -1,6 +1,6 @@
 import { content } from '@/content';
 import { toTenths } from '@/core/grid';
-import { helmetMount, totalWeight } from '@/game/inventory/inventory';
+import { activeNvg, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
 import type { Unit } from '@/game/types';
 
@@ -52,7 +52,7 @@ export function visionRange(s: MissionState, u: Unit, inBeam = true): number {
   const v = R().vision;
   let base = v.dayRange;
   if (s.scenario.timeOfDay === 'night') {
-    const nvg = helmetMount(u, 'nvg');
+    const nvg = activeNvg(u);
     base = Math.min(v.dayRange, v.nightRange * (nvg?.nightFactor ?? 1));
     if (u.lightOn && !nvg && inBeam) base += v.flashlightBonus;
   }

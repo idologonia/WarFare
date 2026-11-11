@@ -231,5 +231,14 @@
     "altitude": 0.6,
     "lowFlyBonus": 15,
     "altitudeCost": 0.5
+  },
+  "fire_": {
+    "burnDamage": 14,
+    "objectDamage": 45,
+    "spreadChance": 30,
+    "spreadTurns": 2,
+    "lightRadius": 3.5,
+    "glareHitPenalty": 20,
+    "glareVisionRange": 3
   }
 }

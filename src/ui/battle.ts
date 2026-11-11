@@ -23,6 +23,8 @@ import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells
 import { losIgnore } from '@/game/visibility/los';
 import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId } from '@/game/logistics';
 import { DIR8_NAMES, dirTo, facingOf } from '@/game/units/facing';
+import { droneDefOfItem, PAYLOAD_NAMES } from '@/game/drones/payload';
+import type { DronePayload } from '@/game/types';
 import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test' | 'online';
@@ -1240,7 +1242,7 @@ export class Battle {
     if (def.kind === 'dropper')
       out.push({
         id: 'ddrop',
-        label: `Скид (${d.drops})`,
+        label: `Скид${d.payload ? ' ' + PAYLOAD_NAMES[d.payload] : ''} (${d.drops})`,
         title: 'Скид у клітинку під дроном — 2 AP дрона',
         items: [{ label: 'Скинути зараз', disabled: !human || d.drops <= 0, run: () => (this.pending = { kind: 'ddrop' }) }],
       });
@@ -1688,11 +1690,20 @@ export class Battle {
         .filter((t) => t !== u && t.side === u.side && isActive(t) && t.pos && u.pos && (adjacent(t.pos, u.pos) || sameCell(t.pos, u.pos)))
         .map((t) => ({ label: `Передати: ${t.callsign}`, title: `${content().rules.actions.loot} AP за предмет`, disabled: !can, run: () => this.openInventory(t.id) })),
     ];
+    if (helmetMount(u, 'nvg')) other.push({ label: u.nvgUp ? 'Опустити ПНБ (0 AP)' : 'Відкинути ПНБ (0 AP)', on: !u.nvgUp, disabled: !can, title: 'Опущений ПНБ: уночі видно далі, але біля вогню засвічується (−огляд, −влучність). Відкинутий: не заважає дивитися на освітлене', run: run({ type: 'toggleNvg', unitId: u.id }) });
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
     if (u.piloting && droneById(s, u.piloting) && !droneById(s, u.piloting)!.destroyed) other.push({ label: 'Керувати дроном', run: () => this.selectDrone(u.piloting!) });
     else
-      for (const it of droneItems(u))
-        other.push({ label: `Запустити ${it.name.replace(' (дрон)', '')} — ${content().rules.drones.launch} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'droneLaunch', unitId: u.id, index: it.index }).then((ok) => ok && u.piloting && this.selectDrone(u.piloting)) });
+      for (const it of droneItems(u)) {
+        const dd = droneDefOfItem(it.defId);
+        const variants = Object.keys(dd?.warheads ?? dd?.drops_ ?? {}) as DronePayload[];
+        const launch = (payload?: DronePayload) => () => void this.exec({ type: 'droneLaunch', unitId: u.id, index: it.index, payload }).then((ok) => ok && u.piloting && this.selectDrone(u.piloting));
+        const nm = it.name.replace(' (дрон)', '');
+        if (!variants.length) other.push({ label: `Запустити ${nm} — ${content().rules.drones.launch} AP`, title: `${content().rules.drones.launch} AP`, disabled: !can || !!u.carrying, run: launch() });
+        else
+          for (const v of variants)
+            other.push({ label: `Запустити ${nm}: ${PAYLOAD_NAMES[v]} — ${content().rules.drones.launch} AP`, title: dd?.kind === 'dropper' ? 'Тип скидів на цей виліт' : 'Бойова частина на цей виліт', disabled: !can || !!u.carrying, run: launch(v) });
+      }
     for (const v of vehicles(s))
       if (v.side === u.side && !v.destroyed && u.pos && adjacentToVehicle(v, u.pos) && freeSeats(v) > 0)
         other.push({ label: `Сісти в ${vehicleDef(v.defId).name} — ${content().rules.actions.embark} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'embark', unitId: u.id, vehicleId: v.id }).then((ok) => ok && this.selectVehicle(v.id)) });

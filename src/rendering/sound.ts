@@ -1,5 +1,5 @@
 /** Процедурні звуки через WebAudio — без файлів. */
-export type Sfx = 'shot' | 'burst' | 'boom' | 'glass' | 'click' | 'throw' | 'rocket' | 'drone' | 'clang' | 'engine';
+export type Sfx = 'shot' | 'burst' | 'boom' | 'glass' | 'click' | 'throw' | 'rocket' | 'drone' | 'clang' | 'engine' | 'fire';
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -90,6 +90,10 @@ export function sfx(kind: Sfx): void {
     case 'clang':
       tone(c, t, 0.4, 0.3, 900, 600, 'triangle');
       burstNoise(c, t, 0.1, 0.3, 'highpass', 2500);
+      break;
+    case 'fire':
+      burstNoise(c, t, 1.4, 0.35, 'lowpass', 900);
+      for (let i = 0; i < 6; i++) burstNoise(c, t + Math.random() * 1.2, 0.04, 0.25, 'bandpass', 2500, 3);
       break;
     case 'engine':
       tone(c, t, 1.0, 0.18, 55, 70, 'sawtooth');

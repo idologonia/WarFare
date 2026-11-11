@@ -1,3 +1,4 @@
+import type { DronePayload } from '@/game/types';
 import type { Cell } from '@/core/grid';
 import type { FireTarget } from '@/game/combat/fire';
 import type { ItemDest, ItemRef } from '@/game/inventory/transfer';
@@ -19,7 +20,8 @@ export type Command =
   | { type: 'reloadLauncher'; unitId: string; ammo?: string }
   | { type: 'toggleLight'; unitId: string }
   | { type: 'turn'; unitId: string; facing: number }
-  | { type: 'droneLaunch'; unitId: string; index: number }
+  | { type: 'droneLaunch'; unitId: string; index: number; payload?: DronePayload }
+  | { type: 'toggleNvg'; unitId: string }
   | { type: 'droneMove'; droneId: string; x: number; y: number }
   | { type: 'droneAttack'; droneId: string; cell: Cell }
   | { type: 'droneDrop'; droneId: string }

@@ -3,6 +3,8 @@ import { content } from '@/content';
 import { groundHeight, objAt } from '@/game/maps/map';
 import { visionRange } from '@/game/units/derived';
 import { offAxis } from '@/game/units/facing';
+import { litByFire } from '@/game/combat/burn';
+import { activeNvg } from '@/game/inventory/inventory';
 import { isActive, onField, other, type Ctx, type MissionState } from '@/game/simulation/state';
 import type { SideId, Stance, Unit, VehicleState } from '@/game/types';
 import { cellCenter, losIgnore, trace, type Point } from './los';
@@ -39,6 +41,8 @@ export function canSeeFrom(s: MissionState, observer: Unit, from: Cell, fromStan
   const off = observer.inVehicle ? 0 : offAxis(observer, from, to);
   if (off > V.fov / 2 && distance > V.peripheralRange) return { seen: false, identified: false, concealment: 0, distance };
   let range = visionRange(s, observer, off <= V.flashlightCone / 2);
+  // Вогонь уночі: освітлену ціль видно як удень; опущений ПНБ засвічується.
+  if (litByFire(s, to)) range = activeNvg(observer) ? Math.min(range, content().rules.fire_.glareVisionRange) : Math.max(range, V.dayRange);
   // Увімкнений ліхтар уночі видно здалеку (якщо є пряма видимість).
   if (s.scenario.timeOfDay === 'night' && target.lightOn) range = Math.max(range, content().rules.vision.lightVisibleRange);
   const none = { seen: false, identified: false, concealment: 0, distance };

@@ -16,6 +16,7 @@ import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
 import { consume, createItem, findItem, findMedical, findReloadMagazine, helmetMount, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
 import { applyTreatment, canSelfApply, tickInjuries } from '@/game/injuries/injuries';
+import { tickFire, burnUnitsAt } from '@/game/combat/burn';
 import { canThrowTo, decaySmoke, resolveFire, resolveGrenade } from '@/game/combat/fire';
 import { fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/movement';
@@ -526,7 +527,7 @@ export class Mission {
       case 'droneLaunch': {
         if (u.carrying) return 'Руки зайняті пораненим';
         if (u.ap < toTenths(R.drones.launch)) return 'Недостатньо AP';
-        const res = launchDrone(ctx, u, cmd.index);
+        const res = launchDrone(ctx, u, cmd.index, cmd.payload);
         if (typeof res === 'string') return res;
         u.ap -= toTenths(R.drones.launch);
         return null;
@@ -540,6 +541,14 @@ export class Mission {
         if (e) return e;
         u.facing = f;
         ctx.ev.push({ t: 'pose', unitId: u.id });
+        return null;
+      }
+
+      case 'toggleNvg': {
+        if (!helmetMount(u, 'nvg')) return 'Немає ПНБ';
+        u.nvgUp = !u.nvgUp;
+        ctx.ev.push({ t: 'pose', unitId: u.id });
+        float(ctx, u.id, u.nvgUp ? 'ПНБ відкинуто' : 'ПНБ опущено', 'info');
         return null;
       }
 
@@ -743,6 +752,12 @@ export class Mission {
       u.ap -= cost;
       u.pos = { ...next };
       segment.push(u.pos);
+      // Крок через вогонь — опік.
+      if (cellAt(s.map, next)?.fire) {
+        flush();
+        burnUnitsAt(ctx, next);
+        if (!isActive(u)) break;
+      }
       const slow = isSlowTerrain(s.map, next);
       u.stamina = Math.max(0, u.stamina - M.staminaPerCell[mode] - (slow ? M.slowTerrainStamina : 0) * (u.carrying ? 2 : 1));
 
@@ -797,7 +812,10 @@ export class Mission {
     const s = this.state;
     const R = content().rules;
     s.turn.side = side;
-    if (side === 'blue') decaySmoke(ctx);
+    if (side === 'blue') {
+      decaySmoke(ctx);
+      tickFire(ctx);
+    }
     tickDrones(ctx, side);
     // Підкріплення.
     for (const r of sideUnits(s, side)) {

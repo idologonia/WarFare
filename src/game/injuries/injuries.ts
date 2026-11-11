@@ -3,7 +3,7 @@ import { float, newId, type Ctx } from '@/game/simulation/state';
 import type { ArmorDefinition, ArmorPiece, BodyPart, Injury, InjuryType, MedicalEffect, Unit } from '@/game/types';
 import { BODY_PARTS } from '@/game/types';
 
-export type DamageKind = 'bullet' | 'shrapnel';
+export type DamageKind = 'bullet' | 'shrapnel' | 'burn';
 
 export const PART_NAMES: Record<BodyPart, string> = {
   head: 'Голова',
@@ -20,6 +20,7 @@ export const INJURY_NAMES: Record<InjuryType, string> = {
   shrapnelLight: 'Легке осколкове',
   shrapnelHeavy: 'Важке осколкове',
   laceration: 'Рвана рана',
+  burn: 'Опік',
   amputation: 'Ампутація',
   pneumothorax: 'Пневмоторакс',
 };
@@ -74,7 +75,7 @@ export function applyHit(
   const part = opts.part ?? pickBodyPart(ctx, !!opts.lowCover);
   let dmg = baseDamage * (1 + (ctx.rng.next() * 2 - 1) * R.variance);
   let armorStopped = false;
-  const armor = armorRoll(ctx, target, part);
+  const armor = kind === 'burn' ? null : armorRoll(ctx, target, part);
   if (armor) {
     const d = itemDef<ArmorDefinition>(armor.defId);
     if (d.protection >= penetration) {
@@ -88,17 +89,19 @@ export function applyHit(
   let injury: InjuryType | null = null;
   if (!armorStopped) {
     const heavy = dmg >= R.heavyThreshold;
-    if (kind === 'shrapnel' && isLimb(part) && dmg >= R.amputationThreshold) injury = 'amputation';
+    if (kind === 'burn') injury = 'burn';
+    else if (kind === 'shrapnel' && isLimb(part) && dmg >= R.amputationThreshold) injury = 'amputation';
     else if (kind === 'shrapnel') injury = heavy ? 'shrapnelHeavy' : ctx.rng.chance(30) ? 'laceration' : 'shrapnelLight';
     else injury = heavy ? 'gunshotHeavy' : 'gunshotLight';
 
     let bleeding: Injury['bleeding'] = 'none';
-    if (injury === 'amputation') bleeding = 'massive';
+    if (injury === 'burn') bleeding = 'none';
+    else if (injury === 'amputation') bleeding = 'massive';
     else if (heavy) bleeding = ctx.rng.next() < R.massiveBleedChance ? 'massive' : 'light';
     else if (ctx.rng.next() < R.lightBleedChance) bleeding = 'light';
 
     target.injuries.push({ id: newId(ctx.s, 'inj'), part, type: injury, bleeding, turn: ctx.s.turn.turn });
-    if (part === 'torso' && heavy && ctx.rng.next() < R.pneumothoraxChance) {
+    if (part === 'torso' && heavy && injury !== 'burn' && ctx.rng.next() < R.pneumothoraxChance) {
       target.injuries.push({ id: newId(ctx.s, 'inj'), part, type: 'pneumothorax', bleeding: 'none', turn: ctx.s.turn.turn });
     }
     if (part === 'head' && heavy && ctx.rng.next() < R.headHeavyLethal) dmg = Math.max(dmg, target.health);

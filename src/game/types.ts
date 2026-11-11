@@ -128,11 +128,15 @@ export interface WeaponModDefinition {
 
 export interface Warhead {
   /** heat — кумулятивний (пробиває стіни), frag — осколковий (не пробиває). */
-  type: 'heat' | 'frag';
+  type: 'heat' | 'frag' | 'incendiary';
   damage: number;
   penetration: number;
-  blast: { radius: number; damage: number; fragments: number; objectDamage: number };
+  blast: { radius: number; damage: number; fragments: number; objectDamage: number; ignite?: { radius: number; turns: number } };
+  /** Запальна суміш: підпал області. */
+  ignite?: { radius: number; turns: number };
 }
+
+export type DronePayload = 'frag' | 'heat' | 'incendiary';
 
 export interface MagazineDefinition extends ItemDefinitionBase {
   kind: 'magazine';
@@ -140,6 +144,10 @@ export interface MagazineDefinition extends ItemDefinitionBase {
   capacity: number;
   /** Для пострілів гранатомета — тип бойової частини. */
   warhead?: Warhead;
+  /** Змінні бойові частини FPV. */
+  warheads?: Partial<Record<DronePayload, Warhead>>;
+  /** Змінні скиди (осколковий / запальний). */
+  drops_?: Partial<Record<DronePayload, Warhead['blast']>>;
 }
 
 export interface GrenadeDefinition extends ItemDefinitionBase {
@@ -290,7 +298,8 @@ export type InjuryType =
   | 'shrapnelHeavy'
   | 'laceration'
   | 'amputation'
-  | 'pneumothorax';
+  | 'pneumothorax'
+  | 'burn';
 
 export type Bleeding = 'none' | 'light' | 'massive';
 
@@ -361,6 +370,8 @@ export interface Unit {
   lightOn?: boolean;
   /** Напрямок погляду 0..7 (див. units/facing.ts). */
   facing?: number;
+  /** ПНБ відкинуто (не працює, але й не засвічується). */
+  nvgUp?: boolean;
   /** Боєць у техніці (id машини); pos при цьому null. */
   inVehicle?: string;
   /** Оператор керує дроном (id дрона). */
@@ -397,6 +408,8 @@ export interface MapCell {
   vehicleHeight?: number;
   /** Димова завіса: скільки ходів ще тримається. */
   smoke?: number;
+  /** Пожежа: скільки ходів ще горить. */
+  fire?: number;
   /** Сходи з цього поверху на наступний. */
   stairsUp?: boolean;
   buildingId?: number;
@@ -583,12 +596,18 @@ export interface DroneDefinition {
   /** Точність ураження (0..1): менше — більше відхилення. */
   accuracy?: number;
   warhead?: Warhead;
+  /** Змінні бойові частини FPV. */
+  warheads?: Partial<Record<DronePayload, Warhead>>;
+  /** Змінні скиди (осколковий / запальний). */
+  drops_?: Partial<Record<DronePayload, Warhead['blast']>>;
   drops?: number;
   dropBlast?: Warhead['blast'];
 }
 
 export interface DroneState {
   id: string;
+  /** Обрана бойова частина / тип скиду. */
+  payload?: DronePayload;
   defId: string;
   side: SideId;
   operatorId: string;

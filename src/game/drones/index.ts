@@ -7,7 +7,7 @@ import { applyHit } from '@/game/injuries/injuries';
 import { float, newId, onField, type Ctx, type MissionState } from '@/game/simulation/state';
 import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { targetPoints } from '@/game/visibility/visibility';
-import type { DroneItemDefinition, DroneState, SideId, Unit } from '@/game/types';
+import type { DroneItemDefinition, DronePayload, DroneState, SideId, Unit } from '@/game/types';
 
 /**
  * Дрони — умовні ігрові системи: окрема одиниця з власними AP і батареєю,
@@ -65,7 +65,7 @@ export function droneItems(u: Unit): { index: number; defId: string; name: strin
     .map(({ e, index }) => ({ index, defId: e.item.defId, name: itemDef(e.item.defId).name }));
 }
 
-export function launchDrone(ctx: Ctx, u: Unit, backpackIndex: number): DroneState | string {
+export function launchDrone(ctx: Ctx, u: Unit, backpackIndex: number, payload?: DronePayload): DroneState | string {
   const s = ctx.s;
   const e = u.inventory.backpackItems[backpackIndex];
   if (!e || itemDef(e.item.defId).kind !== 'drone') return 'Немає дрона';
@@ -85,6 +85,7 @@ export function launchDrone(ctx: Ctx, u: Unit, backpackIndex: number): DroneStat
     battery: def.battery,
     drops: def.drops ?? 0,
     destroyed: false,
+    payload: payload && (def.warheads?.[payload] || def.drops_?.[payload]) ? payload : undefined,
   };
   (s.drones ??= []).push(d);
   u.piloting = d.id;
@@ -151,12 +152,12 @@ export function fpvAttack(ctx: Ctx, d: DroneState, target: Cell): string | null 
   const land = { x: hit.x, y: hit.y, z };
   ctx.ev.push({ t: 'drone', droneId: d.id, attack: land });
   const op = s.units.find((u) => u.id === d.operatorId);
-  const wh = def.warhead;
+  const wh = (d.payload && def.warheads?.[d.payload]) || def.warhead!;
   const v = vehicleAt(s, land);
   if (v && z === 0) damageVehicle(ctx, v, wh.damage, wh.penetration, wh.type === 'heat', op);
   const victim = s.units.find((u) => onField(u) && u.status !== 'dead' && u.pos && u.pos.x === land.x && u.pos.y === land.y && u.pos.z === z);
-  if (victim) applyHit(ctx, victim, wh.damage, wh.penetration, 'bullet', { attacker: op && victim.side !== op.side ? op : undefined, part: 'torso' });
-  explode(ctx, land, cellCenter(land, groundHeight(s.map, land) + 0.3), wh.blast, op ?? null);
+  if (victim) applyHit(ctx, victim, wh.damage, wh.penetration, wh.type === 'incendiary' ? 'burn' : 'bullet', { attacker: op && victim.side !== op.side ? op : undefined, part: 'torso' });
+  explode(ctx, land, cellCenter(land, groundHeight(s.map, land) + 0.3), { ...wh.blast, ignite: wh.ignite ?? wh.blast.ignite }, op ?? null);
   destroyDrone(ctx, d, false);
   return null;
 }
@@ -176,7 +177,7 @@ export function droneDrop(ctx: Ctx, d: DroneState): string | null {
   const at = cellCenter(land, groundHeight(s.map, land) + 0.15);
   ctx.ev.push({ t: 'grenade', unitId: d.operatorId, from: dronePoint(s, d), to: at });
   const op = s.units.find((u) => u.id === d.operatorId);
-  explode(ctx, land, at, def.dropBlast, op ?? null);
+  explode(ctx, land, at, (d.payload && def.drops_?.[d.payload]) || def.dropBlast, op ?? null);
   return null;
 }
 

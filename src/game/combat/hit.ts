@@ -1,7 +1,8 @@
 import { dist2d, type Cell } from '@/core/grid';
 import { content, itemDef, objectDef } from '@/content';
 import { edgeBetween, groundHeight, objAt } from '@/game/maps/map';
-import { helmetMount, primaryDef } from '@/game/inventory/inventory';
+import { activeNvg, primaryDef } from '@/game/inventory/inventory';
+import { litByFire } from './burn';
 import { modEffects } from '@/game/equipment/mods';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import { trace } from '@/game/visibility/los';
@@ -120,8 +121,11 @@ export function estimateHit(
   if (shooter.injuries.some((i) => i.part === 'leftArm' || i.part === 'rightArm')) add('Поранення рук', -R.armWoundPenalty);
   if (shooter.injuries.some((i) => i.part === 'head')) add('Поранення голови', -R.headWoundPenalty);
   if (s.scenario.timeOfDay === 'night') {
-    const nvg = helmetMount(shooter, 'nvg');
-    if (nvg) add('Ніч (ПНБ)', -(nvg.nightHitPenalty ?? R.nightPenalty));
+    const nvg = activeNvg(shooter);
+    const lit = litByFire(s, to);
+    if (lit && nvg) add('Засвітка ПНБ (вогонь)', -content().rules.fire_.glareHitPenalty);
+    else if (lit) add('Ціль освітлена вогнем', 0);
+    else if (nvg) add('Ніч (ПНБ)', -(nvg.nightHitPenalty ?? R.nightPenalty));
     else if (shooter.lightOn && distance <= R.flashlightRange) add('Ніч (ліхтар)', -R.flashlightHitPenalty);
     else if (target.lightOn) add('Ніч (ціль із ліхтарем)', -R.flashlightHitPenalty);
     else add('Ніч', -R.nightPenalty);

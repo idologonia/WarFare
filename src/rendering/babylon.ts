@@ -5,6 +5,7 @@ export { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
 export { Camera } from '@babylonjs/core/Cameras/camera';
 export { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 export { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+export { PointLight } from '@babylonjs/core/Lights/pointLight';
 export { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 export { Mesh } from '@babylonjs/core/Meshes/mesh';
 export { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';

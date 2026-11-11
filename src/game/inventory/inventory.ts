@@ -237,3 +237,6 @@ export function helmetMount(u: Unit, mount: 'light' | 'nvg'): HelmetMountDefinit
   }
   return null;
 }
+
+/** ПНБ, що зараз працює (є на касці й не відкинутий). */
+export const activeNvg = (u: Unit) => (u.nvgUp ? null : helmetMount(u, 'nvg'));

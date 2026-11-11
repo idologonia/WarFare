@@ -1,3 +1,4 @@
+import { ignite } from './burn';
 import { DIRS4, dist2d, sameCell, type Cell } from '@/core/grid';
 import { content, itemDef, objectDef } from '@/content';
 import { cellAt, edgeBlocksMove, getEdge, groundHeight, isStandable, setEdge } from '@/game/maps/map';
@@ -301,6 +302,8 @@ export interface Blast {
   fragments: number;
   /** Шкода оточенню в епіцентрі (до множника матеріалу). */
   objectDamage: number;
+  /** Запальна суміш: підпал. */
+  ignite?: { radius: number; turns: number };
 }
 
 /**
@@ -310,6 +313,7 @@ export interface Blast {
 export function explode(ctx: Ctx, land: Cell, at: Point, b: Blast, attacker: Unit | null): void {
   const s = ctx.s;
   ctx.ev.push({ t: 'explosion', at, radius: b.radius });
+  if (b.ignite) ignite(ctx, land, b.ignite.radius, b.ignite.turns, attacker);
   for (const v of s.units) {
     if (!onField(v) || v.pos!.z !== land.z) continue;
     const dd = dist2d(v.pos!, land);

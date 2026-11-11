@@ -15,6 +15,7 @@ import {
   DirectionalLight,
   Engine,
   HemisphericLight,
+  PointLight,
   Matrix,
   Scene,
   ShadowGenerator,
@@ -63,6 +64,8 @@ export class Renderer {
   private hemi!: HemisphericLight;
   private beams = new Map<string, Mesh>();
   private beamMat!: StandardMaterial;
+  private fireMat!: StandardMaterial;
+  private fireLights: PointLight[] = [];
   private units = new Map<string, UnitModel>();
   private unitMats: Record<string, StandardMaterial> = {};
   private silhouetteMat!: StandardMaterial;
@@ -125,6 +128,7 @@ export class Renderer {
     this.fxMat = makeMaterial(scene, 'fx', 1, true);
     this.beamMat = makeMaterial(scene, 'beam', 0.16, true);
     this.beamMat.emissiveColor = new Color3(1, 0.95, 0.7);
+    this.fireMat = makeMaterial(scene, 'fire', 0.88, true);
 
     this.selRing = CreateTorus('sel', { diameter: 0.8, thickness: 0.05, tessellation: 24 }, scene);
     const ringMat = makeMaterial(scene, 'ring', 1, true);
@@ -138,6 +142,12 @@ export class Renderer {
       this.spinRotors();
       this.updateOrtho();
       if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
+      const fm = this.overlays.get('fire');
+      if (fm) {
+        const t = performance.now() / 120;
+        fm.scaling.y = 1 + Math.sin(t) * 0.08 + Math.sin(t * 2.3) * 0.05;
+        for (const l of this.fireLights) l.intensity = l.metadata.base * (0.85 + Math.random() * 0.3);
+      }
     });
     this.engine.runRenderLoop(() => {
       scene.render();
@@ -348,6 +358,53 @@ export class Renderer {
     beam.setEnabled(true);
   }
 
+  /** Полум'я в клітинках, що горять; уночі — кілька точкових джерел світла. */
+  refreshFire(): void {
+    this.overlays.get('fire')?.dispose();
+    this.overlays.delete('fire');
+    for (const l of this.fireLights) l.dispose();
+    this.fireLights = [];
+    const m = this.state.map;
+    const g = new GeoBuilder();
+    const cells: { x: number; y: number; z: number }[] = [];
+    m.cells.forEach((lvl, z) =>
+      lvl.forEach((row, y) =>
+        row.forEach((c, x) => {
+          if (!c.fire || z > this.viewLevel) return;
+          cells.push({ x, y, z });
+          const p = cellWorld({ x, y, z }, groundHeight(m, { x, y, z }));
+          const k = Math.min(1, c.fire / 3);
+          for (let i = 0; i < 5; i++) {
+            const a = hash2(x, y, i) - 0.5;
+            const b = hash2(y, x, i + 7) - 0.5;
+            const hgt = (0.3 + hash2(x + i, y, 3) * 0.5) * (0.6 + 0.4 * k);
+            g.box(p.x + a * 0.7, p.y + hgt / 2, p.z + b * 0.7, 0.22, hgt, 0.22, [1, 0.45 + hash2(i, x, y) * 0.2, 0.08], 0.9);
+            g.box(p.x + a * 0.7, p.y + hgt * 0.35, p.z + b * 0.7, 0.12, hgt * 0.6, 0.12, [1, 0.9, 0.35], 0.95);
+          }
+          g.box(p.x, p.y + 0.015, p.z, 0.95, 0.02, 0.95, [0.14, 0.06, 0.02], 0.45); // згарище
+        }),
+      ),
+    );
+    if (g.empty) return;
+    const mesh = g.build('ov_fire', this.scene, this.fireMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('fire', mesh);
+    if (this.state.scenario.timeOfDay === 'night') {
+      // Не більше 3 джерел: центри скупчень вогню.
+      const picks: { x: number; y: number; z: number }[] = [];
+      for (const c of cells) if (picks.length < 3 && picks.every((q) => Math.hypot(q.x - c.x, q.y - c.y) > 4)) picks.push(c);
+      for (const c of picks) {
+        const l = new PointLight('fireLight', cellWorld(c, groundHeight(m, c) + 0.8), this.scene);
+        l.diffuse = new Color3(1, 0.55, 0.2);
+        l.range = 7;
+        l.metadata = { base: 1.4 };
+        l.intensity = 1.4;
+        this.fireLights.push(l);
+      }
+    }
+  }
+
   /** Димові завіси: напівпрозорі клуби в клітинках із димом. */
   refreshSmoke(): void {
     this.overlays.get('smoke')?.dispose();
@@ -427,6 +484,7 @@ export class Renderer {
     }
     this.map.applyVisibility(this.viewLevel, inside);
     this.refreshSmoke();
+    this.refreshFire();
     for (const u of s.units) {
       const m = this.units.get(u.id);
       if (m && u.pos && u.pos.z > this.viewLevel) m.root.setEnabled(false);
@@ -785,6 +843,10 @@ export class Renderer {
           break;
         case 'smoke':
           this.refreshSmoke();
+          break;
+        case 'fire':
+          this.refreshFire();
+          this.refreshFog(true);
           break;
         case 'vehicle':
           if (e.path) sfx('engine');

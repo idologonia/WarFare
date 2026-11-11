@@ -21,6 +21,45 @@
      "fragments": 4,
      "objectDamage": 0
     }
+   },
+   "warheads": {
+    "frag": {
+     "type": "frag",
+     "damage": 45,
+     "penetration": 3,
+     "blast": {
+      "radius": 1.8,
+      "damage": 42,
+      "fragments": 4,
+      "objectDamage": 0
+     }
+    },
+    "heat": {
+     "type": "heat",
+     "damage": 60,
+     "penetration": 7,
+     "blast": {
+      "radius": 1.4,
+      "damage": 34,
+      "fragments": 3,
+      "objectDamage": 300
+     }
+    },
+    "incendiary": {
+     "type": "incendiary",
+     "damage": 20,
+     "penetration": 1,
+     "blast": {
+      "radius": 1.2,
+      "damage": 18,
+      "fragments": 1,
+      "objectDamage": 0
+     },
+     "ignite": {
+      "radius": 1.6,
+      "turns": 3
+     }
+    }
    }
   },
   {
@@ -43,6 +82,45 @@
      "fragments": 3,
      "objectDamage": 350
     }
+   },
+   "warheads": {
+    "heat": {
+     "type": "heat",
+     "damage": 70,
+     "penetration": 8,
+     "blast": {
+      "radius": 1.6,
+      "damage": 40,
+      "fragments": 3,
+      "objectDamage": 350
+     }
+    },
+    "frag": {
+     "type": "frag",
+     "damage": 50,
+     "penetration": 3,
+     "blast": {
+      "radius": 2.2,
+      "damage": 48,
+      "fragments": 5,
+      "objectDamage": 0
+     }
+    },
+    "incendiary": {
+     "type": "incendiary",
+     "damage": 24,
+     "penetration": 1,
+     "blast": {
+      "radius": 1.4,
+      "damage": 20,
+      "fragments": 1,
+      "objectDamage": 0
+     },
+     "ignite": {
+      "radius": 2.1,
+      "turns": 3
+     }
+    }
    }
   },
   {
@@ -61,6 +139,24 @@
     "damage": 52,
     "fragments": 7,
     "objectDamage": 0
+   },
+   "drops_": {
+    "frag": {
+     "radius": 2.4,
+     "damage": 52,
+     "fragments": 7,
+     "objectDamage": 0
+    },
+    "incendiary": {
+     "radius": 1.0,
+     "damage": 12,
+     "fragments": 1,
+     "objectDamage": 0,
+     "ignite": {
+      "radius": 1.8,
+      "turns": 3
+     }
+    }
    }
   },
   {
