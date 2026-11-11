@@ -557,6 +557,8 @@ export interface VehicleState {
   weapon: WeaponInstance | null;
   ammoStock: number;
   destroyed: boolean;
+  /** Однотонне фарбування корпусу (замість камуфляжу сторони). */
+  paint?: string;
 }
 
 // ---------- Дрони ----------
@@ -593,4 +595,6 @@ export interface DroneState {
   battery: number;
   drops: number;
   destroyed: boolean;
+  /** Висота польоту: рівень поверху 0..levels (levels — над дахами). */
+  alt?: number;
 }

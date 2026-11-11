@@ -49,6 +49,17 @@ export function damageObject(ctx: Ctx, cell: Cell, amount: number, explosive = f
   if (changed) ctx.ev.push({ t: 'object', cell, defId: c.object?.defId ?? null });
 }
 
+/** Куля крізь вікно — скло розбивається. */
+export function breakWindows(ctx: Ctx, list: { cell: Cell; side: EdgeSide }[]): void {
+  for (const w of list) {
+    const e = getEdge(ctx.s.map, w.cell, w.side);
+    if (!e || e.defId !== 'brick_window') continue;
+    setEdge(ctx.s.map, w.cell, w.side, { defId: 'brick_window_broken', hp: Math.min(e.hp, objectDef('brick_window_broken').hp) });
+    ctx.ev.push({ t: 'object', cell: w.cell, defId: 'brick_window_broken' });
+    ctx.ev.push({ t: 'sound', kind: 'glass' });
+  }
+}
+
 /** Пошкодження тонкого об'єкта на межі клітинок. */
 export function damageEdge(ctx: Ctx, cell: Cell, side: EdgeSide, amount: number, explosive = false): void {
   const e = getEdge(ctx.s.map, cell, side);
@@ -103,6 +114,7 @@ export function blindOrigin(ctx: Pick<Ctx, 's'>, shooter: Unit, target: Cell): C
 function flyBullet(ctx: Ctx, shooter: Unit, from: Point, to: Point, exclude: Set<string>, damage: number, pen: number): { end: Point; hitUnit: string | null } {
   const s = ctx.s;
   const tr = trace(s.map, from, to, { skipStart: shooter.pos!, extend: 6 });
+  breakWindows(ctx, tr.windows);
   // Бійці, через клітинки яких проходить куля, до точки зупинки.
   for (const c of tr.cells) {
     const victims = s.units.filter((u) => onField(u) && u.status !== 'dead' && !exclude.has(u.id) && u.id !== shooter.id && u.pos && sameCell(u.pos, c));
@@ -172,6 +184,7 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
     if (tUnit && onField(tUnit) && est && ctx.rng.chance(chance)) {
       // Влучання: якщо лінія вогню перекрита (наосліп), куля б'є в перешкоду.
       const tr = trace(s.map, from, aimPoint, { skipStart: origin, skipEnd: tUnit.pos! });
+      breakWindows(ctx, tr.windows);
       if (tr.blocked && est.lineOfFire === false) {
         if (tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, w.damage);
         if (tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, w.damage);

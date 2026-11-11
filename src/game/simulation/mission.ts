@@ -5,7 +5,7 @@ import { content, hasSkill, itemDef, vehicleDef } from '@/content';
 import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
 import { adjacentToVehicle, canPlace, crewProxy, embark, exitCells, leaveSeat, moveVehicle, spawnVehicle, vehicleById, vehiclePath, vehicleReachable } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
-import { destroyDrone, droneById, droneDrop, droneNoticedBy, dronePoint, flyDrone, fpvAttack, landDrone, launchDrone, shootDroneChance, tickDrones } from '@/game/drones';
+import { changeAltitude, destroyDrone, droneById, droneDrop, droneNoticedBy, dronePoint, flyDrone, fpvAttack, landDrone, launchDrone, shootDroneChance, tickDrones } from '@/game/drones';
 import { eyePoint } from '@/game/visibility/visibility';
 import { applyMove, validateMove } from '@/game/inventory/transfer';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
@@ -201,6 +201,7 @@ export class Mission {
       switch (cmd.type) {
         case 'deploy': {
           const u = unitById(s, cmd.unitId);
+          if (u.inVehicle) return 'Цей боєць — екіпаж техніки';
           if (u.side !== 'blue' && u.side !== 'red') return 'Невідома сторона';
           if (!cellsInZone(s.map, s.scenario.sides[u.side].deployZone).some((c) => sameCell(c, cmd.cell)))
             return 'Клітинка поза зоною розгортання';
@@ -236,7 +237,7 @@ export class Mission {
 
     const R0 = content().rules;
     if (cmd.type === 'vehicleMove' || cmd.type === 'vehicleFire' || cmd.type === 'vehicleReload') return this.vehicleCommand(ctx, cmd);
-    if (cmd.type === 'droneMove' || cmd.type === 'droneAttack' || cmd.type === 'droneDrop' || cmd.type === 'droneLand') {
+    if (cmd.type === 'droneMove' || cmd.type === 'droneAttack' || cmd.type === 'droneDrop' || cmd.type === 'droneLand' || cmd.type === 'droneAltitude') {
       const d = droneById(s, cmd.droneId);
       if (!d || d.destroyed) return 'Дрона немає';
       if (d.side !== s.turn.side) return 'Зараз хід іншої сторони';
@@ -245,6 +246,7 @@ export class Mission {
       if (cmd.type === 'droneMove') return flyDrone(ctx, d, cmd.x, cmd.y);
       if (cmd.type === 'droneAttack') return fpvAttack(ctx, d, cmd.cell);
       if (cmd.type === 'droneDrop') return droneDrop(ctx, d);
+      if (cmd.type === 'droneAltitude') return changeAltitude(ctx, d, cmd.delta);
       return landDrone(ctx, d);
     }
     if (cmd.type === 'disembark') {

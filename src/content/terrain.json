@@ -302,6 +302,21 @@
    "destroyedTo": null,
    "color": "#9a5038",
    "thin": true
+  },
+  {
+   "id": "brick_window_broken",
+   "name": "Вибите вікно",
+   "material": "brick",
+   "cover": 1,
+   "blocksMove": true,
+   "height": 1.0,
+   "window": true,
+   "sill": 0.42,
+   "hp": 80,
+   "wall": true,
+   "destroyedTo": "brick_rubble",
+   "color": "#a4553a",
+   "thin": true
   }
  ]
 }

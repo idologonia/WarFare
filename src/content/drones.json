@@ -57,9 +57,9 @@
    "drops": 2,
    "accuracy": 0.5,
    "dropBlast": {
-    "radius": 1.4,
-    "damage": 34,
-    "fragments": 3,
+    "radius": 2.4,
+    "damage": 52,
+    "fragments": 7,
     "objectDamage": 0
    }
   },

@@ -26,8 +26,35 @@ export function droneById(s: MissionState, id: string): DroneState | undefined {
 /** Висота польоту дрона (одиниці поверху) — над найвищим поверхом карти. */
 export const droneAltitude = (s: MissionState) => s.map.levels - 1 + 0.9 + RD().altitude;
 
+export const droneAlt = (s: MissionState, d: DroneState) => d.alt ?? s.map.levels;
+
 export function dronePoint(s: MissionState, d: DroneState): Point {
-  return { x: d.x + 0.5, y: d.y + 0.5, h: droneAltitude(s) };
+  const a = droneAlt(s, d);
+  return { x: d.x + 0.5, y: d.y + 0.5, h: a >= s.map.levels ? droneAltitude(s) : a + 0.85 };
+}
+
+/** Чи можна дрону бути в клітинці на висоті alt: над ним відкрите небо, без високих об'єктів. */
+export function airOk(s: MissionState, x: number, y: number, alt: number): boolean {
+  if (x < 0 || y < 0 || x >= s.map.width || y >= s.map.height) return false;
+  if (alt >= s.map.levels) return true;
+  for (let z = alt + 1; z < s.map.levels; z++) if (s.map.cells[z][y][x].floor) return false;
+  const c = s.map.cells[alt][y][x];
+  const o = c.object ? content().objects.get(c.object.defId) : null;
+  if (o && o.blocksMove && o.height >= 0.8) return false;
+  return !c.vehicle;
+}
+
+export function changeAltitude(ctx: Ctx, d: DroneState, delta: number): string | null {
+  const s = ctx.s;
+  const a = droneAlt(s, d) + delta;
+  if (a < 0 || a > s.map.levels) return 'Далі не можна';
+  if (!airOk(s, d.x, d.y, a)) return 'Тут не опуститися — дах або перешкода';
+  const cost = toTenths(RD().altitudeCost) * Math.abs(delta);
+  if (d.ap < cost) return 'Недостатньо AP дрона';
+  d.ap -= cost;
+  d.alt = a;
+  ctx.ev.push({ t: 'drone', droneId: d.id });
+  return null;
 }
 
 /** Дрони в рюкзаку оператора: індекс у рюкзаку й опис. */
@@ -78,15 +105,17 @@ export function flyDrone(ctx: Ctx, d: DroneState, x: number, y: number): string 
   if (x < 0 || y < 0 || x >= s.map.width || y >= s.map.height) return 'Поза картою';
   const cost = moveCost(d, x, y);
   if (cost > d.ap) return 'Недостатньо AP дрона';
-  d.ap -= cost;
   const path: { x: number; y: number }[] = [{ x: d.x, y: d.y }];
   let cx = d.x;
   let cy = d.y;
+  const alt = droneAlt(s, d);
   while (cx !== x || cy !== y) {
     cx += Math.sign(x - cx);
     cy += Math.sign(y - cy);
+    if (!airOk(s, cx, cy, alt)) return 'На цій висоті шлях перекрито — підніміть дрон';
     path.push({ x: cx, y: cy });
   }
+  d.ap -= cost;
   d.x = x;
   d.y = y;
   ctx.ev.push({ t: 'drone', droneId: d.id, path });
@@ -230,5 +259,6 @@ export function droneNoticedBy(s: MissionState, side: SideId, d: DroneState): bo
 export function shootDroneChance(shooter: Unit, d: DroneState): number {
   const R = RD();
   const dist = dist2d(shooter.pos!, { x: d.x, y: d.y, z: 0 });
-  return Math.max(3, Math.min(60, Math.round(R.shootBase + shooter.stats.training * R.shootTrainingFactor - dist * R.shootRangePenalty)));
+  const low = d.alt !== undefined && d.alt < 2 ? R.lowFlyBonus : 0;
+  return Math.max(5, Math.min(75, Math.round(R.shootBase + low + shooter.stats.training * R.shootTrainingFactor - dist * R.shootRangePenalty)));
 }

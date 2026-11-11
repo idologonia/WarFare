@@ -287,6 +287,8 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
     else g.box(ex + b, b0 + yy, ez - a, sb, sy, sa, c, alpha);
   };
   const T = 0.16;
+  // Пн/пд стіни — на всю довжину з кутами, зх/сх — між ними (без накладання граней у кутах).
+  const LEN = horizontal ? 1 + T : 1 - T;
   const n = hash2(x * 3 + (horizontal ? 1 : 2), y, _z);
   switch (o.id) {
     case 'fence':
@@ -303,13 +305,18 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
       break;
     }
     case 'parapet':
-      put(0, h / 2, 0, 1 + T, h, 0.22, col);
+      put(0, h / 2, 0, LEN, h, 0.22, col);
       break;
     case 'door':
-      put(0, L * 0.94, 0, 1 + T, L * 0.12, T, hex('#a4553a'));
-      put(-0.46, L * 0.45, 0, 0.08 + T / 2, L * 0.9, T, col);
-      put(0.46, L * 0.45, 0, 0.08 + T / 2, L * 0.9, T, col);
-      put(-0.2, L * 0.44, 0.3, 0.5, L * 0.86, 0.04, shade(col, 0.85)); // прочинене полотно
+      // Рама: перемичка й два косяки; полотно — у прорізі рами, трохи відчинене.
+      put(0, L * 0.95, 0, LEN, L * 0.1, T, hex('#a4553a'));
+      put(-(LEN / 2) + 0.06, L * 0.45, 0, 0.12, L * 0.9, T, hex('#a4553a'));
+      put(LEN / 2 - 0.06, L * 0.45, 0, 0.12, L * 0.9, T, hex('#a4553a'));
+      put(-0.36, L * 0.45, 0, 0.06, L * 0.9, T + 0.02, shade(col, 0.7)); // лутка
+      put(0.36, L * 0.45, 0, 0.06, L * 0.9, T + 0.02, shade(col, 0.7));
+      put(0, L * 0.88, 0, 0.78, 0.05, T + 0.02, shade(col, 0.7));
+      put(-0.05, L * 0.43, 0.05, 0.62, L * 0.84, 0.05, col); // полотно
+      put(0.2, L * 0.43, 0.09, 0.05, 0.05, 0.04, [0.75, 0.68, 0.4]); // ручка
       break;
     case 'brick_rubble':
     case 'concrete_rubble':
@@ -321,16 +328,24 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
     default:
       if (o.window) {
         const sill = (o.sill ?? 0.4) * L;
-        put(0, sill / 2, 0, 1 + T, sill, T, col);
-        put(0, L * 0.97, 0, 1 + T, L * 0.06, T, col);
-        put(-0.47, L * 0.6, 0, 0.06 + T / 2, L * 0.8, T, col);
-        put(0.47, L * 0.6, 0, 0.06 + T / 2, L * 0.8, T, col);
-        put(0, sill + (L * 0.94 - sill) / 2, 0, 0.06, L * 0.94 - sill, 0.06, shade(col, 0.7));
-        put(0, sill + (L * 0.94 - sill) / 2, 0, 0.9, L * 0.94 - sill, 0.04, [0.55, 0.75, 0.9], 0.35);
+        const broken = o.id.endsWith('_broken');
+        put(0, sill / 2, 0, LEN, sill, T, col);
+        put(0, L * 0.97, 0, LEN, L * 0.06, T, col);
+        put(-(LEN / 2) + 0.04, L * 0.6, 0, 0.08, L * 0.8, T, col);
+        put(LEN / 2 - 0.04, L * 0.6, 0, 0.08, L * 0.8, T, col);
+        put(0, sill + (L * 0.94 - sill) / 2, 0, 0.05, L * 0.94 - sill, 0.06, shade(col, 0.6));
+        put(0, sill + 0.02, 0, 0.86, 0.04, T + 0.04, [0.85, 0.85, 0.82]); // підвіконня
+        if (!broken) put(0, sill + (L * 0.94 - sill) / 2, 0, 0.86, L * 0.94 - sill, 0.03, [0.55, 0.75, 0.9], 0.35);
+        else {
+          // Розбите скло: уламки в рамі та на підвіконні.
+          put(-0.3, L * 0.85, 0, 0.18, 0.12, 0.02, [0.55, 0.75, 0.9], 0.5);
+          put(0.32, sill + 0.12, 0, 0.14, 0.18, 0.02, [0.55, 0.75, 0.9], 0.5);
+          put(0.1, sill + 0.05, 0.08, 0.1, 0.02, 0.06, [0.6, 0.8, 0.9], 0.6);
+        }
       } else {
-        put(0, h / 2, 0, 1 + T, h, T, shade(col, 0.95 + n * 0.1));
-        if (o.material === 'brick') for (let r = 1; r < 5; r++) put(0, (h * r) / 5, 0, 1 + T + 0.01, 0.025, T + 0.01, shade(col, 0.75));
-        put(0, h + 0.02, 0, 1 + T + 0.02, 0.04, T + 0.03, shade(col, 1.15));
+        put(0, h / 2, 0, LEN, h, T, shade(col, 0.95 + n * 0.1));
+        if (o.material === 'brick') for (let r = 1; r < 5; r++) put(0, (h * r) / 5, 0, LEN - 0.002, 0.025, T + 0.012, shade(col, 0.75));
+        put(0, h + 0.02, 0, LEN + (horizontal ? 0.02 : -0.002), 0.04, T + (horizontal ? 0.03 : 0.026), shade(col, 1.15));
       }
   }
 }

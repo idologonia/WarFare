@@ -73,6 +73,10 @@ export function canPlace(s: MissionState, defId: string, x: number, y: number, i
     if (activeUnitAt(s, c)) return false;
     if (cell.buildingId !== undefined && content().terrain.get(cell.terrain)?.indoor) return false;
   }
+  // Лише рівна ділянка: без «зависання» на краю пагорба; колісна техніка на пагорби не заїжджає.
+  const elev = cells.map((c) => cellAt(s.map, c)!.elevation);
+  if (elev.some((e) => e !== elev[0])) return false;
+  if (elev[0] > 0 && vehicleDef(defId).kind === 'wheeled') return false;
   // Тонкі стіни всередині площі техніки.
   for (const a of cells)
     for (const b of cells) {
@@ -259,6 +263,9 @@ export function spawnVehicle(s: MissionState, side: SideId, defId: string, x: nu
     ammoStock: d.ammoStock,
     destroyed: false,
   };
+  // Фарбування: М113 — койот, L200 — олива, чорний або сірий (за ідентифікатором).
+  if (defId === 'm113') v.paint = '#9b8357';
+  if (defId === 'l200') v.paint = ['#55603f', '#1f2022', '#7b7e82'][[...v.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 3];
   (s.vehicles ??= []).push(v);
   setOccupancy(s, v, true);
   return v;

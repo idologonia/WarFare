@@ -23,6 +23,7 @@ export type Command =
   | { type: 'droneAttack'; droneId: string; cell: Cell }
   | { type: 'droneDrop'; droneId: string }
   | { type: 'droneLand'; droneId: string }
+  | { type: 'droneAltitude'; droneId: string; delta: number }
   | { type: 'moveItem'; unitId: string; from: ItemRef; to: ItemDest }
   | { type: 'embark'; unitId: string; vehicleId: string; seat?: 'driver' | 'gunner' | 'passenger' }
   | { type: 'disembark'; unitId: string; cell: Cell }

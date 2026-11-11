@@ -1,6 +1,6 @@
 import type { VehicleState } from '@/game/types';
 import { Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
-import { GeoBuilder, shade, type RGB } from './geo';
+import { GeoBuilder, hex, shade, type RGB } from './geo';
 import { LH } from './mapView';
 
 export interface VehicleModel {
@@ -22,7 +22,10 @@ export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: Vehicl
   const root = new TransformNode(`veh_${v.id}`, scene);
   const g = new GeoBuilder();
   const L = LH();
-  const camo = (on: boolean) => (g.camo = on ? 0.35 : null);
+  // Однотонне фарбування замість камуфляжу (М113 — койот, L200 — випадковий колір).
+  const paint: RGB | null = v.paint ? hex(v.paint) : null;
+  const camo = (on: boolean) => (g.camo = on && !paint ? 0.35 : null);
+  const HULL: RGB = paint ?? WHITE;
   switch (v.defId) {
     case 'mtlb': {
       const h = 0.75 * L;
@@ -31,9 +34,9 @@ export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: Vehicl
         for (let i = 0; i < 6; i++) g.box(x, 0.18, -0.75 + i * 0.3, 0.34, 0.22, 0.2, shade(TRACK, 1.4)); // катки
       }
       camo(true);
-      g.box(0, h * 0.62, 0, 1.3, h * 0.6, 1.85, WHITE); // корпус
-      g.box(0, h * 0.55, 0.98, 1.3, h * 0.35, 0.12, WHITE); // лобовий лист
-      g.box(-0.3, h * 0.98, 0.55, 0.38, 0.16, 0.38, WHITE); // башточка
+      g.box(0, h * 0.62, 0, 1.3, h * 0.6, 1.85, HULL); // корпус
+      g.box(0, h * 0.55, 0.98, 1.3, h * 0.35, 0.12, HULL); // лобовий лист
+      g.box(-0.3, h * 0.98, 0.55, 0.38, 0.16, 0.38, HULL); // башточка
       camo(false);
       g.box(-0.3, h * 1.0, 0.95, 0.05, 0.05, 0.55, DARK); // ПКТ
       g.box(0.35, h * 0.95, 0.6, 0.3, 0.06, 0.3, shade(DARK, 1.5)); // люк водія
@@ -47,8 +50,8 @@ export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: Vehicl
         for (let i = 0; i < 5; i++) g.box(x, 0.2, -0.72 + i * 0.36, 0.32, 0.24, 0.24, shade(TRACK, 1.4));
       }
       camo(true);
-      g.box(0, h * 0.55, -0.05, 1.42, h * 0.62, 1.8, WHITE); // коробчастий корпус
-      g.box(0, h * 0.45, 0.9, 1.42, h * 0.42, 0.25, WHITE); // похилий лоб (сходинка)
+      g.box(0, h * 0.55, -0.05, 1.42, h * 0.62, 1.8, HULL); // коробчастий корпус
+      g.box(0, h * 0.45, 0.9, 1.42, h * 0.42, 0.25, HULL); // похилий лоб (сходинка)
       camo(false);
       g.box(0.3, h * 0.92, 0.15, 0.4, 0.12, 0.4, shade(DARK, 1.5)); // командирська башточка
       g.box(0.3, h * 1.03, 0.4, 0.42, 0.18, 0.05, shade(DARK, 1.7)); // щиток
@@ -60,9 +63,9 @@ export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: Vehicl
       // L200: пікап із кулеметом у кузові.
       for (const [x, z] of [[-0.7, 0.6], [0.7, 0.6], [-0.7, -0.6], [0.7, -0.6]]) g.box(x, 0.2, z, 0.2, 0.4, 0.42, DARK);
       camo(true);
-      g.box(0, 0.42, 0, 1.25, 0.28, 1.9, WHITE); // рама/борти
-      g.box(0, 0.75, 0.35, 1.2, 0.5, 0.75, WHITE); // кабіна
-      g.box(0, 0.58, 0.85, 1.2, 0.25, 0.25, WHITE); // капот
+      g.box(0, 0.42, 0, 1.25, 0.28, 1.9, HULL); // рама/борти
+      g.box(0, 0.75, 0.35, 1.2, 0.5, 0.75, HULL); // кабіна
+      g.box(0, 0.58, 0.85, 1.2, 0.25, 0.25, HULL); // капот
       camo(false);
       g.box(0, 0.82, 0.72, 1.1, 0.26, 0.02, GLASS); // лобове скло
       for (const x of [-0.6, 0.6]) g.box(x, 0.66, -0.5, 0.05, 0.25, 0.8, shade(DARK, 2)); // борти кузова

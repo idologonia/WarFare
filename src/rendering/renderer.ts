@@ -29,6 +29,7 @@ import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
 import { buildDroneModel, type DroneModel } from './droneView';
+import { sfx } from './sound';
 import { droneAltitude, droneNoticedBy } from '@/game/drones';
 import { vehicleDef } from '@/content';
 import { vehicleSeenBy } from '@/game/visibility/visibility';
@@ -510,6 +511,10 @@ export class Renderer {
   // ---------- Дрони ----------
 
   private droneModels = new Map<string, DroneModel>();
+
+  isDroneShown(id: string): boolean {
+    return !!this.droneModels.get(id)?.root.isEnabled();
+  }
   private droneShadows = new Map<string, Mesh>();
 
   /** Візуальна висота дрона: над найвищою підлогою під ним (щоб лишався в кадрі). */
@@ -522,6 +527,7 @@ export class Renderer {
         break;
       }
     void droneAltitude;
+    if (d.alt !== undefined && d.alt < m.levels) top = d.alt + (d.alt === 0 ? m.cells[0][y]?.[x]?.elevation ?? 0 : 0) - 0.35;
     return world(x + 0.5, y + 0.5, top + 1.25);
   }
 
@@ -721,28 +727,35 @@ export class Renderer {
           if (this.isShown(e.unitId) || this.viewSide === this.unitSide(e.unitId)) await this.animateMove(e.unitId, e.path, e.mode);
           break;
         case 'fired':
+          sfx(e.shots.length > 1 ? 'burst' : 'shot');
           await this.animateFire(e);
           break;
         case 'grenade':
+          sfx('throw');
           await this.animateGrenade(e.from, e.to);
           break;
         case 'rocket':
+          sfx('rocket');
           await this.animateRocket(e.from, e.to);
           break;
         case 'smoke':
           this.refreshSmoke();
           break;
         case 'vehicle':
+          if (e.path) sfx('engine');
           if (e.path && this.vehicleModels.get(e.vehicleId)?.root.isEnabled()) await this.animateVehicle(e.vehicleId, e.path);
           this.syncVehicles();
           break;
         case 'drone':
+          sfx(e.lost ? 'boom' : 'drone');
           await this.animateDrone(e);
           break;
         case 'vehicleHit':
+          sfx('clang');
           await this.animateVehicleHit(e.vehicleId, e.penetrated);
           break;
         case 'explosion':
+          sfx('boom');
           await this.animateExplosion(e.at, e.radius);
           break;
         case 'object':
@@ -761,7 +774,11 @@ export class Renderer {
         case 'float':
           onFloat(e);
           break;
+        case 'sound':
+          sfx(e.kind);
+          break;
         case 'reload':
+          sfx('click');
           await this.animateReload(e.unitId);
           break;
         case 'reaction':

@@ -21,7 +21,7 @@ import { openInventoryDnD } from './inventoryDnD';
 import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
-import { droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
+import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test';
 
@@ -103,7 +103,7 @@ export class Battle {
     window.addEventListener('blur', this.blurHandler);
     const first = this.myUnits().find((u) => u.pos) ?? this.myUnits()[0];
     if (first?.pos) r.focus(first.pos, false);
-    if (m.s.turn.phase === 'deploy') this.sel = this.myUnits().find((u) => !u.pos)?.id ?? null;
+    if (m.s.turn.phase === 'deploy') this.sel = this.myUnits().find((u) => !u.pos && !u.inVehicle)?.id ?? null;
     else this.sel = first?.id ?? null;
     this.refresh();
     if (m.s.turn.phase === 'battle' && this.isAiTurn()) void this.runAi();
@@ -383,6 +383,9 @@ export class Battle {
       e.preventDefault();
       this.keysDown.add(k);
       this.updateKeyMove();
+    } else if ((k === 'pageup' || k === 'pagedown') && this.selectedDrone() && this.isHumanTurn() && !this.busy) {
+      e.preventDefault();
+      void this.exec({ type: 'droneAltitude', droneId: this.selDrone!, delta: k === 'pageup' ? 1 : -1 });
     } else if (k === 'pageup') this.changeLevel(1);
     else if (k === 'pagedown') this.changeLevel(-1);
     else if (k === 'escape') this.cancel();
@@ -443,11 +446,22 @@ export class Battle {
 
   private click(x: number, y: number): void {
     if (this.busy) return;
-    const unitId = this.r.pickUnit(x, y);
+    let unitId = this.r.pickUnit(x, y);
     const cell = this.r.pickCell(x, y);
     if (this.sandbox && this.sandbox.click(unitId, cell)) return;
     const s = this.s;
-    if (s.turn.phase === 'battle' && this.droneClick(this.r.pickDrone(x, y), unitId, cell)) return;
+    // Боєць поверхом нижче (під підлогою вибраної клітинки) не перехоплює клік.
+    const picked = unitId ? s.units.find((u) => u.id === unitId) : undefined;
+    if (picked?.pos && cell && picked.pos.z < cell.z) unitId = null;
+    // Клік по моделі свого бійця — завжди вибір цього бійця (у будь-якому режимі).
+    if (s.turn.phase === 'battle' && unitId) {
+      const own = s.units.find((u) => u.id === unitId && u.side === this.viewer && isActive(u));
+      if (own && own.id !== this.sel && !this.selDrone) {
+        this.selectUnit(own);
+        return;
+      }
+    }
+    if (s.turn.phase === 'battle' && this.droneClick(this.r.pickDrone(x, y) ?? this.droneAtCell(cell), unitId, cell)) return;
     const vehId = this.r.pickVehicle(x, y);
     const clickedVeh = vehId ? vehicleById(s, vehId) : undefined;
     if (s.turn.phase === 'battle' && this.vehicleClick(clickedVeh, unitId, cell)) return;
@@ -469,7 +483,7 @@ export class Battle {
         if (!res.ok) this.toast(res.error);
         else {
           this.r.sync();
-          const next = this.myUnits().find((x) => !x.pos);
+          const next = this.myUnits().find((x) => !x.pos && !x.inVehicle);
           if (next) this.sel = next.id;
         }
         this.refresh();
@@ -856,7 +870,7 @@ export class Battle {
         { class: `ucard${u.id === this.sel ? ' sel' : ''}${isActive(u) || (this.s.turn.phase === 'deploy') ? '' : ' dim'}`, onclick: () => (this.s.turn.phase === 'deploy' ? ((this.sel = u.id), this.refresh()) : u.pos && this.selectUnit(u)) },
         h('div', { class: 'nm' }, `${u.callsign} `, h('span', { class: 'muted' }, cls)),
         this.s.turn.phase === 'deploy'
-          ? h('div', { class: 'muted' }, u.pos ? 'Розгорнуто' : 'Не розгорнуто')
+          ? h('div', { class: 'muted' }, u.inVehicle ? 'У техніці' : u.pos ? 'Розгорнуто' : 'Не розгорнуто')
           : h('div', { class: 'muted', style: 'font-size:0.85em' }, u.status === 'active' ? `AP ${fmtAp(u.ap)}${u.overwatch ? ' · спостереження' : ''}${u.panicked ? ' · паніка' : ''}` : statusName(u.status)),
         bar(u.health, u.stats.health, u.health < u.stats.health * 0.4 ? 'var(--bad)' : 'var(--good)'),
         this.s.turn.phase === 'battle' ? bar(u.ap, u.apMax, 'var(--accent)') : null,
@@ -1045,6 +1059,16 @@ export class Battle {
     if (op && isActive(op)) this.selectUnit(op);
   }
 
+  /** Прицілювання по поверхах: ворожий дрон у клітинці на рівні, що зараз переглядається. */
+  private droneAtCell(cell: Cell | null): string | null {
+    if (!cell || this.selDrone) return null;
+    const lv = this.s.map.levels;
+    const d = (this.s.drones ?? []).find(
+      (x) => !x.destroyed && x.side !== this.viewer && x.x === cell.x && x.y === cell.y && Math.min(droneAlt(this.s, x), lv - 1) === cell.z && this.r.isDroneShown(x.id),
+    );
+    return d?.id ?? null;
+  }
+
   /** Клік із урахуванням дронів. true — оброблено. */
   private droneClick(droneId: string | null, unitId: string | null, cell: Cell | null): boolean {
     const s = this.s;
@@ -1069,11 +1093,6 @@ export class Battle {
     }
     const d = this.selectedDrone();
     if (!d) return false;
-    const own = unitId ? s.units.find((x) => x.id === unitId && x.side === this.viewer && isActive(x)) : undefined;
-    if (own && !this.droneAttackMode) {
-      this.selectUnit(own);
-      return true;
-    }
     if (!this.isHumanTurn() || !cell) return true;
     if (this.droneAttackMode) {
       const target = unitId ? s.units.find((x) => x.id === unitId)?.pos ?? cell : cell;
@@ -1148,6 +1167,19 @@ export class Battle {
         title: 'Скид у клітинку під дроном — 2 AP дрона',
         items: [{ label: 'Скинути зараз', disabled: !human || d.drops <= 0, run: () => (this.pending = { kind: 'ddrop' }) }],
       });
+    const alt = droneAlt(this.s, d);
+    const lv = this.s.map.levels;
+    const altName = (a: number) => (a >= lv ? 'над дахами' : `${a + 1} поверх`);
+    const ac = content().rules.drones.altitudeCost;
+    out.push({
+      id: 'dalt',
+      label: `Висота: ${altName(alt)}`,
+      title: `Зміна висоти — ${ac} AP за рівень (PageUp / PageDown)`,
+      items: [
+        { label: `Вище${alt < lv ? ` → ${altName(alt + 1)}` : ''}`, disabled: !human || alt >= lv, run: () => void this.exec({ type: 'droneAltitude', droneId: d.id, delta: 1 }) },
+        { label: `Нижче${alt > 0 ? ` → ${altName(alt - 1)}` : ''}`, disabled: !human || alt <= 0, run: () => void this.exec({ type: 'droneAltitude', droneId: d.id, delta: -1 }) },
+      ],
+    });
     out.push({
       id: 'dother',
       label: 'Дрон',

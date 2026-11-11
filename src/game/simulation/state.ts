@@ -53,6 +53,7 @@ export type SimEvent =
   | { t: 'grenade'; unitId: string; from: Point; to: Point }
   | { t: 'rocket'; unitId: string; from: Point; to: Point }
   | { t: 'smoke'; cells: Cell[] }
+  | { t: 'sound'; kind: 'glass' | 'click' }
   | { t: 'vehicle'; vehicleId: string; path?: Cell[] }
   | { t: 'drone'; droneId: string; path?: { x: number; y: number }[]; attack?: Cell; lost?: boolean }
   | { t: 'vehicleHit'; vehicleId: string; component: string | null; penetrated: boolean }

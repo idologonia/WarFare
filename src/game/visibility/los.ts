@@ -27,6 +27,8 @@ export interface TraceResult {
   concealment: number;
   /** Пройдені клітинки (без повторів). */
   cells: Cell[];
+  /** Вікна, крізь які пройшла лінія (для биття скла). */
+  windows: { cell: Cell; side: EdgeSide }[];
 }
 
 export interface TraceOptions {
@@ -63,6 +65,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
   }
   const steps = Math.max(1, Math.ceil(len / STEP));
   const cells: Cell[] = [];
+  const windows: { cell: Cell; side: EdgeSide }[] = [];
   let concealment = 0;
   let lastKey = '';
   let prevZ = Math.floor(from.h);
@@ -75,7 +78,11 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     if (!e) return null;
     const o = objectDef(e.obj.defId);
     if (o.door) return null;
-    if (o.window) return local < (o.sill ?? 0.4) || local > 0.95 ? { cell: e.cell, side: e.side } : null;
+    if (o.window) {
+      if (local < (o.sill ?? 0.4) || local > 0.95) return { cell: e.cell, side: e.side };
+      windows.push({ cell: e.cell, side: e.side });
+      return null;
+    }
     if (opt.ignoreBelow !== undefined && o.height < opt.ignoreBelow) return null;
     return local < o.height ? { cell: e.cell, side: e.side } : null;
   };
@@ -87,7 +94,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     const cx = Math.floor(p.x);
     const cy = Math.floor(p.y);
     if (cx < 0 || cy < 0 || cx >= map.width || cy >= map.height || p.h < -0.01) {
-      return { blocked: true, blockCell: null, blockKind: 'bounds', end: p, concealment, cells };
+      return { blocked: true, blockCell: null, blockKind: 'bounds', end: p, concealment, cells, windows };
     }
     const z = Math.max(0, Math.min(map.levels - 1, Math.floor(p.h)));
     const local = p.h - z;
@@ -100,7 +107,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     if (z !== prevZ) {
       const upper = Math.max(z, prevZ);
       if (upper > 0 && upper < map.levels && map.cells[upper][cy][cx].floor && !isStart && !isEnd) {
-        return { blocked: true, blockCell: { x: cx, y: cy, z: upper }, blockKind: 'floor', end: p, concealment, cells };
+        return { blocked: true, blockCell: { x: cx, y: cy, z: upper }, blockKind: 'floor', end: p, concealment, cells, windows };
       }
       prevZ = z;
     }
@@ -115,7 +122,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
         const b = edgeBlocks(p0, viaY, local) ?? edgeBlocks(viaY, c, local);
         if (a && b) hit = a;
       } else hit = edgeBlocks(p0, c, local);
-      if (hit) return { blocked: true, blockCell: hit.cell, blockKind: 'edge', blockEdge: hit, end: p, concealment, cells };
+      if (hit) return { blocked: true, blockCell: hit.cell, blockKind: 'edge', blockEdge: hit, end: p, concealment, cells, windows };
     }
     pcx = cx;
     pcy = cy;
@@ -130,16 +137,16 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
 
     const cell = map.cells[z][cy][cx];
     if (cell.vehicle && !losIgnore.ids.has(cell.vehicle) && local < (cell.elevation ?? 0) + (cell.vehicleHeight ?? 0.8)) {
-      return { blocked: true, blockCell: c, blockKind: 'vehicle', blockVehicle: cell.vehicle, end: p, concealment, cells };
+      return { blocked: true, blockCell: c, blockKind: 'vehicle', blockVehicle: cell.vehicle, end: p, concealment, cells, windows };
     }
     if (z === 0 && local < cell.elevation - 0.02) {
-      return { blocked: true, blockCell: c, blockKind: 'ground', end: p, concealment, cells };
+      return { blocked: true, blockCell: c, blockKind: 'ground', end: p, concealment, cells, windows };
     }
     if (cell.object) {
       const o = objectDef(cell.object.defId);
       if (o.door) continue;
       if (o.window) {
-        if (local < (o.sill ?? 0.4) || local > 0.95) return { blocked: true, blockCell: c, blockKind: 'object', end: p, concealment, cells };
+        if (local < (o.sill ?? 0.4) || local > 0.95) return { blocked: true, blockCell: c, blockKind: 'object', end: p, concealment, cells, windows };
         continue;
       }
       if (o.cover === 0 && (o.concealment ?? 0) > 0) {
@@ -149,9 +156,9 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
       }
       const base = z === 0 ? cell.elevation : 0;
       if (local < base + o.height && !(opt.ignoreBelow !== undefined && o.height < opt.ignoreBelow)) {
-        return { blocked: true, blockCell: c, blockKind: 'object', end: p, concealment, cells };
+        return { blocked: true, blockCell: c, blockKind: 'object', end: p, concealment, cells, windows };
       }
     }
   }
-  return { blocked: false, blockCell: null, blockKind: null, end: { x: from.x + dx, y: from.y + dy, h: from.h + dh }, concealment, cells };
+  return { blocked: false, blockCell: null, blockKind: null, end: { x: from.x + dx, y: from.y + dy, h: from.h + dh }, concealment, cells, windows };
 }
