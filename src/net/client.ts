@@ -1,4 +1,4 @@
-import type { ClientMsg, ServerMsg } from './protocol';
+import { DISCOVERY_TOPIC, NTFY_URL, type ClientMsg, type ServerMsg } from './protocol';
 
 const KEY = 'warfare.server';
 
@@ -67,5 +67,29 @@ export class NetClient {
   close(): void {
     this.onClose = () => {};
     this.ws?.close();
+  }
+}
+
+/** Знайти сервер автоматично: останнє оголошення сервера в ntfy за добу. */
+export async function discoverServer(): Promise<string | null> {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(`${NTFY_URL}/${DISCOVERY_TOPIC}/json?poll=1&since=24h`, { cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t);
+    let best: { url: string | null; online: boolean; t: number } | null = null;
+    for (const line of (await r.text()).split('\n')) {
+      try {
+        const ev = JSON.parse(line) as { event: string; message: string };
+        if (ev.event !== 'message') continue;
+        const a = JSON.parse(ev.message) as { app: string; url: string | null; online: boolean; t: number };
+        if (a.app === 'warfare-server' && (!best || a.t > best.t)) best = a;
+      } catch {
+        /* чуже повідомлення */
+      }
+    }
+    return best?.online && best.url ? best.url : null;
+  } catch {
+    return null;
   }
 }

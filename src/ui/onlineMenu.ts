@@ -1,7 +1,7 @@
 import { content } from '@/content';
 import type { MissionState } from '@/game/simulation/state';
 import type { Difficulty, SideId } from '@/game/types';
-import { checkServer, NetClient, serverUrl, setServerUrl } from '@/net/client';
+import { checkServer, discoverServer, NetClient, serverUrl, setServerUrl } from '@/net/client';
 import type { RoomInfo, ServerMsg } from '@/net/protocol';
 import { btn, h } from './dom';
 
@@ -44,8 +44,8 @@ export function openOnlineMenu(root: HTMLElement, hooks: OnlineHooks): () => voi
     box.innerHTML = '';
     box.append(h('h2', {}, 'Гра по мережі'));
     box.append(
-      h('div', { class: 'field' }, h('label', {}, 'Адреса сервера'), h('div', { class: 'row' }, urlInput, btn('Підключитися', () => void connect(), { cls: 'primary' }))),
-      h('div', { class: online ? 'pos' : 'neg', style: 'margin:4px 0 10px' }, `● ${status}`),
+      h('div', { class: online ? 'pos' : 'neg', style: 'margin:4px 0 10px;font-weight:600' }, `● ${status}`),
+      h('details', {}, h('summary', { class: 'muted' }, 'Адреса сервера (зазвичай знаходиться сама)'), h('div', { class: 'row' }, urlInput, btn('Підключитися', () => void connect()))),
     );
     if (error) box.append(h('div', { class: 'neg' }, error));
     if (waiting) {
@@ -106,7 +106,7 @@ export function openOnlineMenu(root: HTMLElement, hooks: OnlineHooks): () => voi
 
   async function connect(): Promise<void> {
     const url = urlInput.value.trim().replace(/\/+$/, '');
-    setServerUrl(url === location.origin ? '' : url);
+    if (!url.includes('trycloudflare.com')) setServerUrl(url === location.origin ? '' : url);
     net?.close();
     net = null;
     online = false;
@@ -147,10 +147,18 @@ export function openOnlineMenu(root: HTMLElement, hooks: OnlineHooks): () => voi
   }
 
   draw();
-  if (urlInput.value) void connect();
-  else {
-    status = 'Вкажіть адресу сервера, яку дав господар';
+  void (async () => {
+    // Спершу — адреса, яку сервер оголосив сам; інакше — збережена / та, з якої відкрито гру.
+    status = 'Шукаю сервер гри…';
     draw();
-  }
+    const found = await discoverServer();
+    if (disposed) return;
+    if (found && (await checkServer(found)).ok) urlInput.value = found;
+    if (urlInput.value) void connect();
+    else {
+      status = 'Сервер гри офлайн';
+      draw();
+    }
+  })();
   return () => dispose();
 }

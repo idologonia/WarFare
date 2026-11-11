@@ -40,3 +40,7 @@ export type ServerMsg =
   | { t: 'error'; error: string };
 
 export const PROTOCOL_VERSION = 1;
+
+/** Тема ntfy, де сервер оголошує свою публічну адресу. */
+export const DISCOVERY_TOPIC = 'warfare-idologonia-v1-server';
+export const NTFY_URL = 'https://ntfy.sh';

@@ -10,7 +10,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { content } from '@/content';
 import { createMission, Mission } from '@/game/simulation/mission';
 import type { SideId } from '@/game/types';
-import { PROTOCOL_VERSION, type ClientMsg, type RoomInfo, type RoomSettings, type ServerMsg } from '@/net/protocol';
+import { DISCOVERY_TOPIC, PROTOCOL_VERSION, type ClientMsg, type RoomInfo, type RoomSettings, type ServerMsg } from '@/net/protocol';
 
 const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8080);
 const ROOT = resolve(process.env.WARFARE_DIST ?? join(process.cwd(), 'dist'));
@@ -183,4 +183,89 @@ wss.on('connection', (ws) => {
 
 http.listen(PORT, () => {
   console.log(`WarFare сервер: http://localhost:${PORT}  (гра з папки ${ROOT})`);
+  if (process.argv.includes('--public')) void startTunnel();
 });
+
+// ---------- Тунель і оголошення адреси: гра знаходить сервер сама ----------
+
+const NTFY = process.env.WARFARE_NTFY ?? 'https://ntfy.sh';
+let publicUrl: string | null = null;
+
+async function announce(online: boolean): Promise<void> {
+  const body = JSON.stringify({ app: 'warfare-server', protocol: PROTOCOL_VERSION, url: online ? publicUrl : null, online, t: Math.floor(Date.now() / 1000) });
+  try {
+    await fetch(`${NTFY}/${DISCOVERY_TOPIC}`, { method: 'POST', body, headers: { 'User-Agent': 'warfare-server' } });
+  } catch {
+    console.log('Не вдалося оголосити адресу (ntfy недоступний)');
+  }
+}
+
+async function cloudflaredPath(): Promise<string | null> {
+  const { existsSync } = await import('node:fs');
+  const { writeFile, chmod } = await import('node:fs/promises');
+  const win = process.platform === 'win32';
+  const local = join(process.cwd(), win ? 'cloudflared.exe' : 'cloudflared');
+  if (existsSync(local)) return local;
+  const name = win ? 'cloudflared-windows-amd64.exe' : process.platform === 'linux' ? 'cloudflared-linux-amd64' : null;
+  if (!name) return null;
+  console.log('Завантажую тунель Cloudflare (один раз, ~30 МБ)…');
+  try {
+    const r = await fetch(`https://github.com/cloudflare/cloudflared/releases/latest/download/${name}`);
+    if (!r.ok) throw new Error(String(r.status));
+    await writeFile(local, Buffer.from(await r.arrayBuffer()));
+    if (!win) await chmod(local, 0o755);
+    return local;
+  } catch (e) {
+    console.log('Не вдалося завантажити cloudflared:', e);
+    return null;
+  }
+}
+
+async function startTunnel(): Promise<void> {
+  const exe = await cloudflaredPath();
+  if (!exe) return;
+  const { spawn } = await import('node:child_process');
+  const run = () => {
+    console.log('Запускаю тунель…');
+    const p = spawn(exe, ['tunnel', '--no-autoupdate', '--url', `http://localhost:${PORT}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const onData = (d: Buffer) => {
+      const m = String(d).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+      if (m && m[0] !== publicUrl) void becameOnline(m[0]);
+    };
+    p.stdout.on('data', onData);
+    p.stderr.on('data', onData);
+    p.on('exit', () => {
+      publicUrl = null;
+      console.log('Тунель зупинився — перезапуск через 5 с');
+      setTimeout(run, 5000);
+    });
+  };
+  run();
+  // Періодично повторюємо оголошення (нові гравці бачать свіже).
+  setInterval(() => publicUrl && void announce(true), 10 * 60_000);
+  const bye = () => {
+    void announce(false).finally(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000);
+  };
+  process.on('SIGINT', bye);
+  process.on('SIGTERM', bye);
+}
+
+async function becameOnline(url: string): Promise<void> {
+  // Чекаємо, поки адреса реально запрацює.
+  for (let i = 0; i < 30; i++) {
+    try {
+      const r = await fetch(`${url}/api/health`);
+      if (r.ok) break;
+    } catch {
+      /* ще не готово */
+    }
+    await new Promise((ok) => setTimeout(ok, 2000));
+  }
+  publicUrl = url;
+  await announce(true);
+  console.log('');
+  console.log(`СЕРВЕР ОНЛАЙН: ${url}`);
+  console.log('Гравці просто відкривають https://idologonia.github.io/WarFare/ → «Гра по мережі» — сервер знайдеться сам.');
+  console.log('Не закривайте це вікно, поки граєте. Вимкнути — Ctrl+C.');
+}
