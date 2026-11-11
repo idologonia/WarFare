@@ -3,7 +3,9 @@ import { Mesh, VertexData, type Scene, type StandardMaterial } from './babylon';
 export type RGB = [number, number, number];
 
 export function hex(c: string): RGB {
-  const n = parseInt(c.replace('#', ''), 16);
+  let h = c.replace('#', '');
+  if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+  const n = parseInt(h, 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
@@ -37,9 +39,11 @@ export class GeoBuilder {
   }
 
   /** Коробка з центром (cx, cy, cz) і розмірами; rotY — поворот навколо вертикалі. */
-  box(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, color: RGB, alpha = 1, rotY = 0): this {
+  box(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, color: RGB, alpha = 1, rotY = 0, rotX = 0): this {
     const hx = sx / 2, hy = sy / 2, hz = sz / 2;
     const cos = Math.cos(rotY), sin = Math.sin(rotY);
+    const cx_ = Math.cos(rotX), sx_ = Math.sin(rotX);
+    const px = (v: number[]): number[] => (rotX ? [v[0], v[1] * cx_ - v[2] * sx_, v[1] * sx_ + v[2] * cx_] : v);
     const faces: [number[], number[][]][] = [
       [[0, 1, 0], [[-hx, hy, -hz], [-hx, hy, hz], [hx, hy, hz], [hx, hy, -hz]]],
       [[0, -1, 0], [[-hx, -hy, hz], [-hx, -hy, -hz], [hx, -hy, -hz], [hx, -hy, hz]]],
@@ -49,13 +53,15 @@ export class GeoBuilder {
       [[0, 0, -1], [[-hx, -hy, -hz], [-hx, hy, -hz], [hx, hy, -hz], [hx, -hy, -hz]]],
     ];
     const camo = this.camo;
-    for (const [n, verts] of faces) {
+    for (const [n0, verts0] of faces) {
+      const n = px(n0);
+      const verts = verts0.map(px);
       const base = this.positions.length / 3;
       // Зсув візерунка для кожної грані, щоб плями не повторювались.
       this.camoSeed = (this.camoSeed * 9301 + 0.4927) % 1;
       const off = 0.1 + this.camoSeed * 0.08;
       // Легке «запечене» затінення граней для ретро-вигляду.
-      const k = n[1] > 0 ? 1.0 : n[1] < 0 ? 0.55 : n[0] !== 0 ? 0.8 : 0.88;
+      const k = n[1] > 0.5 ? 1.0 : n[1] < -0.5 ? 0.55 : Math.abs(n[0]) > 0.5 ? 0.8 : 0.88 + Math.max(0, n[1]) * 0.12;
       for (const [x, y, z] of verts) {
         this.positions.push(cx + x * cos + z * sin, cy + y, cz - x * sin + z * cos);
         this.normals.push(n[0] * cos + n[2] * sin, n[1], -n[0] * sin + n[2] * cos);
@@ -63,9 +69,9 @@ export class GeoBuilder {
         if (camo === null) this.uvs.push(0.02, 0.02);
         else {
           // Проєкція на площину грані: дві осі, перпендикулярні нормалі.
-          const [a, b] = n[0] !== 0 ? [z, y] : n[1] !== 0 ? [x, z] : [x, y];
-          const ua = (a + (n[0] !== 0 ? hz : hx)) * camo;
-          const vb = (b + (n[1] !== 0 ? hz : hy)) * camo;
+          const [a, b] = n0[0] !== 0 ? [z, y] : n0[1] !== 0 ? [x, z] : [x, y];
+          const ua = (a + (n0[0] !== 0 ? hz : hx)) * camo;
+          const vb = (b + (n0[1] !== 0 ? hz : hy)) * camo;
           this.uvs.push(off + Math.min(0.8, ua), off + Math.min(0.8, vb));
         }
       }

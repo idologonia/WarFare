@@ -19,7 +19,7 @@ type Tool =
   | { kind: 'variation' };
 
 const OBJ_GROUPS: [string, string[]][] = [
-  ['Стіни й будівлі', ['brick_wall', 'brick_window', 'door', 'concrete_wall', 'parapet', 'brick_rubble', 'concrete_rubble']],
+  ['Стіни й будівлі', ['brick_wall', 'brick_window', 'door', 'concrete_wall', 'concrete_window', 'parapet', 'brick_rubble', 'concrete_rubble']],
   ['Укриття', ['sandbags', 'earth_berm', 'fence', 'crates', 'container', 'scrap']],
   ['Рослинність', ['tree', 'bush', 'stump']],
 ];

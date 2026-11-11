@@ -108,7 +108,7 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     // Перетин перекриття між поверхами.
     if (z !== prevZ) {
       const upper = Math.max(z, prevZ);
-      if (upper > 0 && upper < map.levels && map.cells[upper][cy][cx].floor && !isStart && !isEnd) {
+      if (upper > 0 && upper < map.levels && map.cells[upper][cy][cx].floor) {
         return { blocked: true, blockCell: { x: cx, y: cy, z: upper }, blockKind: 'floor', end: p, concealment, cells, windows };
       }
       prevZ = z;

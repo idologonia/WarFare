@@ -173,7 +173,7 @@
    "height": 0.4,
    "hp": 200,
    "destroyedTo": null,
-   "color": "#555"
+   "color": "#5e5852"
   },
   {
    "id": "earth_berm",
@@ -260,7 +260,7 @@
    "cover": 2,
    "blocksMove": true,
    "height": 1.0,
-   "hp": 450,
+   "hp": 320,
    "wall": true,
    "damagedTo": "concrete_wall_damaged",
    "destroyedTo": "concrete_rubble",
@@ -316,6 +316,36 @@
    "wall": true,
    "destroyedTo": "brick_rubble",
    "color": "#a4553a",
+   "thin": true
+  },
+  {
+   "id": "concrete_window",
+   "name": "Вікно (бетон)",
+   "material": "concrete",
+   "cover": 1,
+   "blocksMove": true,
+   "height": 1.0,
+   "window": true,
+   "sill": 0.42,
+   "hp": 140,
+   "wall": true,
+   "destroyedTo": "concrete_rubble",
+   "color": "#8d8d86",
+   "thin": true
+  },
+  {
+   "id": "concrete_window_broken",
+   "name": "Розбите вікно (бетон)",
+   "material": "concrete",
+   "cover": 1,
+   "blocksMove": true,
+   "height": 1.0,
+   "window": true,
+   "sill": 0.42,
+   "hp": 80,
+   "wall": true,
+   "destroyedTo": "concrete_rubble",
+   "color": "#8d8d86",
    "thin": true
   }
  ]

@@ -265,6 +265,7 @@ export function spawnVehicle(s: MissionState, side: SideId, defId: string, x: nu
   };
   // Фарбування: М113 — койот, L200 — олива, чорний або сірий (за ідентифікатором).
   if (defId === 'm113') v.paint = '#9b8357';
+  if (defId === 'mtlb') v.paint = '#4f5a32';
   if (defId === 'l200') v.paint = ['#55603f', '#1f2022', '#7b7e82'][[...v.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 3];
   (s.vehicles ??= []).push(v);
   setOccupancy(s, v, true);

@@ -63,8 +63,8 @@ def industrial():
   m.rect(0, 16, 39, 17, '=')
   m.rect(19, 0, 20, 35, '=')
   # цех (2 поверхи), склад (1 поверх, бетон), адмінбудівля (3 поверхи), гаражі
-  m.building(4, 3, 15, 11, 2, 'concrete_wall', 'brick_window', doors=[(9, 11, 's'), (15, 6, 'e')], stairs=(5, 4), rnd=r, inner=10)
-  m.building(24, 3, 35, 9, 1, 'concrete_wall', 'concrete_wall', doors=[(29, 9, 's'), (24, 6, 'w')], rnd=r)
+  m.building(4, 3, 15, 11, 2, 'concrete_wall', 'concrete_window', doors=[(9, 11, 's'), (15, 6, 'e')], stairs=(5, 4), rnd=r, inner=10)
+  m.building(24, 3, 35, 9, 1, 'concrete_wall', 'concrete_window', doors=[(29, 9, 's'), (24, 6, 'w')], rnd=r)
   m.building(24, 21, 31, 27, 3, 'brick_wall', 'brick_window', doors=[(27, 21, 'n'), (31, 24, 'e')], stairs=(25, 26), rnd=r, inner=28)
   m.building(6, 22, 13, 25, 1, 'brick_wall', 'brick_window', doors=[(8, 22, 'n'), (11, 22, 'n')], rnd=r)
   # контейнери, ящики, брухт, мішки

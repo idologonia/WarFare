@@ -54,9 +54,11 @@ export function damageObject(ctx: Ctx, cell: Cell, amount: number, explosive = f
 export function breakWindows(ctx: Ctx, list: { cell: Cell; side: EdgeSide }[]): void {
   for (const w of list) {
     const e = getEdge(ctx.s.map, w.cell, w.side);
-    if (!e || e.defId !== 'brick_window') continue;
-    setEdge(ctx.s.map, w.cell, w.side, { defId: 'brick_window_broken', hp: Math.min(e.hp, objectDef('brick_window_broken').hp) });
-    ctx.ev.push({ t: 'object', cell: w.cell, defId: 'brick_window_broken' });
+    if (!e || e.defId.endsWith('_broken') || !objectDef(e.defId).window) continue;
+    const to = `${e.defId}_broken`;
+    if (!content().objects.get(to)) continue;
+    setEdge(ctx.s.map, w.cell, w.side, { defId: to, hp: Math.min(e.hp, objectDef(to).hp) });
+    ctx.ev.push({ t: 'object', cell: w.cell, defId: to });
     ctx.ev.push({ t: 'sound', kind: 'glass' });
   }
 }
@@ -66,7 +68,7 @@ export function damageEdge(ctx: Ctx, cell: Cell, side: EdgeSide, amount: number,
   const e = getEdge(ctx.s.map, cell, side);
   if (!e) return;
   const def = objectDef(e.defId);
-  const dmg = Math.round(amount * BULLET_MATERIAL[def.material] * (explosive ? 2 : 1));
+  const dmg = Math.round(amount * BULLET_MATERIAL[def.material] * (explosive ? 3 : 1));
   if (dmg <= 0) return;
   e.hp -= dmg;
   let next: EdgeObject | null = e;
