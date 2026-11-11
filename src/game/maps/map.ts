@@ -66,7 +66,7 @@ export function groundHeight(map: MapState, c: Cell): number {
 /** Чи можна стояти в клітинці (без урахування бійців). */
 export function isStandable(map: MapState, c: Cell): boolean {
   const cell = cellAt(map, c);
-  if (!cell || !cell.floor) return false;
+  if (!cell || !cell.floor || cell.vehicle) return false;
   const o = cell.object ? objectDef(cell.object.defId) : null;
   return !o || !o.blocksMove;
 }

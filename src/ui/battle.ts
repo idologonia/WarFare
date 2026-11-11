@@ -1,4 +1,4 @@
-import { content, itemDef } from '@/content';
+import { content, itemDef, vehicleDef } from '@/content';
 import { dist2d, fmtAp, sameCell, type Cell } from '@/core/grid';
 import { AiPlanner } from '@/game/ai/ai';
 import { blindOrigin, canThrowTo, grenadeRange } from '@/game/combat/fire';
@@ -13,11 +13,13 @@ import { computeApMax } from '@/game/units/derived';
 import { Mission } from '@/game/simulation/mission';
 import type { Command } from '@/game/simulation/commands';
 import { isActive, type SimEvent } from '@/game/simulation/state';
-import type { FireMode, MoveMode, SideId, Stance, Unit, WeaponState } from '@/game/types';
+import type { FireMode, MoveMode, SideId, Stance, Unit, VehicleState, WeaponDefinition, WeaponState } from '@/game/types';
 import type { Renderer } from '@/rendering/renderer';
 import { bar, btn, h, modal } from './dom';
 import { inventoryBody, medicalBody, statusName } from './panels';
 import { SandboxPanel } from './sandboxPanel';
+import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
+import { losIgnore } from '@/game/visibility/los';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test';
 
@@ -26,6 +28,9 @@ type Pending =
   | { kind: 'fire'; targetId?: string; cell?: Cell }
   | { kind: 'throw'; cell: Cell }
   | { kind: 'launch'; cell: Cell; mode: 'rpg' | 'ugl' | 'disposable' }
+  | { kind: 'vmove'; x: number; y: number; cost: number }
+  | { kind: 'vfire'; targetId?: string; cell?: Cell }
+  | { kind: 'disembark'; unitId: string; cell: Cell }
   | null;
 
 const STANCE: Record<Stance, string> = { standing: 'Стоячи', crouched: 'Сидячи', prone: 'Лежачи' };
@@ -63,6 +68,10 @@ export class Battle {
   private handover = false;
   private sandbox: SandboxPanel | null = null;
   private rain: HTMLElement | null = null;
+  /** Вибрана техніка (замість бійця). */
+  private selVehicle: string | null = null;
+  private vFireMode: FireMode | null = null;
+  private disembarkUnit: string | null = null;
 
   constructor(
     public root: HTMLElement,
@@ -193,6 +202,7 @@ export class Battle {
       const res = this.m.dispatch(cmd);
       if (!res.ok) {
         if ('unitId' in cmd) this.ai.reject(cmd.unitId);
+        else if ('vehicleId' in cmd) this.ai.reject(cmd.vehicleId);
         else break;
         continue;
       }
@@ -395,6 +405,8 @@ export class Battle {
   }
 
   private selectUnit(u: Unit): void {
+    if (u.inVehicle) return this.selectVehicle(u.inVehicle);
+    this.selVehicle = null;
     this.sel = u.id;
     this.pending = null;
     this.fireMode = null;
@@ -424,6 +436,9 @@ export class Battle {
     const cell = this.r.pickCell(x, y);
     if (this.sandbox && this.sandbox.click(unitId, cell)) return;
     const s = this.s;
+    const vehId = this.r.pickVehicle(x, y);
+    const clickedVeh = vehId ? vehicleById(s, vehId) : undefined;
+    if (s.turn.phase === 'battle' && this.vehicleClick(clickedVeh, unitId, cell)) return;
     let clickedUnit = unitId ? s.units.find((u) => u.id === unitId) ?? null : null;
     // Клік по клітинці, де стоїть свій боєць, теж вибирає його.
     if (!clickedUnit && cell) clickedUnit = s.units.find((u) => u.side === this.viewer && u.status === 'active' && u.pos && sameCell(u.pos, cell)) ?? null;
@@ -517,9 +532,12 @@ export class Battle {
 
   private cancel(): void {
     this.closeCtx();
+    this.openMenu = null;
     if (this.pending) this.pending = null;
     else {
       this.fireMode = null;
+      this.vFireMode = null;
+      this.disembarkUnit = null;
       this.throwGrenade = null;
     this.launchMode = null;
     }
@@ -529,6 +547,18 @@ export class Battle {
   }
 
   private async confirm(): Promise<void> {
+    const p0 = this.pending;
+    const v0 = this.selectedVehicle();
+    if (v0 && p0 && !this.busy) {
+      if (p0.kind === 'vmove') await this.exec({ type: 'vehicleMove', vehicleId: v0.id, x: p0.x, y: p0.y });
+      else if (p0.kind === 'vfire') await this.exec({ type: 'vehicleFire', vehicleId: v0.id, target: p0.targetId ? { unitId: p0.targetId } : { cell: p0.cell }, mode: this.vFireMode ?? 'snap' });
+      else if (p0.kind === 'disembark') {
+        if (await this.exec({ type: 'disembark', unitId: p0.unitId, cell: p0.cell })) this.disembarkUnit = null;
+      }
+      this.r.setCursor(null);
+      this.refresh();
+      return;
+    }
     const u = this.selected();
     const p = this.pending;
     if (!u || !p || this.busy) return;
@@ -641,6 +671,7 @@ export class Battle {
   private overlays(): void {
     const s = this.s;
     const r = this.r;
+    if (this.selVehicle && s.turn.phase === 'battle') return this.vehicleOverlays();
     const u = this.selected();
     r.select(u && u.pos && u.status === 'active' ? u : null);
     r.setGhosts(this.ghostCells());
@@ -737,6 +768,17 @@ export class Battle {
 
   private renderList(): void {
     const list = h('div', { class: 'unitlist', 'data-part': 'list' });
+    for (const v of vehicles(this.s).filter((x) => x.side === this.viewer && !x.destroyed)) {
+      const d = vehicleDef(v.defId);
+      list.append(
+        h(
+          'div',
+          { class: `ucard${this.selVehicle === v.id ? ' sel' : ''}`, onclick: () => this.selectVehicle(v.id) },
+          h('div', { class: 'nm' }, d.name, ' ', h('span', { class: 'muted' }, `екіпаж ${crew(this.s, v).length}`)),
+          bar(v.hp.hull, d.components.hull, v.hp.hull < d.components.hull * 0.4 ? 'var(--bad)' : '#8aa0b0'),
+        ),
+      );
+    }
     for (const u of this.myUnits()) {
       const cls = CLASS().get(u.classId)?.name ?? u.classId;
       const card = h(
@@ -755,6 +797,7 @@ export class Battle {
   }
 
   private renderStatus(): void {
+    if (this.selVehicle) return this.renderVehicleStatus();
     const u = this.selected();
     if (!u || this.s.turn.phase === 'deploy' && !u) return;
     const ammo = ammoSummary(u);
@@ -798,6 +841,7 @@ export class Battle {
   }
 
   private renderHit(): void {
+    if (this.selVehicle) return this.renderVehicleHit();
     const u = this.selected();
     const p = this.pending;
     if (!u?.pos || !p) return;
@@ -876,10 +920,250 @@ export class Battle {
     const u = this.selected();
     const can = this.isHumanTurn() && !this.busy && !!u && isActive(u) && !u.panicked;
     const acts = h('div', { class: 'actions' });
-    if (u) for (const menu of this.menus(u, can)) acts.append(this.menuButton(menu));
+    const sv = this.selectedVehicle();
+    if (sv) for (const menu of this.vehicleMenus(sv)) acts.append(this.menuButton(menu));
+    else if (u) for (const menu of this.menus(u, can)) acts.append(this.menuButton(menu));
     acts.append(btn('Кінець ходу', () => void this.endTurn(), { cls: 'primary', disabled: !this.isHumanTurn() || this.busy }));
     bar2.append(acts);
     this.hud.append(bar2);
+  }
+
+  // ---------- Техніка ----------
+
+  private selectedVehicle(): VehicleState | null {
+    return this.selVehicle ? vehicleById(this.s, this.selVehicle) ?? null : null;
+  }
+
+  private selectVehicle(id: string): void {
+    const v = vehicleById(this.s, id);
+    if (!v || v.side !== this.viewer) return;
+    this.selVehicle = id;
+    this.sel = null;
+    this.pending = null;
+    this.fireMode = null;
+    this.vFireMode = null;
+    this.disembarkUnit = null;
+    this.r.focus({ x: v.x + 0.5, y: v.y + 0.5, z: 0 });
+    this.r.setViewLevel(this.s.map.levels - 1);
+    this.refresh();
+  }
+
+  /** Обробка кліку з урахуванням техніки. true — клік оброблено. */
+  private vehicleClick(clickedVeh: VehicleState | undefined, unitId: string | null, cell: Cell | null): boolean {
+    const s = this.s;
+    const v = this.selectedVehicle();
+    // Своя техніка — вибір (якщо не цілимося з неї).
+    if (clickedVeh && clickedVeh.side === this.viewer && !clickedVeh.destroyed && !(v && v.id === clickedVeh.id && this.pending)) {
+      if (this.selVehicle !== clickedVeh.id) {
+        this.selectVehicle(clickedVeh.id);
+        return true;
+      }
+    }
+    // Ворожа техніка як ціль для бійця: вільний вогонь / гранатомет у найближчу клітинку корпусу.
+    if (!v && clickedVeh && clickedVeh.side !== this.viewer) {
+      const u = this.selected();
+      if (!u?.pos || !this.isHumanTurn()) return false;
+      const target = footprint(clickedVeh).reduce((a, b) => (dist2d(a, u.pos!) <= dist2d(b, u.pos!) ? a : b));
+      if (this.launchMode) {
+        if (this.pending?.kind === 'launch' && sameCell(this.pending.cell, target)) void this.confirm();
+        else this.pending = { kind: 'launch', cell: target, mode: this.launchMode };
+      } else {
+        if (!this.fireMode) this.fireMode = primaryDef(u)?.modes[0] ?? 'snap';
+        if (this.pending?.kind === 'fire' && this.pending.cell && sameCell(this.pending.cell, target)) void this.confirm();
+        else this.pending = { kind: 'fire', cell: target };
+      }
+      this.refresh();
+      return true;
+    }
+    if (!v) return false;
+    // Клік по своєму бійцю на полі — перейти до нього.
+    const own = unitId ? s.units.find((x) => x.id === unitId && x.side === this.viewer && isActive(x)) : undefined;
+    if (own && !this.vFireMode) {
+      this.selectUnit(own);
+      return true;
+    }
+    if (!this.isHumanTurn()) return true;
+    if (this.disembarkUnit && cell) {
+      const ok = exitCells(s, v).some((c) => sameCell(c, cell));
+      if (!ok) this.toast('Оберіть вільну клітинку поруч із технікою');
+      else if (this.pending?.kind === 'disembark' && sameCell(this.pending.cell, cell)) void this.confirm();
+      else this.pending = { kind: 'disembark', unitId: this.disembarkUnit, cell };
+      this.refresh();
+      return true;
+    }
+    if (this.vFireMode) {
+      const t = unitId ? s.units.find((x) => x.id === unitId) : undefined;
+      if (t && t.side !== v.side) {
+        if (this.pending?.kind === 'vfire' && this.pending.targetId === t.id) void this.confirm();
+        else this.pending = { kind: 'vfire', targetId: t.id };
+      } else if (cell) {
+        if (this.pending?.kind === 'vfire' && this.pending.cell && sameCell(this.pending.cell, cell)) void this.confirm();
+        else this.pending = { kind: 'vfire', cell };
+      }
+      this.refresh();
+      return true;
+    }
+    if (!cell) return true;
+    // Рух: обираємо положення, щоб клітинка опинилась у площі техніки, з найменшою ціною.
+    const d = v.driver ? s.units.find((x) => x.id === v.driver) : undefined;
+    if (!d) {
+      this.toast('Немає водія');
+      return true;
+    }
+    const nodes = vehicleReachable(s, v, d.ap);
+    let best: { x: number; y: number; cost: number } | null = null;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const n = nodes.get(`${cell.x - dx},${cell.y - dy}`);
+      if (n && n.cost > 0 && (!best || n.cost < best.cost)) best = { x: n.x, y: n.y, cost: n.cost };
+    }
+    if (!best) {
+      this.toast(canMove(v) ? 'Техніка туди не доїде' : 'Техніка не може рухатись');
+      return true;
+    }
+    if (this.pending?.kind === 'vmove' && this.pending.x === best.x && this.pending.y === best.y) void this.confirm();
+    else this.pending = { kind: 'vmove', ...best };
+    this.refresh();
+    return true;
+  }
+
+  private vehicleOverlays(): void {
+    const s = this.s;
+    const r = this.r;
+    const v = this.selectedVehicle();
+    r.select(null);
+    r.setGhosts(this.ghostCells());
+    r.setOverlay('reach', []);
+    if (!v || !this.isHumanTurn() || this.busy) return;
+    if (this.disembarkUnit) {
+      r.setOverlay('reach', exitCells(s, v).map((cell) => ({ cell, color: [0.3, 0.9, 0.4] as [number, number, number] })), { alpha: 0.4 });
+      return;
+    }
+    if (this.vFireMode) return;
+    const d = v.driver ? s.units.find((x) => x.id === v.driver) : undefined;
+    if (!d || !canMove(v)) return;
+    const seen = new Map<string, Cell>();
+    for (const n of vehicleReachable(s, v, d.ap).values()) for (const c of footprintAt(v.defId, n.x, n.y)) seen.set(`${c.x},${c.y}`, c);
+    const cells = [...seen.values()].map((cell) => ({ cell, color: [0.3, 0.6, 1] as [number, number, number] }));
+    if (this.pending?.kind === 'vmove') for (const c of footprintAt(v.defId, this.pending.x, this.pending.y)) cells.push({ cell: c, color: [1, 0.85, 0.3] });
+    r.setOverlay('reach', cells, { alpha: 0.3 });
+  }
+
+  private vehicleMenus(v: VehicleState): ActionMenu[] {
+    const s = this.s;
+    const d = vehicleDef(v.defId);
+    const human = this.isHumanTurn() && !this.busy;
+    const driver = v.driver ? s.units.find((x) => x.id === v.driver) : undefined;
+    const gunner = v.gunner ? s.units.find((x) => x.id === v.gunner) : undefined;
+    const out: ActionMenu[] = [];
+    out.push({
+      id: 'vmove',
+      label: 'Рух техніки',
+      title: `Клікніть клітинку — техніка під'їде (${d.moveCost} AP водія за клітинку)`,
+      active: !this.vFireMode && !this.disembarkUnit,
+      items: [{ label: driver ? `Водій: ${driver.callsign} · AP ${fmtAp(driver.ap)}` : 'Немає водія', disabled: !human || !driver, run: () => ((this.vFireMode = null), (this.disembarkUnit = null), (this.pending = null)) }],
+    });
+    if (v.weapon) {
+      const wd = itemDef<WeaponDefinition>(v.weapon.defId);
+      const proxy = gunner ? { ...crewProxy(s, v, gunner), inventory: { ...gunner.inventory, primary: v.weapon } } : null;
+      out.push({
+        id: 'vfire',
+        label: this.vFireMode ? `Вогонь: ${FIRE[this.vFireMode]}` : 'Вогонь навідника',
+        title: `${wd.name} · стрічка ${v.weapon.magazine?.rounds ?? 0} · запас ${v.ammoStock}`,
+        active: !!this.vFireMode,
+        items: [
+          ...wd.modes.map((fm) => ({
+            label: `${FIRE[fm]} — ${proxy ? fmtAp(fireApCost(proxy, fm)) : '—'} AP`,
+            on: this.vFireMode === fm,
+            disabled: !human || !gunner || v.hp.weapon <= 0,
+            run: () => {
+              this.vFireMode = this.vFireMode === fm ? null : fm;
+              this.disembarkUnit = null;
+              this.pending = null;
+            },
+          })),
+          { label: `Перезарядити стрічку (${v.ammoStock}) — ${content().rules.actions.vehicleReload} AP`, disabled: !human || !gunner || v.ammoStock <= 0, run: () => void this.exec({ type: 'vehicleReload', vehicleId: v.id }) },
+        ],
+      });
+    }
+    out.push({
+      id: 'crew',
+      label: `Екіпаж (${crew(s, v).length})`,
+      title: `Висадка — ${content().rules.actions.disembark} AP бійця`,
+      items: crew(s, v).map((c) => ({
+        label: `Висадити: ${c.callsign} (${v.driver === c.id ? 'водій' : v.gunner === c.id ? 'навідник' : 'десант'}, AP ${fmtAp(c.ap)})`,
+        on: this.disembarkUnit === c.id,
+        disabled: !human || c.status !== 'active',
+        run: () => {
+          this.disembarkUnit = c.id;
+          this.vFireMode = null;
+          this.pending = null;
+        },
+      })),
+    });
+    return out;
+  }
+
+  private renderVehicleStatus(): void {
+    const v = this.selectedVehicle();
+    if (!v) return;
+    const d = vehicleDef(v.defId);
+    const s = this.s;
+    const comp = (k: 'hull' | 'engine' | 'mobility' | 'weapon') => [
+      h('span', { class: 'muted' }, COMPONENT_NAMES[k]),
+      h('span', {}, `${v.hp[k]}/${d.components[k]}`, bar(v.hp[k], d.components[k], v.hp[k] <= 0 ? 'var(--bad)' : '#8aa0b0')),
+    ];
+    const seat = (label: string, id: string | null) => [h('span', { class: 'muted' }, label), h('span', {}, id ? s.units.find((x) => x.id === id)?.callsign ?? '—' : '—')];
+    this.hud.append(
+      h(
+        'div',
+        { class: 'status panel', 'data-part': 'status' },
+        h('div', { style: 'font-weight:700' }, d.name),
+        h('div', { class: 'muted', style: 'margin-bottom:6px' }, `${d.kind === 'tracked' ? 'Гусенична' : 'Колісна'} · броня ${d.armor}${v.destroyed ? ' · знищено' : ''}`),
+        h(
+          'div',
+          { class: 'grid2' },
+          ...comp('hull'),
+          ...comp('engine'),
+          ...comp('mobility'),
+          ...(v.weapon ? comp('weapon') : []),
+          ...seat('Водій', v.driver),
+          ...(v.weapon ? seat('Навідник', v.gunner) : []),
+          h('span', { class: 'muted' }, 'Десант'),
+          h('span', {}, `${v.passengers.length}/${d.passengers}`),
+          ...(v.weapon ? [h('span', { class: 'muted' }, 'БК'), h('span', {}, `${v.weapon.magazine?.rounds ?? 0} · запас ${v.ammoStock} стр.`)] : []),
+        ),
+      ),
+    );
+  }
+
+  private renderVehicleHit(): void {
+    const v = this.selectedVehicle();
+    const p = this.pending;
+    if (!v || !p) return;
+    const s = this.s;
+    let body: HTMLElement | null = null;
+    if (p.kind === 'vmove') body = h('div', {}, h('div', { class: 'muted' }, 'Рух техніки'), h('div', { class: 'big' }, `${fmtAp(p.cost)} AP`), h('div', { class: 'muted' }, 'AP водія. Легкі перешкоди (паркани, кущі, ящики, мішки) буде розчавлено.'));
+    else if (p.kind === 'disembark') body = h('div', {}, h('div', { class: 'muted' }, 'Висадка'), h('div', { class: 'big' }, `${content().rules.actions.disembark} AP`));
+    else if (p.kind === 'vfire') {
+      const g = v.gunner ? s.units.find((x) => x.id === v.gunner) : undefined;
+      if (g && v.weapon) {
+        const proxy = { ...crewProxy(s, v, g), inventory: { ...g.inventory, primary: v.weapon } };
+        const mode = this.vFireMode ?? 'snap';
+        const t = p.targetId ? s.units.find((x) => x.id === p.targetId) : undefined;
+        losIgnore.ids.add(v.id);
+        const est = t?.pos ? estimateHit(s, proxy, t, mode) : null;
+        losIgnore.ids.delete(v.id);
+        body = h(
+          'div',
+          {},
+          h('div', { class: 'muted' }, `${FIRE[mode]} · ${fmtAp(fireApCost(proxy, mode))} AP навідника`),
+          h('div', { class: 'big' }, est ? (est.lineOfFire ? `${est.chance}%` : 'Немає лінії вогню') : 'Вільний вогонь'),
+          est ? h('div', { class: 'factors' }, ...est.factors.flatMap((f) => [h('span', {}, f.label), h('span', { class: f.value >= 0 ? 'pos' : 'neg' }, `${f.value > 0 ? '+' : ''}${f.value}`)])) : null,
+        );
+      }
+    }
+    if (!body) return;
+    this.hud.append(h('div', { class: 'hitpanel panel', 'data-part': 'hit' }, body, h('div', { class: 'row', style: 'margin-top:6px' }, btn('Підтвердити', () => void this.confirm(), { cls: 'primary' }), btn('Скасувати', () => this.cancel()))));
   }
 
   /** Висувне меню: кнопка з поточним значенням і список пунктів над панеллю. */
@@ -1012,6 +1296,9 @@ export class Battle {
       { label: 'Інвентар…', run: () => this.openInventory() },
     ];
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
+    for (const v of vehicles(s))
+      if (v.side === u.side && !v.destroyed && u.pos && adjacentToVehicle(v, u.pos) && freeSeats(v) > 0)
+        other.push({ label: `Сісти в ${vehicleDef(v.defId).name} — ${content().rules.actions.embark} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'embark', unitId: u.id, vehicleId: v.id }).then((ok) => ok && this.selectVehicle(v.id)) });
     const pick = this.pickUpTarget(u);
     if (u.carrying) other.push({ label: 'Покласти пораненого', disabled: !can, run: run({ type: 'drop', unitId: u.id }) });
     else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });

@@ -8,7 +8,9 @@ import factionsJson from './factions.json';
 import villageMap from './maps/village.json';
 import firstMission from './scenarios/first_mission.json';
 import nightRaid from './scenarios/night_raid.json';
+import armorAssault from './scenarios/armor_assault.json';
 import modsJson from './mods.json';
+import vehiclesJson from './vehicles.json';
 import type {
   ItemDefinition,
   MapDefinition,
@@ -16,6 +18,7 @@ import type {
   Scenario,
   TerrainDefinition,
   UnitStats,
+  VehicleDefinition,
   WeaponModDefinition,
 } from '@/game/types';
 
@@ -56,6 +59,7 @@ export interface ContentDb {
   scenarios: Map<string, Scenario>;
   factions: { id: string; name: string; classes: string[] }[];
   mods: Map<string, WeaponModDefinition>;
+  vehicles: Map<string, VehicleDefinition>;
 }
 
 function byId<T extends { id: string }>(list: T[]): Map<string, T> {
@@ -71,9 +75,10 @@ export function loadContent(): ContentDb {
     classes: byId(classesJson.classes as ClassDefinition[]),
     names: namesJson,
     maps: byId([villageMap as unknown as MapDefinition]),
-    scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario]),
+    scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario, armorAssault as unknown as Scenario]),
     factions: factionsJson.factions,
     mods: byId(modsJson.mods as WeaponModDefinition[]),
+    vehicles: byId(vehiclesJson.vehicles as unknown as VehicleDefinition[]),
   };
 }
 
@@ -101,7 +106,7 @@ export function terrainDef(id: string): TerrainDefinition {
 }
 
 /** Вбудовані (не користувацькі) карти й сценарії — їх не можна перезаписати з редактора. */
-export const BUILTIN_IDS = new Set(['village', 'first_mission', 'night_raid']);
+export const BUILTIN_IDS = new Set(['village', 'first_mission', 'night_raid', 'armor_assault']);
 
 /** Додати або оновити користувацьку карту/сценарій у реєстрі контенту. */
 export function registerMap(def: MapDefinition): void {
@@ -119,5 +124,11 @@ export function unregister(kind: 'map' | 'scenario', id: string): void {
 export function modDef(id: string): WeaponModDefinition {
   const d = content().mods.get(id);
   if (!d) throw new Error(`Невідома модифікація: ${id}`);
+  return d;
+}
+
+export function vehicleDef(id: string): VehicleDefinition {
+  const d = content().vehicles.get(id);
+  if (!d) throw new Error(`Невідома техніка: ${id}`);
   return d;
 }

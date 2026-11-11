@@ -7,6 +7,7 @@ import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import type { MagazineDefinition, MagazineInstance, Unit, Warhead, WeaponDefinition } from '@/game/types';
 import { damageEdge, damageObject, explode } from './fire';
+import { damageVehicle, vehicleById } from '@/game/vehicles';
 
 /**
  * Гранатомети — умовні ігрові системи.
@@ -152,6 +153,10 @@ export function resolveRocket(ctx: Ctx, u: Unit, target: Cell, def: WeaponDefini
   const blast = wh.blast;
   // Влучання в стіну/об'єкт: кумулятивний робить пролом, осколковий — лише вибухає біля перешкоди.
   let land = impactCell;
+  if (!hitUnit && tr.blocked && tr.blockVehicle) {
+    const v = vehicleById(s, tr.blockVehicle);
+    if (v) damageVehicle(ctx, v, wh.damage, wh.penetration, wh.type === 'heat', u);
+  }
   if (!hitUnit && tr.blocked) {
     if (tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, blast.objectDamage, true);
     else if (tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, blast.objectDamage, true);

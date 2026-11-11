@@ -3,6 +3,7 @@ import { Rng } from '@/core/rng';
 import { sameCell, type Cell } from '@/core/grid';
 import { createItem, placeInBackpack, pouchCapacity } from '@/game/inventory/inventory';
 import { isStandable } from '@/game/maps/map';
+import { canPlace, embark, spawnVehicle } from '@/game/vehicles';
 import { newId, type MissionState } from '@/game/simulation/state';
 import { computeApMax } from '@/game/units/derived';
 import { generateUnit } from '@/game/units/generator';
@@ -110,4 +111,23 @@ export function sandboxRefill(s: MissionState, unitId: string): void {
   if (u.inventory.primary?.magazine) {
     u.inventory.primary.magazine.rounds = itemDef<MagazineDefinition>(u.inventory.primary.magazine.defId).capacity;
   }
+}
+
+/** Поставити техніку з екіпажем (водій, навідник) у тестовому режимі. */
+export function sandboxAddVehicle(s: MissionState, side: SideId, defId: string, cell: Cell): string | null {
+  assertTest(s);
+  if (cell.z !== 0 || !canPlace(s, defId, cell.x, cell.y)) return 'Тут не поміститься (потрібно 2×2 вільних клітинки на землі)';
+  const id = (p: string) => newId(s, p);
+  const v = spawnVehicle(s, side, defId, cell.x, cell.y, id);
+  const rng = new Rng(s.rng ^ s.nextId);
+  const crewList = ['driver', ...(v.weapon ? ['rifleman'] : [])];
+  for (const cls of crewList) {
+    const u = generateUnit(side, cls, rng, id, { aiStyle: s.scenario.sides[side].aiStyle });
+    const ap = computeApMax(u);
+    u.apMax = ap.total;
+    u.ap = s.turn.side === side ? ap.total : 0;
+    s.units.push(u);
+    embark(v, u, cls === 'driver' ? 'driver' : 'gunner');
+  }
+  return null;
 }

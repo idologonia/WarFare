@@ -15,6 +15,7 @@ import type {
   TurnState,
   Unit,
   UnitStatus,
+  VehicleState,
 } from '@/game/types';
 
 /** Повний серіалізований стан місії (звичайний JSON). */
@@ -33,6 +34,8 @@ export interface MissionState {
   revealAll: boolean;
   nextId: number;
   result: MissionResult | null;
+  /** Техніка (у старих збереженнях відсутня). */
+  vehicles?: VehicleState[];
 }
 
 /** Події симуляції для рендерингу/UI (не бойова стрічка: лише для анімацій і спливаючих підказок). */
@@ -47,6 +50,8 @@ export type SimEvent =
   | { t: 'grenade'; unitId: string; from: Point; to: Point }
   | { t: 'rocket'; unitId: string; from: Point; to: Point }
   | { t: 'smoke'; cells: Cell[] }
+  | { t: 'vehicle'; vehicleId: string; path?: Cell[] }
+  | { t: 'vehicleHit'; vehicleId: string; component: string | null; penetrated: boolean }
   | { t: 'explosion'; at: Point; radius: number }
   | { t: 'reload'; unitId: string }
   | { t: 'overwatch'; unitId: string }
@@ -80,6 +85,8 @@ export function unitById(s: MissionState, id: string): Unit {
 }
 
 export const isActive = (u: Unit): boolean => u.status === 'active' && u.pos !== null;
+/** Живий і боєздатний — на полі або в техніці. */
+export const isAlive = (u: Unit): boolean => u.status === 'active' && (u.pos !== null || !!u.inVehicle);
 /** На полі як тіло або активний (займає місце, видимий). */
 export const onField = (u: Unit): boolean => (u.status === 'active' || u.status === 'down' || u.status === 'dead') && u.pos !== null;
 

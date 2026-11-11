@@ -115,7 +115,7 @@ function itemWeight(item: AnyItem | { defId: string } | null): number {
 
 export function totalWeight(inv: Inventory): number {
   let w = 0;
-  for (const it of [inv.primary, inv.secondary, inv.helmet, inv.armor, inv.rig, inv.backpack, ...(inv.helmetMounts ?? [])]) w += itemWeight(it);
+  for (const it of [inv.primary, inv.secondary, inv.helmet, inv.armor, inv.rig, inv.backpack, ...(inv.helmetMounts ?? []), ...(inv.extraArmor ?? [])]) w += itemWeight(it);
   for (const it of inv.pouches) w += itemWeight(it);
   for (const it of inv.belt) w += itemWeight(it);
   for (const e of inv.backpackItems) w += itemWeight(e.item);

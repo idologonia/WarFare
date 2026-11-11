@@ -1,7 +1,7 @@
 import { itemDef } from '@/content';
 import { createItem, placeInBackpack, pouchCapacity } from '@/game/inventory/inventory';
 import { newId, type MissionState } from '@/game/simulation/state';
-import type { AnyItem, GrenadeDefinition, MagazineInstance, StackItem, Unit, WeaponDefinition, WeaponInstance } from '@/game/types';
+import type { AnyItem, ArmorDefinition, GrenadeDefinition, MagazineInstance, StackItem, Unit, WeaponDefinition, WeaponInstance } from '@/game/types';
 import { validateMods } from './mods';
 
 /** Зміни спорядження дозволені лише до початку бою (етап розгортання). */
@@ -78,4 +78,17 @@ export function helmetChoice(u: Unit): HelmetMountChoice {
   if (ids.includes('nvg_mono')) return 'nvg_mono';
   if (ids.includes('flashlight')) return 'flashlight';
   return 'none';
+}
+
+export const EXTRA_ARMOR = ['neck_guard', 'groin_guard', 'shoulder_guards', 'leg_guards', 'side_plates'];
+
+/** Додатковий захист (лише перед місією). Більшість елементів кріпиться до бронежилета. */
+export function setExtraArmor(s: MissionState, u: Unit, ids: string[]): string | null {
+  assertBeforeBattle(s);
+  for (const id of ids) {
+    const d = itemDef<ArmorDefinition>(id);
+    if (d.requiresCarrier && !u.inventory.armor) return `${d.name} кріпиться до бронежилета`;
+  }
+  u.inventory.extraArmor = ids.map((id) => ({ id: newId(s, 'a'), defId: id, durability: itemDef<ArmorDefinition>(id).durability }));
+  return null;
 }

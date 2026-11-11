@@ -16,7 +16,9 @@ export interface TraceResult {
   blocked: boolean;
   /** Клітинка, що зупинила лінію (об'єкт, перекриття або ґрунт). */
   blockCell: Cell | null;
-  blockKind: 'object' | 'edge' | 'floor' | 'ground' | 'bounds' | null;
+  blockKind: 'object' | 'edge' | 'vehicle' | 'floor' | 'ground' | 'bounds' | null;
+  /** Техніка, що зупинила лінію. */
+  blockVehicle?: string;
   /** Межа клітинки, що зупинила лінію (тонка стіна, паркан тощо). */
   blockEdge?: { cell: Cell; side: EdgeSide };
   /** Точка зупинки (або кінцева точка). */
@@ -38,6 +40,8 @@ export interface TraceOptions {
 }
 
 const STEP = 0.1;
+/** Техніка, яку лінія ігнорує (власна машина екіпажу, що стріляє/дивиться з неї). */
+export const losIgnore: { ids: Set<string> } = { ids: new Set() };
 /** Маскування однієї клітинки диму (у клітинках дальності огляду). */
 const SMOKE = 6;
 
@@ -125,6 +129,9 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     if (isStart || isEnd) continue;
 
     const cell = map.cells[z][cy][cx];
+    if (cell.vehicle && !losIgnore.ids.has(cell.vehicle) && local < (cell.elevation ?? 0) + (cell.vehicleHeight ?? 0.8)) {
+      return { blocked: true, blockCell: c, blockKind: 'vehicle', blockVehicle: cell.vehicle, end: p, concealment, cells };
+    }
     if (z === 0 && local < cell.elevation - 0.02) {
       return { blocked: true, blockCell: c, blockKind: 'ground', end: p, concealment, cells };
     }

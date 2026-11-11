@@ -8,6 +8,7 @@ import type { BodyPart, SideId } from '@/game/types';
 import { BODY_PARTS } from '@/game/types';
 import {
   sandboxAddUnit,
+  sandboxAddVehicle,
   sandboxGiveWeapon,
   sandboxHeal,
   sandboxRefill,
@@ -19,7 +20,7 @@ import {
 import { btn, h } from './dom';
 import { statusName } from './panels';
 
-type SbTool = 'pick' | 'add' | 'move' | 'remove';
+type SbTool = 'pick' | 'add' | 'vehicle' | 'move' | 'remove';
 
 /** Панель тестового режиму: довільне розміщення бійців обох сторін і зміна їхнього стану. */
 export class SandboxPanel {
@@ -27,6 +28,7 @@ export class SandboxPanel {
   tool: SbTool = 'pick';
   private side: SideId = 'red';
   private classId = 'rifleman';
+  private vehicleId = 'mtlb';
   private target: string | null = null;
   private part: BodyPart = 'leftLeg';
 
@@ -42,6 +44,16 @@ export class SandboxPanel {
       this.target = unitId;
       this.render();
       return false; // дати бою теж обробити (вибір свого бійця)
+    }
+    if (this.tool === 'vehicle' && cell) {
+      const e = sandboxAddVehicle(s, this.side, this.vehicleId, cell);
+      if (e) this.toast(e);
+      else {
+        this.refreshKnowledge();
+        this.changed(true);
+      }
+      this.render();
+      return true;
     }
     if (this.tool === 'add' && cell) {
       const r = sandboxAddUnit(s, this.side, this.classId, cell);
@@ -92,7 +104,10 @@ export class SandboxPanel {
     const t = this.target ? s.units.find((u) => u.id === this.target) : undefined;
     this.el.append(
       h('b', {}, 'Пісочниця (тестовий режим)'),
-      h('div', { class: 'row' }, toolBtn('pick', 'Вибір'), toolBtn('add', 'Додати'), toolBtn('move', 'Перенести'), toolBtn('remove', 'Прибрати')),
+      h('div', { class: 'row' }, toolBtn('pick', 'Вибір'), toolBtn('add', 'Додати'), toolBtn('vehicle', 'Техніка'), toolBtn('move', 'Перенести'), toolBtn('remove', 'Прибрати')),
+      ...(this.tool === 'vehicle'
+        ? [h('div', { class: 'row' }, sel<SideId>([['blue', 'Синя'], ['red', 'Червона']], () => this.side, (v) => (this.side = v)), sel([...db.vehicles.values()].map((v) => [v.id, v.name] as [string, string]), () => this.vehicleId, (v) => (this.vehicleId = v)))]
+        : []),
       ...(this.tool === 'add'
         ? [h(
             'div',
@@ -104,7 +119,7 @@ export class SandboxPanel {
       h(
         'div',
         { class: 'muted', style: 'font-size:0.85em' },
-        { pick: 'Клікніть будь-якого бійця, щоб змінити його нижче.', add: 'Клікніть клітинку, щоб поставити бійця.', move: 'Клікніть клітинку — вибраний боєць переміститься туди.', remove: 'Клікніть бійця, щоб прибрати його з карти.' }[this.tool],
+        { pick: 'Клікніть будь-якого бійця, щоб змінити його нижче.', add: 'Клікніть клітинку, щоб поставити бійця.', vehicle: 'Клікніть клітинку — лівий верхній кут площі 2×2.', move: 'Клікніть клітинку — вибраний боєць переміститься туди.', remove: 'Клікніть бійця, щоб прибрати його з карти.' }[this.tool],
       ),
     );
     if (t) {

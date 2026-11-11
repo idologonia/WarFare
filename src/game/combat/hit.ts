@@ -34,6 +34,9 @@ export function coverAgainst(s: MissionState, target: Cell, from: Cell): 0 | 1 |
   for (const c of cand) {
     // Стрілець упритул з того ж боку, що й укриття, — укриття не діє.
     if (c.x === from.x && c.y === from.y && c.z === from.z) continue;
+    // Техніка поруч — повне укриття.
+    const vc = s.map.cells[c.z]?.[c.y]?.[c.x];
+    if (vc?.vehicle && (vc.vehicleHeight ?? 0) >= 0.5) best = c.x !== target.x && c.y !== target.y ? (Math.max(best, 1) as 0 | 1 | 2) : 2;
     const o = objAt(s.map, c);
     if (o && o.cover > best) {
       // Діагональна клітинка дає щонайбільше половинне укриття.

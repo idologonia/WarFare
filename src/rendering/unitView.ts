@@ -77,6 +77,7 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         g.box(0, -0.33, 0, 0.145, 0.2, 0.16, WHITE); // гомілка
         camo(g, false);
         g.box(0, -0.25, 0.085, 0.12, 0.09, 0.04, black); // наколінник
+        if (u.inventory.extraArmor?.some((a) => a.defId === 'leg_guards')) g.box(0, -0.13, 0.09, 0.15, 0.17, 0.04, gear);
         g.box(0, -0.45, 0.025, 0.16, 0.09, 0.24, boots); // черевик
         g.box(0, -0.495, 0.025, 0.17, 0.02, 0.25, shade(boots, 0.6)); // підошва
         if (x < 0) g.box(-0.085, -0.1, 0.02, 0.03, 0.1, 0.1, gearDark); // кишеня
@@ -121,6 +122,13 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         const tube: RGB = [0.27, 0.3, 0.2];
         for (let i = 0; i < 6; i++) g.box(0.12 - 0.04 * i * 0.6, 0.12 + i * 0.1, -0.26, 0.08, 0.1, 0.08, tube);
         g.box(0.12 - 0.15, 0.72, -0.26, 0.12, 0.12, 0.12, [0.3, 0.35, 0.25]); // постріл
+      }
+      const extra = new Set((u.inventory.extraArmor ?? []).map((a) => a.defId));
+      if (extra.has('neck_guard')) g.box(0, 0.45, 0.02, 0.24, 0.07, 0.24, gearDark);
+      if (extra.has('groin_guard')) g.box(0, -0.06, 0.12, 0.14, 0.12, 0.04, gear);
+      if (extra.has('side_plates')) {
+        g.box(-0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
+        g.box(0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
       }
       if (u.inventory.backpack && u.classId !== 'scout') {
         g.box(0, 0.27, -0.19, 0.26, 0.3, 0.13, shade(gear, 0.92));
@@ -172,6 +180,7 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         g.box(0, -0.27, 0, 0.105, 0.18, 0.115, WHITE);
         camo(g, false);
         g.box(0, -0.06, 0, 0.122, 0.06, 0.132, side); // пов'язка сторони
+        if (u.inventory.extraArmor?.some((a) => a.defId === 'shoulder_guards')) g.box(0, -0.02, 0, 0.14, 0.12, 0.15, gear);
         g.box(0, -0.39, 0.0, 0.1, 0.08, 0.1, gloves); // рукавиця
       }),
     );

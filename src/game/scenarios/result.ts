@@ -14,6 +14,7 @@ export function computeResult(s: MissionState, winner: SideId | null, reason: Mi
       roundsUsed: us.reduce((a, u) => a + u.stats_mission.roundsUsed, 0),
       grenades: us.reduce((a, u) => a + u.stats_mission.grenades, 0),
       medsUsed: us.reduce((a, u) => a + u.stats_mission.medsUsed, 0),
+      vehiclesLost: (s.vehicles ?? []).filter((v) => v.side === side && v.destroyed).length,
     };
   }
   return {

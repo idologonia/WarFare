@@ -17,6 +17,11 @@ export type Command =
   | { type: 'launch'; unitId: string; kind: 'rpg' | 'ugl' | 'disposable'; cell: Cell }
   | { type: 'reloadLauncher'; unitId: string; ammo?: string }
   | { type: 'toggleLight'; unitId: string }
+  | { type: 'embark'; unitId: string; vehicleId: string; seat?: 'driver' | 'gunner' | 'passenger' }
+  | { type: 'disembark'; unitId: string; cell: Cell }
+  | { type: 'vehicleMove'; vehicleId: string; x: number; y: number }
+  | { type: 'vehicleFire'; vehicleId: string; target: FireTarget; mode: FireMode }
+  | { type: 'vehicleReload'; vehicleId: string }
   | { type: 'treat'; unitId: string; patientId: string; effect: MedicalEffect; injuryId: string | null }
   | { type: 'pickUp'; unitId: string; targetId: string }
   | { type: 'drop'; unitId: string }

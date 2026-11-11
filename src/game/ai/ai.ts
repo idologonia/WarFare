@@ -8,10 +8,12 @@ import { canThrowTo } from '@/game/combat/fire';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, uglAmmo } from '@/game/combat/launcher';
 import { coverAgainst, effectiveCover, estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, unitReachable } from '@/game/combat/movement';
+import { crewProxy, vehicles } from '@/game/vehicles';
+import { losIgnore } from '@/game/visibility/los';
 import { canSeeFrom } from '@/game/visibility/visibility';
 import { isActive, other, sideUnits, type MissionState } from '@/game/simulation/state';
 import type { Command } from '@/game/simulation/commands';
-import type { AiStyle, FireMode, GrenadeDefinition, MedicalDefinition, Unit } from '@/game/types';
+import type { AiStyle, FireMode, GrenadeDefinition, MedicalDefinition, Unit, VehicleState } from '@/game/types';
 
 interface Known {
   unit: Unit;
@@ -64,7 +66,45 @@ export class AiPlanner {
       if (cmd.type === 'overwatch') this.done.add(u.id);
       return cmd;
     }
+    // Техніка: навідник стріляє з бортової зброї.
+    for (const v of vehicles(s)) {
+      if (v.side !== s.turn.side || v.destroyed || this.done.has(v.id)) continue;
+      const cmd = this.vehicleDecide(s, v);
+      if (!cmd) {
+        this.done.add(v.id);
+        continue;
+      }
+      return cmd;
+    }
     return { type: 'endTurn' };
+  }
+
+  private vehicleDecide(s: MissionState, v: VehicleState): Command | null {
+    const g = v.gunner ? s.units.find((u) => u.id === v.gunner) : undefined;
+    if (!g || g.status !== 'active' || g.panicked || !v.weapon || v.hp.weapon <= 0) return null;
+    const R = content().rules;
+    if ((v.weapon.magazine?.rounds ?? 0) <= 0) return v.ammoStock > 0 && g.ap >= toTenths(R.actions.vehicleReload) ? { type: 'vehicleReload', vehicleId: v.id } : null;
+    const proxy = crewProxy(s, v, g);
+    proxy.inventory = { ...g.inventory, primary: v.weapon };
+    let best: { cmd: Command; score: number } | null = null;
+    losIgnore.ids.add(v.id);
+    try {
+      for (const c of Object.values(s.contacts[v.side])) {
+        const t = s.units.find((u) => u.id === c.unitId);
+        if (!t || !c.visible || !isActive(t)) continue;
+        for (const mode of ['burst', 'snap'] as FireMode[]) {
+          const cost = fireApCost(proxy, mode);
+          if (cost > g.ap) continue;
+          const est = estimateHit(s, proxy, t, mode);
+          if (!est.lineOfFire) continue;
+          const score = est.chance * (mode === 'burst' ? 1.6 : 1);
+          if (!best || score > best.score) best = { cmd: { type: 'vehicleFire', vehicleId: v.id, target: { unitId: t.id }, mode }, score };
+        }
+      }
+    } finally {
+      losIgnore.ids.delete(v.id);
+    }
+    return best && best.score >= 15 ? best.cmd : null;
   }
 
   private known(s: MissionState, u: Unit): Known[] {

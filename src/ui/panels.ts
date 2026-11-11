@@ -110,6 +110,7 @@ export function inventoryBody(u: Unit): HTMLElement {
     slot('Основна зброя', w ? `${name(w.defId)}${w.mods.length ? ` [${modNames(w)}]` : ''}${w.magazine ? ` · ${name(w.magazine.defId)}: ${w.magazine.rounds} наб.` : ' · без магазина'}` : '—'),
     slot('Каска', armor(inv.helmet)),
     slot('Бронезахист', armor(inv.armor)),
+    slot('Додатковий захист', (inv.extraArmor ?? []).map((a) => armor(a)).join(', ') || '—'),
     slot('Розвантаження', inv.rig ? name(inv.rig.defId) : '—'),
     slot(
       `Підсумки (${inv.pouches.length}/${pouchCapacity(inv)})`,
@@ -150,7 +151,7 @@ export function resultsBody(r: MissionResult, viewer: 'blue' | 'red'): HTMLEleme
   const headline = r.winner === null ? 'Нічия' : r.winner === viewer ? 'Перемога' : 'Поразка';
   const side = (k: 'blue' | 'red') => {
     const p = r.perSide[k];
-    return h('tr', {}, h('td', {}, sideName[k]), h('td', {}, String(p.killed)), h('td', {}, String(p.wounded)), h('td', {}, String(p.evacuated)), h('td', {}, String(p.leftOnField)), h('td', {}, String(p.roundsUsed)), h('td', {}, String(p.grenades)), h('td', {}, String(p.medsUsed)));
+    return h('tr', {}, h('td', {}, sideName[k]), h('td', {}, String(p.killed)), h('td', {}, String(p.wounded)), h('td', {}, String(p.evacuated)), h('td', {}, String(p.leftOnField)), h('td', {}, String(p.roundsUsed)), h('td', {}, String(p.grenades)), h('td', {}, String(p.medsUsed)), h('td', {}, String(p.vehiclesLost ?? 0)));
   };
   const units = h(
     'table',
@@ -177,9 +178,9 @@ export function resultsBody(r: MissionResult, viewer: 'blue' | 'red'): HTMLEleme
     { class: 'col' },
     h('div', { class: 'title-logo', style: `font-size:2.2em;color:${headline === 'Перемога' ? 'var(--good)' : headline === 'Поразка' ? 'var(--bad)' : 'var(--accent)'}` }, headline),
     h('div', { class: 'muted' }, `Причина: ${reason}. Ходів: ${r.turns}.`),
-    h('table', {}, h('tr', {}, ...['Сторона', 'Загинуло', 'Поранено', 'Евакуйовано', 'Лишилось на полі', 'Набоїв', 'Гранат', 'Медицина'].map((t) => h('th', {}, t))), side('blue'), side('red')),
+    h('table', {}, h('tr', {}, ...['Сторона', 'Загинуло', 'Поранено', 'Евакуйовано', 'Лишилось на полі', 'Набоїв', 'Гранат і пострілів', 'Медицина', 'Втрачено техніки'].map((t) => h('th', {}, t))), side('blue'), side('red')),
     h('h3', { style: 'margin-top:8px' }, 'Ефективність бійців'),
     units,
-    h('p', { class: 'muted' }, 'Техніка та виконання окремих завдань з’являться у статистиці разом із відповідними механіками.'),
+    h('p', { class: 'muted' }, 'Виконання окремих завдань з’явиться у статистиці разом із механікою об’єктів.'),
   );
 }

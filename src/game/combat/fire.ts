@@ -8,6 +8,7 @@ import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import type { EdgeObject, EdgeSide, FireMode, GrenadeDefinition, Material, Unit } from '@/game/types';
 import { coverAgainst, estimateHit, type HitFactor } from './hit';
+import { damageVehicle, vehicleById, vehicleDistance, vehicles } from '@/game/vehicles';
 import { modEffects } from '@/game/equipment/mods';
 
 const BULLET_MATERIAL: Record<Material, number> = {
@@ -123,6 +124,10 @@ function flyBullet(ctx: Ctx, shooter: Unit, from: Point, to: Point, exclude: Set
   }
   if (tr.blocked && tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, damage);
   if (tr.blocked && tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, damage);
+  if (tr.blocked && tr.blockVehicle) {
+    const v = vehicleById(s, tr.blockVehicle);
+    if (v) damageVehicle(ctx, v, damage, pen, false, shooter);
+  }
   return { end: tr.end, hitUnit: null };
 }
 
@@ -168,6 +173,10 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
       if (tr.blocked && est.lineOfFire === false) {
         if (tr.blockCell && tr.blockKind === 'object') damageObject(ctx, tr.blockCell, w.damage);
         if (tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, w.damage);
+        if (tr.blockVehicle) {
+          const v = vehicleById(s, tr.blockVehicle);
+          if (v) damageVehicle(ctx, v, w.damage, w.penetration, false, shooter);
+        }
         shots.push({ to: tr.end, hitUnit: null });
         continue;
       }
@@ -299,6 +308,12 @@ export function explode(ctx: Ctx, land: Cell, at: Point, b: Blast, attacker: Uni
       applyHit(ctx, v, per, 2, 'shrapnel', { attacker: attacker && v.side !== attacker.side ? attacker : undefined });
     }
     if (v.status === 'active') v.suppression = Math.min(100, v.suppression + 40);
+  }
+  // Техніка в радіусі: осколки зазвичай не пробивають броню, кумулятивний заряд — пробиває.
+  for (const v of vehicles(s)) {
+    if (v.destroyed || land.z !== 0 || vehicleDistance(v, land) > b.radius) continue;
+    const heat = b.objectDamage >= 300;
+    damageVehicle(ctx, v, b.damage, heat ? 8 : 2, heat, attacker ?? undefined);
   }
   const rad = Math.ceil(b.radius);
   for (let y = land.y - rad; y <= land.y + rad; y++)

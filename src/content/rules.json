@@ -43,7 +43,10 @@
     "pickUp": 2,
     "drop": 1,
     "evacuate": 1,
-    "carryRaise": 1
+    "carryRaise": 1,
+    "embark": 2,
+    "disembark": 2,
+    "vehicleReload": 3
   },
   "fire": {
     "apCost": {

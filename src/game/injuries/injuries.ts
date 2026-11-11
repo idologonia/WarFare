@@ -37,11 +37,16 @@ export function pickBodyPart(ctx: Ctx, lowCover: boolean): BodyPart {
   );
 }
 
-function armorFor(u: Unit, part: BodyPart): ArmorPiece | null {
-  for (const a of [u.inventory.helmet, u.inventory.armor]) {
+/**
+ * Яка броня прийняла влучання: перевіряються всі елементи, що покривають частину тіла
+ * (основні й додаткові); кожен — з імовірністю свого покриття.
+ */
+function armorRoll(ctx: Ctx, u: Unit, part: BodyPart): ArmorPiece | null {
+  const pieces = [u.inventory.helmet, u.inventory.armor, ...(u.inventory.extraArmor ?? [])];
+  for (const a of pieces) {
     if (!a || a.durability <= 0) continue;
-    const d = itemDef<ArmorDefinition>(a.defId);
-    if (d.covers[part]) return a;
+    const c = itemDef<ArmorDefinition>(a.defId).covers[part] ?? 0;
+    if (c > 0 && ctx.rng.next() < c) return a;
   }
   return null;
 }
@@ -69,16 +74,14 @@ export function applyHit(
   const part = opts.part ?? pickBodyPart(ctx, !!opts.lowCover);
   let dmg = baseDamage * (1 + (ctx.rng.next() * 2 - 1) * R.variance);
   let armorStopped = false;
-  const armor = armorFor(target, part);
+  const armor = armorRoll(ctx, target, part);
   if (armor) {
     const d = itemDef<ArmorDefinition>(armor.defId);
-    if (ctx.rng.next() < (d.covers[part] ?? 0)) {
-      if (d.protection >= penetration) {
-        dmg *= R.armorStopFactor;
-        armorStopped = true;
-      } else dmg *= R.armorReduceFactor;
-      armor.durability = Math.max(0, armor.durability - R.armorWearPerHit * (kind === 'shrapnel' ? 0.5 : 1));
-    }
+    if (d.protection >= penetration) {
+      dmg *= R.armorStopFactor;
+      armorStopped = true;
+    } else dmg *= R.armorReduceFactor;
+    armor.durability = Math.max(0, armor.durability - R.armorWearPerHit * (kind === 'shrapnel' ? 0.5 : 1));
   }
   dmg = Math.max(1, Math.round(dmg * (part === 'head' ? 1.4 : isLimb(part) ? 0.8 : 1)));
 

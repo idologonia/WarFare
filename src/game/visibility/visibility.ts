@@ -3,8 +3,9 @@ import { content } from '@/content';
 import { groundHeight, objAt } from '@/game/maps/map';
 import { visionRange } from '@/game/units/derived';
 import { isActive, onField, other, type Ctx, type MissionState } from '@/game/simulation/state';
-import type { SideId, Stance, Unit } from '@/game/types';
-import { cellCenter, trace, type Point } from './los';
+import type { SideId, Stance, Unit, VehicleState } from '@/game/types';
+import { cellCenter, losIgnore, trace, type Point } from './los';
+import { crew, crewProxy, vehicleCenter, vehicles } from '@/game/vehicles';
 
 export function eyePoint(s: MissionState, cell: Cell, stance: Stance): Point {
   return cellCenter(cell, groundHeight(s.map, cell) + content().rules.vision.eyeHeight[stance]);
@@ -64,10 +65,49 @@ export const canSee = (s: MissionState, observer: Unit, target: Unit): SightResu
  * Оновлення знань сторони про противника. Якщо один союзник виявив противника — знають усі.
  * Після втрати контакту лишається остання відома позиція.
  */
+/** Спостерігачі сторони: бійці на полі й екіпажі техніки (з власною машиною, прозорою для огляду). */
+export function observersOf(s: MissionState, side: SideId): { u: Unit; vehicle?: string }[] {
+  const out: { u: Unit; vehicle?: string }[] = s.units.filter((u) => u.side === side && isActive(u)).map((u) => ({ u }));
+  for (const v of vehicles(s)) {
+    if (v.side !== side || v.destroyed) continue;
+    const c = crew(s, v).find((x) => x.status === 'active');
+    if (c) out.push({ u: crewProxy(s, v, c), vehicle: v.id });
+  }
+  return out;
+}
+
+function seeAs(s: MissionState, o: { u: Unit; vehicle?: string }, target: Unit): SightResult {
+  if (o.vehicle) losIgnore.ids.add(o.vehicle);
+  try {
+    return canSee(s, o.u, target);
+  } finally {
+    if (o.vehicle) losIgnore.ids.delete(o.vehicle);
+  }
+}
+
+/** Чи бачить сторона техніку (пряма видимість хоча б однієї клітинки корпусу). */
+export function vehicleSeenBy(s: MissionState, side: SideId, v: VehicleState): boolean {
+  if (s.revealAll || v.side === side) return true;
+  const center = vehicleCenter(s, v, 0.5);
+  for (const o of observersOf(s, side)) {
+    const range = visionRange(s, o.u) + 3;
+    if (Math.hypot(center.x - o.u.pos!.x - 0.5, center.y - o.u.pos!.y - 0.5) > range) continue;
+    losIgnore.ids.add(v.id);
+    if (o.vehicle) losIgnore.ids.add(o.vehicle);
+    try {
+      if (!trace(s.map, eyePoint(s, o.u.pos!, o.u.stance), center, { skipStart: o.u.pos! }).blocked) return true;
+    } finally {
+      losIgnore.ids.delete(v.id);
+      if (o.vehicle) losIgnore.ids.delete(o.vehicle);
+    }
+  }
+  return false;
+}
+
 export function updateContacts(ctx: Ctx): void {
   const { s } = ctx;
   for (const side of ['blue', 'red'] as SideId[]) {
-    const observers = s.units.filter((u) => u.side === side && isActive(u));
+    const observers = observersOf(s, side);
     const known = s.contacts[side];
     for (const target of s.units) {
       if (target.side === side) continue;
@@ -78,7 +118,7 @@ export function updateContacts(ctx: Ctx): void {
       let seen = false;
       let identified = false;
       for (const o of observers) {
-        const r = canSee(s, o, target);
+        const r = seeAs(s, o, target);
         if (r.seen) {
           seen = true;
           if (r.identified) identified = true;

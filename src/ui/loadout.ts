@@ -1,10 +1,10 @@
 import { content, itemDef } from '@/content';
-import { equipWeapon, grenadeTypes, helmetChoice, setGrenadeType, setHelmetMounts, type HelmetMountChoice } from '@/game/equipment/loadout';
+import { EXTRA_ARMOR, equipWeapon, grenadeTypes, helmetChoice, setExtraArmor, setGrenadeType, setHelmetMounts, type HelmetMountChoice } from '@/game/equipment/loadout';
 import { modNames, validateMods } from '@/game/equipment/mods';
 import { countItems, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
 import { freeWeight } from '@/game/units/derived';
-import type { Unit, WeaponDefinition } from '@/game/types';
+import type { ArmorDefinition, Unit, WeaponDefinition } from '@/game/types';
 import { btn, h, modal } from './dom';
 
 export function loadoutSummary(u: Unit): HTMLElement {
@@ -69,6 +69,18 @@ export function loadoutModal(s: MissionState, u: Unit, onChange: () => void): HT
       setHelmetMounts(s, u, mountSel.value as HelmetMountChoice);
       onChange();
     });
+    const extraBox = h('div', { class: 'col' });
+    const have = new Set((u.inventory.extraArmor ?? []).map((a) => a.defId));
+    for (const id of EXTRA_ARMOR) {
+      const d = itemDef<ArmorDefinition>(id);
+      const cb = h('input', { type: 'checkbox', checked: have.has(id), disabled: !!d.requiresCarrier && !u.inventory.armor });
+      cb.addEventListener('change', () => {
+        const next = EXTRA_ARMOR.filter((x) => (x === id ? cb.checked : have.has(x)));
+        setExtraArmor(s, u, next);
+        onChange();
+      });
+      extraBox.append(h('label', { class: 'row', style: 'gap:6px' }, cb, h('span', {}, d.name), h('span', { class: 'muted', style: 'font-size:0.85em' }, `+${d.weight} кг${d.requiresCarrier ? ' · до бронежилета' : ''}`)));
+    }
     const nadeSel = h('select', {});
     for (const g of grenadeTypes()) nadeSel.append(h('option', { value: g.id, selected: g.id === curNade }, `${g.name} · радіус ${g.radius} кл.`));
     nadeSel.addEventListener('change', () => {
@@ -81,6 +93,7 @@ export function loadoutModal(s: MissionState, u: Unit, onChange: () => void): HT
       h('div', { class: 'field' }, h('label', {}, 'Магазини'), magSel),
       hasNades ? h('div', { class: 'field' }, h('label', {}, 'Осколкові гранати'), nadeSel) : null,
       h('div', { class: 'field' }, h('label', {}, 'На каску'), mountSel),
+      h('div', { class: 'field' }, h('label', {}, 'Додатковий захист'), extraBox),
       errors.length ? h('div', { class: 'neg' }, errors.join('; ')) : null,
       h(
         'div',

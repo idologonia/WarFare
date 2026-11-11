@@ -868,6 +868,138 @@
    "mount": "nvg",
    "nightFactor": 2.0,
    "nightHitPenalty": 5
+  },
+  {
+   "id": "neck_guard",
+   "kind": "armor",
+   "slot": "extra",
+   "name": "Захист шиї",
+   "weight": 0.6,
+   "size": [
+    2,
+    1
+   ],
+   "covers": {
+    "head": 0.15
+   },
+   "protection": 2,
+   "durability": 40,
+   "requiresCarrier": true
+  },
+  {
+   "id": "groin_guard",
+   "kind": "armor",
+   "slot": "extra",
+   "name": "Захист паху",
+   "weight": 0.7,
+   "size": [
+    2,
+    1
+   ],
+   "covers": {
+    "leftLeg": 0.12,
+    "rightLeg": 0.12
+   },
+   "protection": 2,
+   "durability": 40,
+   "requiresCarrier": true
+  },
+  {
+   "id": "shoulder_guards",
+   "kind": "armor",
+   "slot": "extra",
+   "name": "Наплічники",
+   "weight": 1.2,
+   "size": [
+    2,
+    2
+   ],
+   "covers": {
+    "leftArm": 0.35,
+    "rightArm": 0.35
+   },
+   "protection": 2,
+   "durability": 50,
+   "requiresCarrier": true
+  },
+  {
+   "id": "leg_guards",
+   "kind": "armor",
+   "slot": "extra",
+   "name": "Захист ніг",
+   "weight": 1.8,
+   "size": [
+    2,
+    2
+   ],
+   "covers": {
+    "leftLeg": 0.35,
+    "rightLeg": 0.35
+   },
+   "protection": 2,
+   "durability": 50
+  },
+  {
+   "id": "side_plates",
+   "kind": "armor",
+   "slot": "extra",
+   "name": "Бокові плити",
+   "weight": 1.6,
+   "size": [
+    2,
+    1
+   ],
+   "covers": {
+    "torso": 0.15
+   },
+   "protection": 4,
+   "durability": 60,
+   "requiresCarrier": true
+  },
+  {
+   "id": "hmg",
+   "kind": "weapon",
+   "category": "lmg",
+   "name": "Великокаліберний кулемет",
+   "weight": 38,
+   "size": [
+    6,
+    2
+   ],
+   "caliber": "hmg",
+   "magazines": [
+    "belt_hmg_100"
+   ],
+   "accuracy": -2,
+   "damage": 45,
+   "penetration": 6,
+   "range": 22,
+   "burst": 4,
+   "cqb": -10,
+   "modes": [
+    "snap",
+    "burst"
+   ],
+   "apMod": {
+    "snap": 1,
+    "burst": 1
+   },
+   "rail": false,
+   "mods": [],
+   "recoil": 2,
+   "suppression": 3.5
+  },
+  {
+   "id": "belt_hmg_100",
+   "kind": "magazine",
+   "name": "Стрічка ВКК (100)",
+   "weight": 12,
+   "size": [
+    3,
+    2
+   ],
+   "caliber": "hmg",
+   "capacity": 100
   }
  ]
 }

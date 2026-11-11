@@ -3,7 +3,7 @@ import { cellAt, groundHeight } from '@/game/maps/map';
 import type { MissionState, SimEvent } from '@/game/simulation/state';
 import { sideSees } from '@/game/visibility/visibility';
 import type { Point } from '@/game/visibility/los';
-import type { SideId, Unit } from '@/game/types';
+import type { SideId, Unit, VehicleState } from '@/game/types';
 import {
   ArcRotateCamera,
   Camera,
@@ -27,6 +27,9 @@ import { Animator, ease, lerp } from './anim';
 import { GeoBuilder, hash2, hex, type RGB } from './geo';
 import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
+import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
+import { vehicleDef } from '@/content';
+import { vehicleSeenBy } from '@/game/visibility/visibility';
 import { camoMaterial } from './camo';
 
 export interface GraphicsSettings {
@@ -236,6 +239,8 @@ export class Renderer {
     for (const u of this.units.values()) u.root.dispose();
     this.units.clear();
     this.beams.clear();
+    for (const m of this.vehicleModels.values()) m.root.dispose();
+    this.vehicleModels.clear();
     this.applyEnvironment(state);
     this.map?.dispose();
     for (const o of this.overlays.values()) o.dispose();
@@ -268,6 +273,7 @@ export class Renderer {
   /** Розміщення моделей за станом (без анімації), видимість противника. */
   sync(): void {
     const s = this.state;
+    this.syncVehicles();
     for (const u of s.units) {
       const m = this.ensureUnit(u);
       const visible = u.pos !== null && (u.side === this.viewSide || sideSees(s, this.viewSide, u.id) || u.status === 'dead') && u.pos.z <= this.viewLevel;
@@ -471,9 +477,89 @@ export class Renderer {
   // ---------- Вибір ----------
 
   pickUnit(x: number, y: number): string | null {
-    const r = this.scene.pick(x, y, (m) => !!m.metadata?.hitbox && m.isEnabled());
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.hitbox && !m.metadata.vehicle && m.isEnabled());
     return r?.hit ? (r.pickedMesh!.metadata.unitId as string) : null;
   }
+
+  pickVehicle(x: number, y: number): string | null {
+    const r = this.scene.pick(x, y, (m) => !!m.metadata?.vehicle && m.isEnabled());
+    return r?.hit ? (r.pickedMesh!.metadata.vehicleId as string) : null;
+  }
+
+  // ---------- Техніка ----------
+
+  private vehicleModels = new Map<string, VehicleModel>();
+  private wreckMat: StandardMaterial | null = null;
+
+  private ensureVehicle(v: VehicleState): VehicleModel {
+    let m = this.vehicleModels.get(v.id);
+    if (!m) {
+      m = buildVehicleModel(this.scene, this.unitMats[v.side], v);
+      for (const mesh of m.meshes) {
+        mesh.receiveShadows = true;
+        this.shadowGen?.addShadowCaster(mesh);
+      }
+      this.vehicleModels.set(v.id, m);
+    }
+    return m;
+  }
+
+  private placeVehicle(v: VehicleState, m: VehicleModel, x = v.x, y = v.y): void {
+    const [w, h] = vehicleDef(v.defId).footprint;
+    m.root.position = world(x + w / 2, y + h / 2, groundHeight(this.state.map, { x, y, z: 0 }));
+    m.root.rotation.y = facingAngle(v.facing);
+  }
+
+  syncVehicles(): void {
+    const s = this.state;
+    for (const v of s.vehicles ?? []) {
+      const m = this.ensureVehicle(v);
+      this.placeVehicle(v, m);
+      m.root.setEnabled(this.viewLevel >= 0 && (v.destroyed || vehicleSeenBy(s, this.viewSide, v)));
+      if (v.destroyed) {
+        this.wreckMat ??= (() => {
+          const w = makeMaterial(this.scene, 'wreck');
+          w.diffuseColor = new Color3(0.12, 0.11, 0.1);
+          return w;
+        })();
+        for (const mesh of m.meshes) mesh.material = this.wreckMat;
+      }
+    }
+  }
+
+  vehicleScreenPos(id: string): { x: number; y: number } | null {
+    const v = this.state.vehicles?.find((x) => x.id === id);
+    if (!v) return null;
+    return this.project({ x: v.x + 1, y: v.y + 1, z: 0 }, 1.2);
+  }
+
+  private async animateVehicle(id: string, path: Cell[]): Promise<void> {
+    const v = this.state.vehicles?.find((x) => x.id === id);
+    const m = v && this.vehicleModels.get(id);
+    if (!v || !m || path.length < 2) return;
+    const [w, h] = vehicleDef(v.defId).footprint;
+    const pos = (c: Cell) => world(c.x + w / 2, c.y + h / 2, groundHeight(this.state.map, c));
+    for (let i = 1; i < path.length; i++) {
+      const a = pos(path[i - 1]);
+      const b = pos(path[i]);
+      const dx = path[i].x - path[i - 1].x;
+      const dy = path[i].y - path[i - 1].y;
+      m.root.rotation.y = facingAngle(dx > 0 ? 1 : dx < 0 ? 3 : dy > 0 ? 2 : 0);
+      await this.anim.tween(140, (t) => (m.root.position = Vector3.Lerp(a, b, t)));
+    }
+  }
+
+  private async animateVehicleHit(id: string, penetrated: boolean): Promise<void> {
+    const v = this.state.vehicles?.find((x) => x.id === id);
+    if (!v) return;
+    const p = world(v.x + 1, v.y + 1, 0.6);
+    const spark = CreateSphere('spark', { diameter: penetrated ? 0.7 : 0.3, segments: 4 }, this.scene);
+    spark.material = this.fxMat;
+    spark.position = p;
+    await this.anim.tween(140, (t) => spark.scaling.setAll(1 + t));
+    spark.dispose();
+  }
+
 
   pickCell(x: number, y: number): Cell | null {
     const ray = this.scene.createPickingRay(x, y, Matrix.Identity(), this.camera);
@@ -535,6 +621,13 @@ export class Renderer {
           break;
         case 'smoke':
           this.refreshSmoke();
+          break;
+        case 'vehicle':
+          if (e.path && this.vehicleModels.get(e.vehicleId)?.root.isEnabled()) await this.animateVehicle(e.vehicleId, e.path);
+          this.syncVehicles();
+          break;
+        case 'vehicleHit':
+          await this.animateVehicleHit(e.vehicleId, e.penetrated);
           break;
         case 'explosion':
           await this.animateExplosion(e.at, e.radius);

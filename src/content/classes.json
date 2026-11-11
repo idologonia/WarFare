@@ -251,9 +251,28 @@
   {
    "id": "driver",
    "name": "Водій",
-   "planned": true,
-   "statMods": {},
-   "kit": null
+   "statMods": {
+    "reaction": 4
+   },
+   "kit": {
+    "primary": "ak74",
+    "armor": "rig_ballistic",
+    "helmet": "helmet_basic",
+    "rig": "belt_ranger",
+    "backpack": null,
+    "pouches": [
+     "mag_ak545_30",
+     "mag_ak545_30"
+    ],
+    "belt": [
+     "med_tourniquet",
+     "med_bandage"
+    ],
+    "backpackItems": [],
+    "helmetMounts": [
+     "flashlight"
+    ]
+   }
   },
   {
    "id": "droneOperator",

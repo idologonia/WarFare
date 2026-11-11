@@ -191,6 +191,12 @@ export class ScenarioEditor {
             if (v > 0) st.squad.push({ classId: c.id, count: v });
           }, 0, 12),
         ),
+        h('b', {}, 'Техніка (з екіпажем: водій і навідник)'),
+        ...[...db.vehicles.values()].map((vd) =>
+          number(vd.name, () => (st.vehicles ?? []).filter((x) => x === vd.id).length, (n) => {
+            st.vehicles = [...(st.vehicles ?? []).filter((x) => x !== vd.id), ...Array(n).fill(vd.id)];
+          }, 0, 3),
+        ),
         h('b', {}, 'Спорядження'),
         h(
           'div',
@@ -199,6 +205,7 @@ export class ScenarioEditor {
           number('Додаткові гранати', () => lo.extraGrenades, (v) => (lo.extraGrenades = v), 0, 4),
         ),
         check('Без бронежилетів і касок', () => lo.noArmor, (v) => (lo.noArmor = v)),
+        check('Повний додатковий захист (шия, пах, плечі, ноги, боки)', () => !!lo.extraArmor, (v) => (lo.extraArmor = v)),
         select<NonNullable<typeof lo.helmetMount>>('На каску', [['none', 'Нічого'], ['flashlight', 'Ліхтар'], ['nvg_mono', 'ПНБ моно + ліхтар'], ['nvg_bino', 'ПНБ біно + ліхтар']], () => lo.helmetMount ?? 'flashlight', (v) => (lo.helmetMount = v)),
       );
     };

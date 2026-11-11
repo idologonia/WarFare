@@ -1,8 +1,10 @@
 import { Rng } from '@/core/rng';
 import { cellKey, sameCell, toTenths, type Cell } from '@/core/grid';
 import { GAME_VERSION, SCHEMA_VERSION } from '@/core/version';
-import { content, itemDef } from '@/content';
+import { content, itemDef, vehicleDef } from '@/content';
 import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
+import { adjacentToVehicle, canPlace, crewProxy, embark, exitCells, leaveSeat, moveVehicle, spawnVehicle, vehicleById, vehiclePath, vehicleReachable } from '@/game/vehicles';
+import { losIgnore } from '@/game/visibility/los';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
@@ -14,12 +16,14 @@ import { fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/movement';
 import { canSee, updateContacts } from '@/game/visibility/visibility';
 import { computeResult } from '@/game/scenarios/result';
-import type { ControllerKind, MagazineInstance, MedicalDefinition, MoveMode, SideId, StackItem, Unit } from '@/game/types';
+import { EXTRA_ARMOR } from '@/game/equipment/loadout';
+import type { ArmorDefinition, ControllerKind, MagazineInstance, MedicalDefinition, MoveMode, SideId, StackItem, Unit } from '@/game/types';
 import type { Command, CommandResult } from './commands';
 import {
   activeUnitAt,
   float,
   isActive,
+  isAlive,
   newId,
   other,
   sideUnits,
@@ -79,6 +83,7 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
       }
   }
   const ctx: Ctx = { s, rng, ev: [] };
+  for (const side of ['blue', 'red'] as SideId[]) spawnScenarioVehicles(ctx, side, idGen);
   for (const side of ['blue', 'red'] as SideId[]) {
     if (!scenario.sides[side].manualDeploy || s.controllers[side] === 'ai') autoDeploy(ctx, side);
   }
@@ -89,9 +94,12 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
 /** Спорядження сторони за сценарієм: запасні магазини, гранати, броня. */
 function applyLoadout(u: Unit, l: NonNullable<MissionState['scenario']['sides']['blue']['loadout']>, id: (p: string) => string): void {
   const inv = u.inventory;
+  if (l.extraArmor && !l.noArmor)
+    inv.extraArmor = EXTRA_ARMOR.map((x) => ({ id: id('a'), defId: x, durability: itemDef<ArmorDefinition>(x).durability }));
   if (l.noArmor) {
     inv.armor = null;
     inv.helmet = null;
+    inv.extraArmor = [];
     inv.pouches = inv.pouches.slice(0, pouchCapacity(inv));
   }
   const w = primaryDef(u);
@@ -118,12 +126,35 @@ function applyLoadout(u: Unit, l: NonNullable<MissionState['scenario']['sides'][
   }
 }
 
+/** Техніка сценарію: ставиться в зоні розгортання, екіпаж (водій і навідник) створюється й сідає. */
+function spawnScenarioVehicles(ctx: Ctx, side: SideId, idGen: (p: string) => string): void {
+  const s = ctx.s;
+  const setup = s.scenario.sides[side];
+  for (const defId of setup.vehicles ?? []) {
+    const [x0, y0, x1, y1] = setup.deployZone;
+    const spots: [number, number][] = [];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (canPlace(s, defId, x, y)) spots.push([x, y]);
+    if (!spots.length) continue;
+    const [x, y] = ctx.rng.pick(spots);
+    const v = spawnVehicle(s, side, defId, x, y, idGen);
+    const bonus = s.controllers[side] === 'ai' ? DIFF_BONUS[s.scenario.difficulty] : 0;
+    const driver = generateUnit(side, 'driver', ctx.rng, idGen, { statBonus: bonus, aiStyle: setup.aiStyle });
+    s.units.push(driver);
+    embark(v, driver, 'driver');
+    if (v.weapon) {
+      const gunner = generateUnit(side, 'rifleman', ctx.rng, idGen, { statBonus: bonus, aiStyle: setup.aiStyle });
+      s.units.push(gunner);
+      embark(v, gunner, 'gunner');
+    }
+  }
+}
+
 function autoDeploy(ctx: Ctx, side: SideId): void {
   const { s, rng } = ctx;
   const zone = cellsInZone(s.map, s.scenario.sides[side].deployZone);
   for (const u of sideUnits(s, side)) {
-    if (u.pos || u.status !== 'active') continue;
-    const free = zone.filter((c) => !activeUnitAt(s, c));
+    if (u.pos || u.inVehicle || u.status !== 'active') continue;
+    const free = zone.filter((c) => !activeUnitAt(s, c) && isStandable(s.map, c));
     if (!free.length) throw new Error('Зона розгортання переповнена');
     u.pos = { ...rng.pick(free) };
     ctx.ev.push({ t: 'deployed', unitId: u.id, cell: u.pos });
@@ -200,6 +231,22 @@ export class Mission {
     }
     if (cmd.type === 'deploy' || cmd.type === 'autoDeploy' || cmd.type === 'startBattle') return 'Бій уже триває';
 
+    const R0 = content().rules;
+    if (cmd.type === 'vehicleMove' || cmd.type === 'vehicleFire' || cmd.type === 'vehicleReload') return this.vehicleCommand(ctx, cmd);
+    if (cmd.type === 'disembark') {
+      const u0 = unitById(s, cmd.unitId);
+      if (u0.side !== s.turn.side) return 'Зараз хід іншої сторони';
+      const v = u0.inVehicle ? vehicleById(s, u0.inVehicle) : undefined;
+      if (!v || u0.status !== 'active') return 'Боєць не в техніці';
+      if (!exitCells(s, v).some((c) => sameCell(c, cmd.cell))) return 'Висадка можлива лише в сусідню вільну клітинку';
+      if (u0.ap < toTenths(R0.actions.disembark)) return 'Недостатньо AP';
+      u0.ap -= toTenths(R0.actions.disembark);
+      leaveSeat(v, u0);
+      u0.pos = { ...cmd.cell };
+      ctx.ev.push({ t: 'deployed', unitId: u0.id, cell: u0.pos });
+      ctx.ev.push({ t: 'vehicle', vehicleId: v.id });
+      return null;
+    }
     const u = unitById(s, cmd.unitId);
     if (u.side !== s.turn.side) return 'Зараз хід іншої сторони';
     if (!isActive(u)) return 'Боєць не може діяти';
@@ -213,6 +260,20 @@ export class Mission {
     };
 
     switch (cmd.type) {
+      case 'embark': {
+        const v = vehicleById(s, cmd.vehicleId);
+        if (!v || v.destroyed) return 'Техніку не знайдено';
+        if (v.side !== u.side) return 'Це техніка противника';
+        if (u.carrying) return 'Спершу покладіть пораненого';
+        if (!adjacentToVehicle(v, u.pos!)) return 'Підійдіть упритул до техніки';
+        if (u.ap < toTenths(R.actions.embark)) return 'Недостатньо AP';
+        const err = embark(v, u, cmd.seat);
+        if (err) return err;
+        u.ap -= toTenths(R.actions.embark);
+        ctx.ev.push({ t: 'evacuated', unitId: u.id });
+        ctx.ev.push({ t: 'vehicle', vehicleId: v.id });
+        return null;
+      }
       case 'move':
         return this.move(ctx, u, cmd.to, cmd.mode);
 
@@ -418,6 +479,60 @@ export class Mission {
     return 'Невідома команда';
   }
 
+  /** Команди техніки: рух (AP водія), вогонь і перезаряджання (AP навідника). */
+  private vehicleCommand(ctx: Ctx, cmd: Extract<Command, { type: 'vehicleMove' | 'vehicleFire' | 'vehicleReload' }>): string | null {
+    const s = this.state;
+    const R = content().rules;
+    const v = vehicleById(s, cmd.vehicleId);
+    if (!v || v.destroyed) return 'Техніку не знайдено або знищено';
+    if (v.side !== s.turn.side) return 'Зараз хід іншої сторони';
+    if (cmd.type === 'vehicleMove') {
+      const d = v.driver ? unitById(s, v.driver) : null;
+      if (!d || d.status !== 'active') return 'Немає водія';
+      if (d.panicked) return 'Водій у паніці';
+      if (v.hp.engine <= 0) return 'Двигун уражено — техніка не рухається';
+      if (v.hp.mobility <= 0) return 'Ходову уражено — техніка не рухається';
+      const nodes = vehicleReachable(s, v, d.ap);
+      const path = vehiclePath(nodes, cmd.x, cmd.y);
+      if (!path) return 'Недосяжно з поточними AP водія';
+      d.ap -= nodes.get(`${cmd.x},${cmd.y}`)!.cost;
+      moveVehicle(ctx, v, path);
+      return null;
+    }
+    const g = v.gunner ? unitById(s, v.gunner) : null;
+    if (!g || g.status !== 'active') return 'Немає навідника';
+    if (g.panicked) return 'Навідник у паніці';
+    if (!v.weapon || v.hp.weapon <= 0) return 'Бортова зброя виведена з ладу';
+    if (cmd.type === 'vehicleReload') {
+      if (v.ammoStock <= 0) return 'Боєкомплект вичерпано';
+      if (g.ap < toTenths(R.actions.vehicleReload)) return 'Недостатньо AP';
+      g.ap -= toTenths(R.actions.vehicleReload);
+      v.ammoStock--;
+      v.weapon.magazine = createItem(vehicleDef(v.defId).weaponAmmo!, (p) => newId(s, p)) as MagazineInstance;
+      ctx.ev.push({ t: 'vehicle', vehicleId: v.id });
+      return null;
+    }
+    if (!v.weapon.magazine || v.weapon.magazine.rounds <= 0) return 'Стрічка порожня — перезарядіть';
+    const proxy = crewProxy(s, v, g);
+    proxy.inventory = { ...g.inventory, primary: v.weapon };
+    const wd = primaryDef(proxy)!;
+    if (!wd.modes.includes(cmd.mode)) return 'Цей режим недоступний';
+    const t = cmd.target.unitId ? unitById(s, cmd.target.unitId) : null;
+    if (t && t.side !== v.side && !s.revealAll && !s.contacts[v.side][t.id]?.visible) return 'Ціль не видно';
+    const cost = fireApCost(proxy, cmd.mode);
+    if (g.ap < cost) return 'Недостатньо AP навідника';
+    g.ap -= cost;
+    losIgnore.ids.add(v.id);
+    try {
+      resolveFire(ctx, proxy, cmd.target, cmd.mode);
+    } finally {
+      losIgnore.ids.delete(v.id);
+    }
+    g.xp = proxy.xp;
+    // Подія пострілу — від імені навідника; рендерер покаже її з техніки.
+    return null;
+  }
+
   private evacuateUnit(ctx: Ctx, t: Unit): void {
     const s = this.state;
     const wasDead = t.status === 'dead';
@@ -528,7 +643,7 @@ export class Mission {
     const casualtiesOnField = sideUnits(s, side).filter((x) => (x.status === 'dead' || x.status === 'down') && (x.pos || x.carriedBy)).length;
     for (const u of sideUnits(s, side)) {
       tickInjuries(ctx, u);
-      if (!isActive(u)) {
+      if (!isAlive(u)) {
         u.ap = 0;
         continue;
       }
@@ -548,7 +663,7 @@ export class Mission {
         u.panicked = true;
         u.ap = 0;
         u.morale = Math.min(u.stats.morale, u.morale + R.morale.panicRecovery);
-        if (!u.carrying) u.stance = 'prone';
+        if (!u.carrying && u.pos) u.stance = 'prone';
         ctx.ev.push({ t: 'panic', unitId: u.id });
         ctx.ev.push({ t: 'pose', unitId: u.id });
         float(ctx, u.id, 'Паніка!', 'bad');
@@ -559,7 +674,7 @@ export class Mission {
 
   private endTurn(ctx: Ctx): void {
     const s = this.state;
-    for (const u of sideUnits(s, s.turn.side)) if (isActive(u)) u.ap = 0;
+    for (const u of sideUnits(s, s.turn.side)) if (isAlive(u)) u.ap = 0;
     const next = other(s.turn.side);
     if (next === 'blue') s.turn.turn++;
     const max = s.scenario.maxTurns;
@@ -573,7 +688,7 @@ export class Mission {
   private checkVictory(ctx: Ctx): void {
     const s = this.state;
     if (s.turn.phase !== 'battle') return;
-    const alive = (side: SideId) => sideUnits(s, side).some((u) => isActive(u) || u.status === 'reserve');
+    const alive = (side: SideId) => sideUnits(s, side).some((u) => isAlive(u) || u.status === 'reserve');
     const b = alive('blue');
     const r = alive('red');
     if (b && r) return;
@@ -583,7 +698,7 @@ export class Mission {
   private finish(ctx: Ctx, winner: SideId | null, reason: 'eliminated' | 'withdrawal' | 'turnLimit'): void {
     const s = this.state;
     s.turn.phase = 'ended';
-    for (const u of s.units) if (isActive(u) || u.status === 'evacuated') u.xp += content().rules.xp.survive;
+    for (const u of s.units) if (isAlive(u) || u.status === 'evacuated') u.xp += content().rules.xp.survive;
     s.result = computeResult(s, winner, reason);
     ctx.ev.push({ t: 'missionEnd', result: s.result });
   }

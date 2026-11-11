@@ -170,6 +170,10 @@ export interface ArmorDefinition extends ItemDefinitionBase {
   covers: Partial<Record<BodyPart, number>>;
   protection: number;
   durability: number;
+  /** Додатковий елемент захисту (шия, пах, плечі, ноги, боки). */
+  slot?: 'extra';
+  /** Кріпиться до плитоноски/РПС (без бронежилета не носиться). */
+  requiresCarrier?: boolean;
   /** Скільки підсумків під магазини дає (для плитоноски/РПС). */
   pouches?: number;
 }
@@ -250,6 +254,8 @@ export interface Inventory {
   belt: StackItem[];
   backpack: ItemInstance | null;
   backpackItems: BackpackEntry[];
+  /** Додатковий захист: шия, пах, плечі, ноги, боки. */
+  extraArmor?: ArmorPiece[];
   /** Кріплення на каску: ліхтар, ПНБ (у старих збереженнях може бути відсутнє). */
   helmetMounts?: ItemInstance[];
 }
@@ -344,6 +350,8 @@ export interface Unit {
   carriedBy: string | null;
   /** Ліхтар увімкнено (вночі видно далі, але й самого видно здалеку). */
   lightOn?: boolean;
+  /** Боєць у техніці (id машини); pos при цьому null. */
+  inVehicle?: string;
   aiStyle?: AiStyle;
   stats_mission: UnitMissionStats;
   /** Хід, на якому має з'явитися підкріплення (для резерву). */
@@ -370,6 +378,10 @@ export interface MapCell {
   elevation: number;
   /** rot — поворот моделі об'єкта на 90° (лише вигляд). */
   object: { defId: string; hp: number; rot?: number } | null;
+  /** Техніка, що стоїть у клітинці (займає кілька клітинок). */
+  vehicle?: string;
+  /** Висота корпусу техніки в цій клітинці (для огляду/вогню). */
+  vehicleHeight?: number;
   /** Димова завіса: скільки ходів ще тримається. */
   smoke?: number;
   /** Сходи з цього поверху на наступний. */
@@ -418,6 +430,8 @@ export interface SideSetup {
   aiStyle?: AiStyle;
   /** Зміни стандартного комплекту класу для цього сценарію. */
   loadout?: SideLoadout;
+  /** Техніка сторони (з екіпажем: водій і навідник). */
+  vehicles?: string[];
 }
 
 export interface SideLoadout {
@@ -427,6 +441,8 @@ export interface SideLoadout {
   extraGrenades: number;
   /** Без бронежилетів і касок. */
   noArmor: boolean;
+  /** Повний комплект додаткового захисту (шия, пах, плечі, ноги, боки). */
+  extraArmor?: boolean;
   /** Кріплення на каску для всієї сторони. */
   helmetMount?: 'none' | 'flashlight' | 'nvg_mono' | 'nvg_bino';
 }
@@ -485,7 +501,49 @@ export interface MissionResult {
       roundsUsed: number;
       grenades: number;
       medsUsed: number;
+      /** Знищена техніка цієї сторони. */
+      vehiclesLost?: number;
     }
   >;
   units: { id: string; name: string; side: SideId; status: UnitStatus; stats: UnitMissionStats; health: number; injuries: number }[];
+}
+
+// ---------- Техніка ----------
+
+export type VehicleComponent = 'hull' | 'engine' | 'mobility' | 'weapon';
+
+export interface VehicleDefinition {
+  id: string;
+  name: string;
+  kind: 'tracked' | 'wheeled';
+  footprint: [number, number];
+  armor: number;
+  /** Висота корпусу в частках поверху (для огляду й укриття). */
+  height: number;
+  /** AP водія за клітинку руху. */
+  moveCost: number;
+  weapon?: string;
+  weaponAmmo?: string;
+  ammoStock: number;
+  passengers: number;
+  components: Record<VehicleComponent, number>;
+  colors: Record<string, string>;
+}
+
+export interface VehicleState {
+  id: string;
+  defId: string;
+  side: SideId;
+  /** Лівий верхній кут площі техніки (поверх 0). */
+  x: number;
+  y: number;
+  /** Напрямок корпусу: 0 — північ, 1 — схід, 2 — південь, 3 — захід (вигляд). */
+  facing: number;
+  hp: Record<VehicleComponent, number>;
+  driver: string | null;
+  gunner: string | null;
+  passengers: string[];
+  weapon: WeaponInstance | null;
+  ammoStock: number;
+  destroyed: boolean;
 }
