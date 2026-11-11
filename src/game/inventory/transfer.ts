@@ -30,7 +30,7 @@ export function itemAt(inv: Inventory, ref: ItemRef): AnyItem | null {
   return inv.backpackItems[ref.index ?? -1]?.item ?? null;
 }
 
-function removeAt(inv: Inventory, ref: ItemRef): void {
+export function removeAt(inv: Inventory, ref: ItemRef): void {
   if (ref.area === 'primary') inv.primary = null;
   else if (ref.area === 'pouches') inv.pouches.splice(ref.index!, 1);
   else if (ref.area === 'belt') inv.belt.splice(ref.index!, 1);

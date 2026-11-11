@@ -21,6 +21,7 @@ import { openInventoryDnD } from './inventoryDnD';
 import { SandboxPanel } from './sandboxPanel';
 import { adjacentToVehicle, canMove, COMPONENT_NAMES, crew, crewProxy, exitCells, footprint, footprintAt, freeSeats, vehicleById, vehicleReachable, vehicles } from '@/game/vehicles';
 import { losIgnore } from '@/game/visibility/los';
+import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId } from '@/game/logistics';
 import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
 export type BattleMode = 'ai' | 'hotseat' | 'test';
@@ -696,14 +697,21 @@ export class Battle {
   private openInventory(otherId?: string): void {
     const u = this.selected();
     if (!u) return;
-    const other = otherId ? this.s.units.find((x) => x.id === otherId) : undefined;
+    const cache = otherId && isCacheId(otherId) ? cacheById(this.s, otherId) : undefined;
+    const ou = otherId && !cache ? this.s.units.find((x) => x.id === otherId) : undefined;
+    const other = cache ? cacheAsOwner(cache) : ou;
+    const otherKind = cache ? 'cache' : ou && ou.side === u.side && isActive(ou) ? 'ally' : ou ? 'loot' : undefined;
     const R = content().rules.actions;
     const canAct = this.isHumanTurn() && isActive(u);
     this.hud.append(
       openInventoryDnD({
         unit: u,
         other,
-        costNote: canAct ? `Перекладання свого — ${R.rearrange} AP, взяти з тіла — ${R.loot} AP за предмет.` : 'Зараз не ваш хід — лише перегляд.',
+        otherKind,
+        otherTitle: cache?.name,
+        costNote: canAct
+          ? `Перекладання свого — ${R.rearrange} AP; взяти з тіла чи складу, покласти на склад або передати бійцю (лише БК, медицина, гранати) — ${R.loot} AP за предмет.`
+          : 'Зараз не ваш хід — лише перегляд.',
         move: (from, to) => {
           if (!canAct) return 'Зараз не ваш хід';
           const res = this.m.dispatch({ type: 'moveItem', unitId: u.id, from, to });
@@ -1598,6 +1606,12 @@ export class Battle {
       { label: 'Медицина…', run: () => this.openMedical(), disabled: !u.pos },
       { label: 'Інвентар…', run: () => this.openInventory() },
       ...this.lootTargets(u).map((t) => ({ label: `Обшукати: ${t.callsign}${t.side !== u.side ? ' (противник)' : ''}`, disabled: !can, run: () => this.openInventory(t.id) })),
+      ...caches(this.s)
+        .filter((c) => cacheReachable(this.s, c, u))
+        .map((c) => ({ label: `${c.name} (${c.items.length})`, disabled: !can, run: () => this.openInventory(c.id) })),
+      ...this.s.units
+        .filter((t) => t !== u && t.side === u.side && isActive(t) && t.pos && u.pos && (adjacent(t.pos, u.pos) || sameCell(t.pos, u.pos)))
+        .map((t) => ({ label: `Передати: ${t.callsign}`, disabled: !can, run: () => this.openInventory(t.id) })),
     ];
     if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
     if (u.piloting && droneById(s, u.piloting) && !droneById(s, u.piloting)!.destroyed) other.push({ label: 'Керувати дроном', run: () => this.selectDrone(u.piloting!) });

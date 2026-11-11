@@ -1,83 +1,98 @@
 {
- "_comment": "Техніка: умовні ігрові характеристики. footprint — розмір у клітинках (2×2, як у X-COM). armor — захист корпусу (куля з пробиттям ≤ armor не проходить).",
- "vehicles": [
-  {
-   "id": "mtlb",
-   "name": "МТ-ЛБ",
-   "kind": "tracked",
-   "footprint": [
-    2,
-    2
-   ],
-   "armor": 4,
-   "height": 0.75,
-   "moveCost": 0.6,
-   "weapon": "pkm",
-   "weaponAmmo": "belt_pkm_100",
-   "ammoStock": 4,
-   "passengers": 8,
-   "components": {
-    "hull": 220,
-    "engine": 80,
-    "mobility": 90,
-    "weapon": 50
-   },
-   "colors": {
-    "blue": "#4f5c3a",
-    "red": "#6a5a3c"
-   }
-  },
-  {
-   "id": "m113",
-   "name": "М113",
-   "kind": "tracked",
-   "footprint": [
-    2,
-    2
-   ],
-   "armor": 4,
-   "height": 0.95,
-   "moveCost": 0.6,
-   "weapon": "hmg",
-   "weaponAmmo": "belt_hmg_100",
-   "ammoStock": 4,
-   "passengers": 9,
-   "components": {
-    "hull": 240,
-    "engine": 90,
-    "mobility": 90,
-    "weapon": 50
-   },
-   "colors": {
-    "blue": "#5a6447",
-    "red": "#73644a"
-   }
-  },
-  {
-   "id": "l200",
-   "name": "L200",
-   "kind": "wheeled",
-   "footprint": [
-    2,
-    2
-   ],
-   "armor": 1,
-   "height": 0.7,
-   "moveCost": 0.4,
-   "weapon": "pkm",
-   "weaponAmmo": "belt_pkm_100",
-   "ammoStock": 3,
-   "passengers": 3,
-   "components": {
-    "hull": 110,
-    "engine": 50,
-    "mobility": 50,
-    "weapon": 40
-   },
-   "colors": {
-    "blue": "#5d6a52",
-    "red": "#8a7a5a"
-   }
-  }
- ]
+  "_comment": "Техніка: умовні ігрові характеристики. footprint — розмір у клітинках (2×2, як у X-COM). armor — захист корпусу (куля з пробиттям ≤ armor не проходить).",
+  "vehicles": [
+    {
+      "id": "mtlb",
+      "name": "МТ-ЛБ",
+      "kind": "tracked",
+      "footprint": [
+        2,
+        2
+      ],
+      "armor": 4,
+      "height": 0.75,
+      "moveCost": 0.6,
+      "weapon": "pkm",
+      "weaponAmmo": "belt_pkm_100",
+      "ammoStock": 4,
+      "passengers": 8,
+      "components": {
+        "hull": 220,
+        "engine": 80,
+        "mobility": 90,
+        "weapon": 50
+      },
+      "colors": {
+        "blue": "#4f5c3a",
+        "red": "#6a5a3c"
+      },
+      "cargo": {
+        "mags": 5,
+        "meds": 6,
+        "grenades": 4
+      }
+    },
+    {
+      "id": "m113",
+      "name": "М113",
+      "kind": "tracked",
+      "footprint": [
+        2,
+        2
+      ],
+      "armor": 4,
+      "height": 0.95,
+      "moveCost": 0.6,
+      "weapon": "hmg",
+      "weaponAmmo": "belt_hmg_100",
+      "ammoStock": 4,
+      "passengers": 9,
+      "components": {
+        "hull": 240,
+        "engine": 90,
+        "mobility": 90,
+        "weapon": 50
+      },
+      "colors": {
+        "blue": "#5a6447",
+        "red": "#73644a"
+      },
+      "cargo": {
+        "mags": 5,
+        "meds": 6,
+        "grenades": 4
+      }
+    },
+    {
+      "id": "l200",
+      "name": "L200",
+      "kind": "wheeled",
+      "footprint": [
+        2,
+        2
+      ],
+      "armor": 1,
+      "height": 0.7,
+      "moveCost": 0.4,
+      "weapon": "pkm",
+      "weaponAmmo": "belt_pkm_100",
+      "ammoStock": 3,
+      "passengers": 3,
+      "components": {
+        "hull": 110,
+        "engine": 50,
+        "mobility": 50,
+        "weapon": 40
+      },
+      "colors": {
+        "blue": "#5d6a52",
+        "red": "#8a7a5a"
+      },
+      "cargo": {
+        "mags": 3,
+        "meds": 3,
+        "grenades": 2
+      }
+    }
+  ]
 }

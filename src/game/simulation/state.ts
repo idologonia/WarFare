@@ -1,3 +1,4 @@
+import type { SupplyCache } from '@/game/logistics';
 import type { Rng } from '@/core/rng';
 import { cellKey, sameCell, type Cell } from '@/core/grid';
 import type { Point } from '@/game/visibility/los';
@@ -39,6 +40,8 @@ export interface MissionState {
   vehicles?: VehicleState[];
   /** Дрони в повітрі. */
   drones?: DroneState[];
+  /** Склади постачання й вантаж техніки. */
+  supplies?: SupplyCache[];
 }
 
 /** Події симуляції для рендерингу/UI (не бойова стрічка: лише для анімацій і спливаючих підказок). */

@@ -7,7 +7,8 @@ import { adjacentToVehicle, canPlace, crewProxy, embark, exitCells, leaveSeat, m
 import { losIgnore } from '@/game/visibility/los';
 import { changeAltitude, destroyDrone, droneById, droneDrop, droneNoticedBy, dronePoint, flyDrone, fpvAttack, landDrone, launchDrone, shootDroneChance, tickDrones } from '@/game/drones';
 import { eyePoint } from '@/game/visibility/visibility';
-import { applyMove, validateMove } from '@/game/inventory/transfer';
+import { applyMove, itemAt, removeAt, validateMove } from '@/game/inventory/transfer';
+import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId, stockFor, TRANSFERABLE } from '@/game/logistics';
 import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
@@ -87,6 +88,7 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
   }
   const ctx: Ctx = { s, rng, ev: [] };
   for (const side of ['blue', 'red'] as SideId[]) spawnScenarioVehicles(ctx, side, idGen);
+  setupSupplies(s, idGen);
   for (const side of ['blue', 'red'] as SideId[]) {
     if (!scenario.sides[side].manualDeploy || s.controllers[side] === 'ai') autoDeploy(ctx, side);
   }
@@ -126,6 +128,30 @@ function applyLoadout(u: Unit, l: NonNullable<MissionState['scenario']['sides'][
   for (let i = 0; i < l.extraGrenades; i++) inv.belt.push(createItem('rgd5', id) as StackItem);
   if (l.helmetMount && inv.helmet) {
     inv.helmetMounts = l.helmetMount === 'none' ? [] : l.helmetMount === 'flashlight' ? [{ id: id('i'), defId: 'flashlight' }] : [{ id: id('i'), defId: l.helmetMount }, { id: id('i'), defId: 'flashlight' }];
+  }
+}
+
+/** Склади постачання сценарію та вантаж техніки. */
+function setupSupplies(s: MissionState, idGen: (p: string) => string): void {
+  const list = caches(s);
+  for (const p of s.scenario.supplyPoints ?? []) {
+    // Найближча вільна клітинка поверху 0 без об'єкта.
+    let best: Cell | null = null;
+    for (let r = 0; r < 5 && !best; r++)
+      for (let dy = -r; dy <= r && !best; dy++)
+        for (let dx = -r; dx <= r && !best; dx++) {
+          const c = { x: p.x + dx, y: p.y + dy, z: 0 };
+          const mc = cellAt(s.map, c);
+          if (mc && isStandable(s.map, c) && !mc.object && !mc.vehicle) best = c;
+        }
+    if (!best) continue;
+    s.map.cells[0][best.y][best.x].object = { defId: 'crates', hp: content().objects.get('crates')?.hp ?? 100 };
+    const side = p.side ?? null;
+    list.push({ id: idGen('sup'), name: side === 'red' ? 'Склад противника' : side ? 'Склад постачання' : 'Ящики', side, pos: best, items: stockFor(s, side, p, idGen) });
+  }
+  for (const v of s.vehicles ?? []) {
+    const cg = content().vehicles.get(v.defId)?.cargo;
+    if (cg) list.push({ id: idGen('sup'), name: `Вантаж: ${content().vehicles.get(v.defId)!.name}`, side: v.side, vehicleId: v.id, items: stockFor(s, v.side, cg, idGen) });
   }
 }
 
@@ -424,8 +450,48 @@ export class Mission {
       }
 
       case 'moveItem': {
+        // Склад постачання / вантаж техніки.
+        if (isCacheId(cmd.from.owner) || isCacheId(cmd.to.owner)) {
+          const c = cacheById(s, isCacheId(cmd.from.owner) ? cmd.from.owner : cmd.to.owner);
+          if (!c) return 'Складу немає';
+          if (!cacheReachable(s, c, u)) return c.vehicleId ? 'Підійдіть до техніки' : 'Підійдіть до ящика';
+          const e0 = spend(R.actions.loot);
+          if (isCacheId(cmd.from.owner)) {
+            if (cmd.to.owner !== u.id) return 'Брати можна лише собі';
+            const err = validateMove(cacheAsOwner(c), u, cmd.from, cmd.to);
+            if (err) return err;
+            if (e0) return e0;
+            applyMove(cacheAsOwner(c), u, cmd.from, cmd.to);
+          } else {
+            if (cmd.from.owner !== u.id) return 'Покласти можна лише своє';
+            const it = itemAt(u.inventory, cmd.from);
+            if (!it) return 'Предмета немає';
+            if (cmd.from.area === 'primary') return 'Зброю на склад не здають';
+            if (e0) return e0;
+            removeAt(u.inventory, cmd.from);
+            c.items.push(it);
+          }
+          ctx.ev.push({ t: 'pose', unitId: u.id });
+          return null;
+        }
         const src = unitById(s, cmd.from.owner);
-        if (cmd.to.owner !== u.id) return 'Класти можна лише у своє спорядження';
+        // Передача живому бійцю поруч: лише БК, медицина й гранати.
+        if (cmd.to.owner !== u.id) {
+          if (cmd.from.owner !== u.id) return 'Передавати можна лише своє';
+          const dst = unitById(s, cmd.to.owner);
+          if (dst.side !== u.side || !isActive(dst)) return 'Передати можна лише своєму бійцю';
+          if (!dst.pos || !(adjacent(dst.pos, u.pos!) || sameCell(dst.pos, u.pos!))) return 'Підійдіть упритул';
+          const it = itemAt(u.inventory, cmd.from);
+          if (!it || !TRANSFERABLE.includes(itemDef(it.defId).kind)) return 'Передати можна лише БК, медицину й гранати';
+          const err = validateMove(u, dst, cmd.from, cmd.to);
+          if (err) return err;
+          const e = spend(R.actions.loot);
+          if (e) return e;
+          applyMove(u, dst, cmd.from, cmd.to);
+          float(ctx, dst.id, `Отримав: ${itemDef(it.defId).name}`, 'good');
+          ctx.ev.push({ t: 'pose', unitId: u.id });
+          return null;
+        }
         const looting = src.id !== u.id;
         if (looting) {
           if (src.status !== 'dead' && src.status !== 'down') return 'Обшукати можна лише загиблого або непритомного';

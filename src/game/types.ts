@@ -476,6 +476,8 @@ export interface Scenario {
   /** Чи видно карту до місії. */
   mapPreview: boolean;
   maxTurns?: number;
+  /** Точки постачання (ящики з БК і медициною). */
+  supplyPoints?: { x: number; y: number; side?: SideId | null; mags?: number; meds?: number; grenades?: number }[];
 }
 
 // ---------- Хід і результат ----------
@@ -526,6 +528,8 @@ export type VehicleComponent = 'hull' | 'engine' | 'mobility' | 'weapon';
 export interface VehicleDefinition {
   id: string;
   name: string;
+  /** Вантаж постачання в кузові/десантному відділенні. */
+  cargo?: { mags?: number; meds?: number; grenades?: number };
   kind: 'tracked' | 'wheeled';
   footprint: [number, number];
   armor: number;

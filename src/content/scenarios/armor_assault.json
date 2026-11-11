@@ -104,5 +104,13 @@
   },
   "randomEvents": false,
   "mapPreview": true,
-  "maxTurns": 40
+  "maxTurns": 40,
+  "supplyPoints": [
+    {
+      "x": 16,
+      "y": 4,
+      "side": "red",
+      "mags": 3
+    }
+  ]
 }

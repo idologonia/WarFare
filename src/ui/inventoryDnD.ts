@@ -12,6 +12,9 @@ export interface InventoryHost {
   unit: Unit;
   /** Тіло або непритомний поруч (обшук). */
   other?: Unit;
+  /** loot — обшук тіла, ally — передача бійцю поруч, cache — склад/вантаж техніки. */
+  otherKind?: 'loot' | 'ally' | 'cache';
+  otherTitle?: string;
   /** Виконати переміщення; повертає текст помилки або null. */
   move: (from: ItemRef, to: ItemDest) => string | null;
   /** Підпис ціни (у бою — AP, до бою — безкоштовно). */
@@ -76,10 +79,24 @@ export function openInventoryDnD(host: InventoryHost): HTMLElement {
     return p;
   };
 
+  function otherPanel(): HTMLElement | null {
+    const o = host.other;
+    if (!o) return null;
+    if (host.otherKind === 'cache') {
+      const p = h('div', { class: 'invpanel panel' }, h('h3', {}, host.otherTitle ?? o.callsign));
+      const zone = h('div', { class: 'slotrow cachezone', 'data-drop': '1', 'data-owner': o.id, 'data-area': 'pouches', style: 'flex-wrap:wrap;min-height:90px' });
+      o.inventory.pouches.forEach((it, i) => zone.append(h('div', { class: 'islot' }, tile(o, { owner: o.id, area: 'pouches', index: i }, it))));
+      p.append(h('div', { class: 'muted' }, `Предметів: ${o.inventory.pouches.length}. Перетягніть сюди, щоб покласти.`), zone);
+      return p;
+    }
+    if (host.otherKind === 'ally') return panel(o, true, host.otherTitle ?? `Передати: ${o.callsign}`);
+    return panel(o, false, host.otherTitle ?? `Обшук: ${o.callsign} (${o.status === 'dead' ? 'загинув' : 'непритомний'})`);
+  }
+
   function draw() {
     body.innerHTML = '';
     body.append(
-      h('div', { class: 'invcols' }, panel(host.unit, true, `${host.unit.callsign}`), host.other ? panel(host.other, false, `Обшук: ${host.other.callsign} (${host.other.status === 'dead' ? 'загинув' : 'непритомний'})`) : null),
+      h('div', { class: 'invcols' }, panel(host.unit, true, `${host.unit.callsign}`), otherPanel()),
       h('div', { class: 'muted', style: 'font-size:0.85em' }, `Перетягніть предмет. ${host.costNote}`),
       status,
     );
@@ -112,7 +129,8 @@ export function openInventoryDnD(host: InventoryHost): HTMLElement {
       hover = [];
       const d = destAt(x, y);
       if (!d) return;
-      const err = validateMove(owner, host.unit, ref, d);
+      const dstU = host.other && d.owner === host.other.id ? host.other : host.unit;
+      const err = host.otherKind === 'cache' && dstU === host.other ? null : validateMove(owner, dstU, ref, d);
       if (d.area === 'backpack') {
         for (let yy = 0; yy < hh; yy++)
           for (let xx = 0; xx < w; xx++) {
@@ -147,7 +165,7 @@ export function openInventoryDnD(host: InventoryHost): HTMLElement {
   }
 
   draw();
-  back = modal(host.other ? 'Обшук' : 'Інвентар', body, host.onClose);
+  back = modal(host.otherKind === 'cache' ? 'Постачання' : host.otherKind === 'ally' ? 'Передача' : host.other ? 'Обшук' : 'Інвентар', body, host.onClose);
   back.querySelector('.modal')?.classList.add('wide');
   void content;
   return back;
