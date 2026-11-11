@@ -1,11 +1,11 @@
-import { content } from '@/content';
+import { content, itemDef } from '@/content';
 import { dist2d, fmtAp, sameCell, type Cell } from '@/core/grid';
 import { AiPlanner } from '@/game/ai/ai';
 import { blindOrigin, canThrowTo, grenadeRange } from '@/game/combat/fire';
-import { canLobTo, countDisposable, findRocket, hasUnderbarrel, launcherOf, rpgScatter, uglAmmo, uglScatter } from '@/game/combat/launcher';
+import { canLobTo, countDisposable, hasUnderbarrel, launcherOf, loadedAmmo, rocketStock, rpgScatter, uglAmmo, uglScatter } from '@/game/combat/launcher';
 import { estimateHit, fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, planPath, unitReachable } from '@/game/combat/movement';
-import { ammoSummary, countItems, primaryDef } from '@/game/inventory/inventory';
+import { ammoSummary, countItems, helmetMount, primaryDef } from '@/game/inventory/inventory';
 import { modEffects, modNames } from '@/game/equipment/mods';
 import { INJURY_NAMES, PART_NAMES, bleedingRate } from '@/game/injuries/injuries';
 import { cellAt, cellsInZone, inZone, isIndoor } from '@/game/maps/map';
@@ -46,7 +46,8 @@ export class Battle {
   private sel: string | null = null;
   private moveMode: MoveMode = 'standard';
   private fireMode: FireMode | null = null;
-  private throwMode = false;
+  private throwGrenade: string | null = null;
+  private openMenu: string | null = null;
   private launchMode: 'rpg' | 'ugl' | 'disposable' | null = null;
   private pending: Pending = null;
   private busy = false;
@@ -61,6 +62,7 @@ export class Battle {
   private disposed = false;
   private handover = false;
   private sandbox: SandboxPanel | null = null;
+  private rain: HTMLElement | null = null;
 
   constructor(
     public root: HTMLElement,
@@ -73,6 +75,7 @@ export class Battle {
     this.hud = h('div', { class: 'layer hud' });
     this.floats = h('div', { class: 'layer', style: 'pointer-events:none' });
     root.append(this.hud, this.floats);
+    if (m.s.scenario.weather === 'rain') root.append((this.rain = h('div', { class: 'layer rain' })));
     r.load(m.s, this.viewer);
     r.setViewLevel(m.s.map.levels - 1);
     this.bindInput();
@@ -96,6 +99,7 @@ export class Battle {
     this.r.keyMove.x = this.r.keyMove.y = this.r.keyMove.rot = 0;
     this.hud.remove();
     this.floats.remove();
+    this.rain?.remove();
     this.ctxMenu?.remove();
   }
 
@@ -168,7 +172,7 @@ export class Battle {
   private async endTurn(): Promise<void> {
     if (!this.isHumanTurn() || this.busy) return;
     this.fireMode = null;
-    this.throwMode = false;
+    this.throwGrenade = null;
     this.launchMode = null;
     await this.exec({ type: 'endTurn' });
     if (this.s.turn.phase !== 'battle') return;
@@ -394,7 +398,7 @@ export class Battle {
     this.sel = u.id;
     this.pending = null;
     this.fireMode = null;
-    this.throwMode = false;
+    this.throwGrenade = null;
     this.launchMode = null;
     if (u.pos) this.r.focus(u.pos);
     this.autoView();
@@ -406,7 +410,7 @@ export class Battle {
     const cell = this.r.pickCell(x, y);
     const u = this.selected();
     this.r.setCursor(cell);
-    if (!cell || !u?.pos || !this.isHumanTurn() || this.s.turn.phase !== 'battle' || this.fireMode || this.throwMode || this.launchMode) {
+    if (!cell || !u?.pos || !this.isHumanTurn() || this.s.turn.phase !== 'battle' || this.fireMode || this.throwGrenade || this.launchMode) {
       this.r.setPath([], [1, 1, 1]);
       return;
     }
@@ -476,7 +480,7 @@ export class Battle {
       return;
     }
     if (!cell) return;
-    if (this.throwMode) {
+    if (this.throwGrenade) {
       if (this.pending?.kind === 'throw' && sameCell(this.pending.cell, cell)) void this.confirm();
       else {
         this.pending = { kind: 'throw', cell };
@@ -516,7 +520,7 @@ export class Battle {
     if (this.pending) this.pending = null;
     else {
       this.fireMode = null;
-      this.throwMode = false;
+      this.throwGrenade = null;
     this.launchMode = null;
     }
     this.r.setPath([], [1, 1, 1]);
@@ -533,7 +537,7 @@ export class Battle {
     else if (p.kind === 'launch') {
       if (await this.exec({ type: 'launch', unitId: u.id, kind: p.mode, cell: p.cell })) this.launchMode = null;
     } else if (p.kind === 'throw') {
-      if (await this.exec({ type: 'throw', unitId: u.id, cell: p.cell })) this.throwMode = false;
+      if (await this.exec({ type: 'throw', unitId: u.id, cell: p.cell, grenade: this.throwGrenade ?? undefined })) this.throwGrenade = null;
     }
     this.r.setCursor(null);
     this.refresh();
@@ -655,13 +659,14 @@ export class Battle {
       r.setOverlay('reach', []);
       return;
     }
-    if (this.throwMode) {
+    if (this.throwGrenade) {
+      const gid = this.throwGrenade;
       const cells: Cell[] = [];
-      const rng = Math.ceil(grenadeRange(u));
+      const rng = Math.ceil(grenadeRange(u, gid));
       for (let y = u.pos.y - rng; y <= u.pos.y + rng; y++)
         for (let x = u.pos.x - rng; x <= u.pos.x + rng; x++) {
           const c = { x, y, z: u.pos.z };
-          if (dist2d(c, u.pos) <= grenadeRange(u) && canThrowTo({ s }, u, c)) cells.push(c);
+          if (canThrowTo({ s }, u, c, gid)) cells.push(c);
         }
       r.setOverlay('reach', cells.map((cell) => ({ cell, color: [1, 0.55, 0.2] })), { alpha: 0.3 });
       return;
@@ -708,7 +713,7 @@ export class Battle {
         ? 'Розгортання'
         : s.turn.phase === 'ended'
           ? 'Бій завершено'
-          : `Хід ${s.turn.turn} · ${s.scenario.sides[side].name}${s.controllers[side] === 'ai' ? ' (AI)' : ''}`;
+          : `Хід ${s.turn.turn} · ${s.scenario.sides[side].name}${s.controllers[side] === 'ai' ? ' (AI)' : ''}${s.scenario.timeOfDay === 'night' ? ' · ніч' : ''}${s.scenario.weather === 'fog' ? ' · туман' : s.scenario.weather === 'rain' ? ' · дощ' : ''}`;
     const top = h(
       'div',
       { class: 'topbar', 'data-part': 'top' },
@@ -763,6 +768,9 @@ export class Battle {
     if (u.suppression >= 25) chips.push(h('span', { class: 'chip warn' }, `Придушення ${u.suppression}`));
     if (u.panicked) chips.push(h('span', { class: 'chip bad' }, 'Паніка'));
     if (u.carrying) chips.push(h('span', { class: 'chip' }, 'Несе пораненого'));
+    const nvg = helmetMount(u, 'nvg');
+    if (nvg) chips.push(h('span', { class: 'chip' }, nvg.name));
+    if (u.lightOn) chips.push(h('span', { class: 'chip warn' }, 'Ліхтар увімкнено'));
     const meds = countItems(u, (d) => d.kind === 'medical');
     const nades = countItems(u, (d) => d.kind === 'grenade');
     const row = (k: string, v: Node | string) => [h('span', { class: 'muted' }, k), typeof v === 'string' ? h('span', {}, v) : v];
@@ -867,97 +875,171 @@ export class Battle {
     }
     const u = this.selected();
     const can = this.isHumanTurn() && !this.busy && !!u && isActive(u) && !u.panicked;
-    const run = (c: Command) => () => void this.exec(c);
-    const group = (label: string, ...b: (HTMLElement | null)[]) => h('div', { class: 'group' }, h('span', { class: 'lbl' }, label), ...b);
-    const wd = u ? primaryDef(u) : null;
     const acts = h('div', { class: 'actions' });
-    if (u) {
-      acts.append(
-        group(
-          'Рух',
-          ...(['fast', 'standard', 'careful'] as MoveMode[]).map((m) =>
-            btn(MOVE[m], () => {
-              this.moveMode = m;
-              this.fireMode = null;
-              this.throwMode = false;
-              this.launchMode = null;
-    this.launchMode = null;
-              this.pending = null;
-              this.r.setPath([], [1, 1, 1]);
-              this.refresh();
-            }, { on: this.moveMode === m && !this.fireMode && !this.throwMode, disabled: !can || !canUseMode(u, m) }),
-          ),
-        ),
-        group(
-          'Позиція',
-          ...(['standing', 'crouched', 'prone'] as Stance[]).map((st) => btn(STANCE[st], run({ type: 'stance', unitId: u.id, stance: st }), { on: u.stance === st, disabled: !can })),
-        ),
-        group(
-          'Зброя',
-          ...(['high', 'low', 'carry'] as WeaponState[]).map((ws) => btn(ws === 'high' ? 'High' : ws === 'low' ? 'Low' : 'Вільно', run({ type: 'weaponState', unitId: u.id, state: ws }), { on: u.weaponState === ws, disabled: !can, title: WSTATE[ws] })),
-        ),
-        group(
-          'Вогонь',
-          ...(wd?.modes ?? []).map((fm) =>
-            btn(`${FIRE[fm]} ${fmtAp(fireApCost(u, fm))}`, () => {
-              this.fireMode = this.fireMode === fm ? null : fm;
-              this.throwMode = false;
-              this.launchMode = null;
-    this.launchMode = null;
-              if (this.pending?.kind !== 'fire') this.pending = null;
-              this.r.setPath([], [1, 1, 1]);
-              this.refresh();
-            }, { on: this.fireMode === fm, disabled: !can }),
-          ),
-        ),
-        group(
-          'Дії',
-          btn('Перезарядити', run({ type: 'reload', unitId: u.id }), { disabled: !can }),
-          btn('Граната', () => {
-            this.throwMode = !this.throwMode;
-            this.fireMode = null;
-            this.pending = null;
-            this.refresh();
-          }, { on: this.throwMode, disabled: !can || !countItems(u, (d) => d.kind === 'grenade') }),
-          ...this.launcherButtons(u, can),
-          btn('Спостереження', run({ type: 'overwatch', unitId: u.id }), { disabled: !can, title: 'Overwatch: резерв усіх AP для реакції' }),
-          btn('Медицина', () => this.openMedical(), { disabled: !u.pos }),
-          btn('Інвентар', () => this.openInventory()),
-          u.carrying ? btn('Покласти', run({ type: 'drop', unitId: u.id }), { disabled: !can }) : this.pickUpButton(u, can),
-          inZone(u.pos ?? { x: -1, y: -1, z: 0 }, s.scenario.evacZone) ? btn('Евакуація', run({ type: 'evacuate', unitId: u.id }), { disabled: !can }) : null,
-        ) as HTMLElement,
-      );
-    }
-    acts.append(group('Хід', btn('Кінець ходу', () => void this.endTurn(), { cls: 'primary', disabled: !this.isHumanTurn() || this.busy })));
+    if (u) for (const menu of this.menus(u, can)) acts.append(this.menuButton(menu));
+    acts.append(btn('Кінець ходу', () => void this.endTurn(), { cls: 'primary', disabled: !this.isHumanTurn() || this.busy }));
     bar2.append(acts);
     this.hud.append(bar2);
   }
 
-  private launcherButtons(u: Unit, can: boolean): HTMLElement[] {
-    const out: HTMLElement[] = [];
-    const toggle = (m: 'rpg' | 'ugl' | 'disposable') => () => {
-      this.launchMode = this.launchMode === m ? null : m;
+  /** Висувне меню: кнопка з поточним значенням і список пунктів над панеллю. */
+  private menuButton(m: ActionMenu): HTMLElement {
+    const open = this.openMenu === m.id;
+    const wrap = h('div', { class: 'menuwrap' });
+    wrap.append(
+      btn(`${m.label} ▾`, () => {
+        this.openMenu = open ? null : m.id;
+        this.refresh();
+      }, { on: open || !!m.active }),
+    );
+    if (open) {
+      const pop = h('div', { class: 'menupop panel' }, h('div', { class: 'muted', style: 'font-size:0.8em' }, m.title));
+      for (const it of m.items)
+        pop.append(
+          btn(it.label, () => {
+            this.openMenu = null;
+            it.run();
+            this.refresh();
+          }, { on: it.on, disabled: it.disabled, title: it.title }),
+        );
+      wrap.append(pop);
+    }
+    return wrap;
+  }
+
+  private menus(u: Unit, can: boolean): ActionMenu[] {
+    const s = this.s;
+    const run = (c: Command) => () => void this.exec(c);
+    const clearModes = () => {
       this.fireMode = null;
-      this.throwMode = false;
+      this.throwGrenade = null;
+      this.launchMode = null;
       this.pending = null;
-      this.refresh();
+      this.r.setPath([], [1, 1, 1]);
     };
+    const wd = primaryDef(u);
+    const out: ActionMenu[] = [];
+    out.push({
+      id: 'move',
+      label: `Рух: ${MOVE[this.moveMode]}`,
+      title: 'Режим руху (місцевість не змінює AP)',
+      items: (['fast', 'standard', 'careful'] as MoveMode[]).map((m) => ({
+        label: MOVE[m],
+        on: this.moveMode === m,
+        disabled: !can || !canUseMode(u, m),
+        run: () => {
+          this.moveMode = m;
+          clearModes();
+        },
+      })),
+    });
+    out.push({
+      id: 'stance',
+      label: STANCE[u.stance],
+      title: 'Позиція',
+      items: (['standing', 'crouched', 'prone'] as Stance[]).map((st) => ({ label: STANCE[st], on: u.stance === st, disabled: !can || u.stance === st, run: run({ type: 'stance', unitId: u.id, stance: st }) })),
+    });
+    out.push({
+      id: 'wstate',
+      label: u.weaponState === 'high' ? 'High ready' : u.weaponState === 'low' ? 'Low ready' : 'Вільно',
+      title: 'Стан зброї',
+      items: (['high', 'low', 'carry'] as WeaponState[]).map((ws) => ({ label: WSTATE[ws], on: u.weaponState === ws, disabled: !can || u.weaponState === ws, run: run({ type: 'weaponState', unitId: u.id, state: ws }) })),
+    });
+    out.push({
+      id: 'fire',
+      label: this.fireMode ? `Вогонь: ${FIRE[this.fireMode]}` : 'Вогонь',
+      title: 'Режим вогню, потім оберіть ціль',
+      active: !!this.fireMode,
+      items: [
+        ...(wd?.modes ?? []).map((fm) => ({
+          label: `${FIRE[fm]} — ${fmtAp(fireApCost(u, fm))} AP`,
+          on: this.fireMode === fm,
+          disabled: !can,
+          run: () => {
+            const keep = this.fireMode === fm;
+            clearModes();
+            this.fireMode = keep ? null : fm;
+          },
+        })),
+        { label: 'Перезарядити', disabled: !can, run: run({ type: 'reload', unitId: u.id }) },
+        { label: 'Спостереження (overwatch)', disabled: !can, title: 'Резерв усіх AP для реакції', run: run({ type: 'overwatch', unitId: u.id }) },
+      ],
+    });
+    // Гранати за типами.
+    const nades = new Map<string, number>();
+    for (const it of [...u.inventory.belt, ...u.inventory.backpackItems.map((e) => e.item)])
+      if (itemDef(it.defId).kind === 'grenade') nades.set(it.defId, (nades.get(it.defId) ?? 0) + ((it as { uses?: number }).uses ?? 1));
+    if (nades.size)
+      out.push({
+        id: 'nades',
+        label: this.throwGrenade ? itemDef(this.throwGrenade).name : `Гранати (${[...nades.values()].reduce((a, b) => a + b, 0)})`,
+        title: 'Оберіть гранату, потім клітинку',
+        active: !!this.throwGrenade,
+        items: [...nades].map(([id, n]) => ({
+          label: `${itemDef(id).name} ×${n}`,
+          on: this.throwGrenade === id,
+          disabled: !can,
+          run: () => {
+            const keep = this.throwGrenade === id;
+            clearModes();
+            this.throwGrenade = keep ? null : id;
+          },
+        })),
+      });
+    // Гранатомети.
+    const lItems: ActionMenuItem[] = [];
     const l = launcherOf(u);
+    const toggle = (m: 'rpg' | 'ugl' | 'disposable') => () => {
+      const keep = this.launchMode === m;
+      clearModes();
+      this.launchMode = keep ? null : m;
+    };
     if (l) {
-      out.push(btn(`РПГ ${l.loaded ? '' : '(порожній)'}`, toggle('rpg'), { on: this.launchMode === 'rpg', disabled: !can || !l.loaded }));
-      if (!l.loaded) out.push(btn(`Зарядити РПГ (${findRocket(u) ? 'є' : 'немає'})`, () => void this.exec({ type: 'reloadLauncher', unitId: u.id }), { disabled: !can || !findRocket(u) }));
+      const ammo = loadedAmmo(u);
+      lItems.push({ label: `РПГ-7: ${ammo ? itemDef(ammo).name.replace('Постріл ', '') : 'не заряджено'}`, on: this.launchMode === 'rpg', disabled: !can || !l.loaded, run: toggle('rpg') });
+      if (!l.loaded)
+        for (const st of rocketStock(u))
+          lItems.push({ label: `Зарядити ${st.name.replace('Постріл ', '')} ×${st.count} — ${content().rules.launcher.rpgReload} AP`, disabled: !can || st.count === 0, run: run({ type: 'reloadLauncher', unitId: u.id, ammo: st.id }) });
     }
     const nd = countDisposable(u);
-    if (nd) out.push(btn(`Bulspike (${nd})`, toggle('disposable'), { on: this.launchMode === 'disposable', disabled: !can, title: 'Одноразовий гранатомет' }));
-    if (hasUnderbarrel(u)) out.push(btn(`Підствольник (${countItems(u, (d) => d.id === 'vog')})`, toggle('ugl'), { on: this.launchMode === 'ugl', disabled: !can || !uglAmmo(u) }));
+    if (nd) lItems.push({ label: `Bulspike (одноразовий) ×${nd}`, on: this.launchMode === 'disposable', disabled: !can, run: toggle('disposable') });
+    if (hasUnderbarrel(u)) lItems.push({ label: `Підствольник ×${countItems(u, (d) => d.id === 'vog')}`, on: this.launchMode === 'ugl', disabled: !can || !uglAmmo(u), run: toggle('ugl') });
+    if (lItems.length)
+      out.push({ id: 'launch', label: this.launchMode ? { rpg: 'РПГ-7', ugl: 'Підствольник', disposable: 'Bulspike' }[this.launchMode] : 'Гранатомет', title: 'Гранатомети', active: !!this.launchMode, items: lItems });
+    // Інші дії.
+    const other: ActionMenuItem[] = [
+      { label: 'Медицина…', run: () => this.openMedical(), disabled: !u.pos },
+      { label: 'Інвентар…', run: () => this.openInventory() },
+    ];
+    if (helmetMount(u, 'light')) other.push({ label: u.lightOn ? 'Вимкнути ліхтар (0 AP)' : 'Увімкнути ліхтар (0 AP)', on: !!u.lightOn, disabled: !can, title: 'Уночі видно далі, але й вас видно здалеку', run: run({ type: 'toggleLight', unitId: u.id }) });
+    const pick = this.pickUpTarget(u);
+    if (u.carrying) other.push({ label: 'Покласти пораненого', disabled: !can, run: run({ type: 'drop', unitId: u.id }) });
+    else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
+    if (inZone(u.pos ?? { x: -1, y: -1, z: 0 }, s.scenario.evacZone))
+      other.push({ label: u.carrying ? 'Евакуювати пораненого' : 'Евакуюватися', disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
+    out.push({ id: 'other', label: 'Дії', title: 'Інші дії', items: other });
     return out;
   }
 
-  private pickUpButton(u: Unit, can: boolean): HTMLElement | null {
-    if (!u.pos) return null;
-    const c = this.s.units.find((t) => t.side === u.side && t.pos && (t.status === 'down' || t.status === 'dead') && (adjacent(t.pos, u.pos!) || sameCell(t.pos, u.pos!)));
-    if (!c) return null;
-    return btn(`Підняти ${c.callsign}`, () => void this.exec({ type: 'pickUp', unitId: u.id, targetId: c.id }), { disabled: !can });
+  private pickUpTarget(u: Unit): Unit | undefined {
+    if (!u.pos) return undefined;
+    return this.s.units.find((t) => t.side === u.side && t.pos && (t.status === 'down' || t.status === 'dead') && (adjacent(t.pos, u.pos!) || sameCell(t.pos, u.pos!)));
   }
+
 }
 
+interface ActionMenuItem {
+  label: string;
+  run: () => void;
+  on?: boolean;
+  disabled?: boolean;
+  title?: string;
+}
+
+interface ActionMenu {
+  id: string;
+  label: string;
+  title: string;
+  active?: boolean;
+  items: ActionMenuItem[];
+}

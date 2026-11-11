@@ -3,13 +3,13 @@ import { cellKey, sameCell, toTenths, type Cell } from '@/core/grid';
 import { GAME_VERSION, SCHEMA_VERSION } from '@/core/version';
 import { content, itemDef } from '@/content';
 import { buildMap, cellAt, cellsInZone, inZone, isSlowTerrain, isStandable } from '@/game/maps/map';
-import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo } from '@/game/combat/launcher';
+import { canLobTo, findDisposable, findRocket, hasUnderbarrel, launcherOf, loadedAmmo, reloadLauncher, resolveRocket, resolveUgl, takeUglAmmo, uglAmmo, warheadOf } from '@/game/combat/launcher';
 import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
-import { consume, createItem, findItem, findMedical, findReloadMagazine, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
+import { consume, createItem, findItem, findMedical, findReloadMagazine, helmetMount, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
 import { applyTreatment, canSelfApply, tickInjuries } from '@/game/injuries/injuries';
-import { canThrowTo, resolveFire, resolveGrenade } from '@/game/combat/fire';
+import { canThrowTo, decaySmoke, resolveFire, resolveGrenade } from '@/game/combat/fire';
 import { fireApCost } from '@/game/combat/hit';
 import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/movement';
 import { canSee, updateContacts } from '@/game/visibility/visibility';
@@ -112,7 +112,10 @@ function applyLoadout(u: Unit, l: NonNullable<MissionState['scenario']['sides'][
       drop--;
     }
   }
-  for (let i = 0; i < l.extraGrenades; i++) inv.belt.push(createItem('frag_g1', id) as StackItem);
+  for (let i = 0; i < l.extraGrenades; i++) inv.belt.push(createItem('rgd5', id) as StackItem);
+  if (l.helmetMount && inv.helmet) {
+    inv.helmetMounts = l.helmetMount === 'none' ? [] : l.helmetMount === 'flashlight' ? [{ id: id('i'), defId: 'flashlight' }] : [{ id: id('i'), defId: l.helmetMount }, { id: id('i'), defId: 'flashlight' }];
+  }
 }
 
 function autoDeploy(ctx: Ctx, side: SideId): void {
@@ -180,6 +183,9 @@ export class Mission {
         case 'startBattle':
           for (const side of ['blue', 'red'] as SideId[]) autoDeploy(ctx, side);
           s.turn = { turn: 1, side: 'blue', phase: 'battle' };
+          // Уночі бійці AI без ПНБ вмикають ліхтарі.
+          if (s.scenario.timeOfDay === 'night')
+            for (const x of s.units) if (s.controllers[x.side] === 'ai' && helmetMount(x, 'light') && !helmetMount(x, 'nvg')) x.lightOn = true;
           updateContacts(ctx);
           this.beginSideTurn(ctx, 'blue');
           return null;
@@ -262,10 +268,10 @@ export class Mission {
       }
 
       case 'throw': {
-        const g = findItem(u, (d) => d.kind === 'grenade');
-        if (!g) return 'Немає гранат';
+        const g = findItem(u, (d) => d.kind === 'grenade' && (!cmd.grenade || d.id === cmd.grenade));
+        if (!g) return 'Немає таких гранат';
         if (u.carrying) return 'Руки зайняті пораненим';
-        if (!canThrowTo(ctx, u, cmd.cell)) return 'Не докинути сюди';
+        if (!canThrowTo(ctx, u, cmd.cell, g.item.defId)) return 'Не докинути сюди';
         const e = spend(R.actions.throw + (g.where === 'backpack' ? 2 : 0));
         if (e) return e;
         const defId = g.item.defId;
@@ -284,8 +290,9 @@ export class Mission {
           if (!cellAt(s.map, cmd.cell)) return 'Ціль поза картою';
           const e = spend(R.launcher.rpgAp);
           if (e) return e;
+          const ammo = loadedAmmo(u);
           u.inventory.secondary!.magazine = null;
-          resolveRocket(ctx, u, cmd.cell, l.def);
+          resolveRocket(ctx, u, cmd.cell, l.def, warheadOf(l.def, ammo));
         } else if (cmd.kind === 'disposable') {
           const f = findDisposable(u);
           if (!f) return 'Немає одноразового гранатомета';
@@ -310,14 +317,22 @@ export class Mission {
         return null;
       }
 
+      case 'toggleLight': {
+        if (!helmetMount(u, 'light')) return 'Немає ліхтаря';
+        u.lightOn = !u.lightOn;
+        ctx.ev.push({ t: 'pose', unitId: u.id });
+        float(ctx, u.id, u.lightOn ? 'Ліхтар увімкнено' : 'Ліхтар вимкнено', 'info');
+        return null;
+      }
+
       case 'reloadLauncher': {
         const l = launcherOf(u);
         if (!l) return 'Немає гранатомета';
         if (l.loaded) return 'Вже заряджено';
-        if (!findRocket(u)) return 'Немає пострілів';
+        if (!findRocket(u, cmd.ammo)) return 'Немає пострілів цього типу';
         const e = spend(R.launcher.rpgReload);
         if (e) return e;
-        reloadLauncher(u);
+        reloadLauncher(u, cmd.ammo);
         ctx.ev.push({ t: 'reload', unitId: u.id });
         float(ctx, u.id, 'Гранатомет заряджено', 'info');
         return null;
@@ -498,6 +513,7 @@ export class Mission {
     const s = this.state;
     const R = content().rules;
     s.turn.side = side;
+    if (side === 'blue') decaySmoke(ctx);
     // Підкріплення.
     for (const r of sideUnits(s, side)) {
       if (r.status !== 'reserve' || (r.reserveTurn ?? 0) > s.turn.turn) continue;

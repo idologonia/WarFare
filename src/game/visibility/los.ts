@@ -38,6 +38,8 @@ export interface TraceOptions {
 }
 
 const STEP = 0.1;
+/** Маскування однієї клітинки диму (у клітинках дальності огляду). */
+const SMOKE = 6;
 
 /**
  * Трасування прямої у 3D сітці. Блокують: стіни й об'єкти нижче своєї висоти,
@@ -116,6 +118,9 @@ export function trace(map: MapState, from: Point, to: Point, opt: TraceOptions =
     if (key !== lastKey) {
       lastKey = key;
       cells.push(c);
+      // Дим маскує (рахується на кожну клітинку завіси, крім точок старту й цілі).
+      if (map.cells[z][cy][cx].smoke && !(sameCell(c, opt.skipStart) && Math.floor(from.h) === z) && !(sameCell(c, opt.skipEnd) && Math.floor(to.h) === z))
+        concealment += SMOKE;
     }
     if (isStart || isEnd) continue;
 

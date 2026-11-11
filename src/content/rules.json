@@ -92,7 +92,10 @@
     "notIdentifiedPenalty": 10,
     "nightPenalty": 15,
     "min": 5,
-    "max": 95
+    "max": 95,
+    "rainPenalty": 5,
+    "flashlightHitPenalty": 6,
+    "flashlightRange": 8
   },
   "damage": {
     "variance": 0.25,
@@ -161,7 +164,11 @@
       "standing": 0.62,
       "crouched": 0.4,
       "prone": 0.14
-    }
+    },
+    "flashlightBonus": 4,
+    "lightVisibleRange": 20,
+    "rainPenalty": 2,
+    "smokePerCell": 6
   },
   "overwatch": {
     "baseChance": 45,
@@ -200,7 +207,7 @@
       "radius": 1.8,
       "damage": 32,
       "fragments": 3,
-      "objectDamage": 90
+      "objectDamage": 0
     }
   }
 }

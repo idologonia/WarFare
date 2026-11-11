@@ -1,6 +1,6 @@
 import { content } from '@/content';
 import { toTenths } from '@/core/grid';
-import { totalWeight } from '@/game/inventory/inventory';
+import { helmetMount, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
 import type { Unit } from '@/game/types';
 
@@ -44,9 +44,18 @@ export function computeApMax(u: Unit): ApBreakdown {
   return { total: toTenths(total), parts };
 }
 
+/**
+ * Дальність огляду: день/ніч, ПНБ (множник уночі), ліхтар (+ уночі), туман (обмеження), дощ (−), сприйняття.
+ */
 export function visionRange(s: MissionState, u: Unit): number {
   const v = R().vision;
-  let base = s.scenario.timeOfDay === 'night' ? v.nightRange : v.dayRange;
+  let base = v.dayRange;
+  if (s.scenario.timeOfDay === 'night') {
+    const nvg = helmetMount(u, 'nvg');
+    base = Math.min(v.dayRange, v.nightRange * (nvg?.nightFactor ?? 1));
+    if (u.lightOn && !nvg) base += v.flashlightBonus;
+  }
+  if (s.scenario.weather === 'rain') base -= v.rainPenalty;
   if (s.scenario.weather === 'fog') base = Math.min(base, v.fogRange);
   return base * (1 + ((u.stats.perception - 50) / 10) * v.perceptionBonus);
 }

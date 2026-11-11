@@ -147,6 +147,16 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
       g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
       g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
       g.box(0, 0.69, -0.13, 0.12, 0.04, 0.012, side); // мітка сторони на шоломі
+      const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
+      if (mounts.includes('nvg_mono')) g.box(0.045, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+      if (mounts.includes('nvg_bino')) {
+        g.box(-0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+        g.box(0.04, 0.66, 0.16, 0.05, 0.05, 0.08, [0.1, 0.12, 0.1]);
+      }
+      if (mounts.includes('flashlight')) {
+        g.box(0.15, 0.68, 0.05, 0.04, 0.04, 0.09, black);
+        g.box(0.15, 0.68, 0.096, 0.03, 0.03, 0.004, [1, 0.95, 0.7]);
+      }
     }),
   );
 

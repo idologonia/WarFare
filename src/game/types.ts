@@ -126,10 +126,20 @@ export interface WeaponModDefinition {
   effects: WeaponModEffects;
 }
 
+export interface Warhead {
+  /** heat — кумулятивний (пробиває стіни), frag — осколковий (не пробиває). */
+  type: 'heat' | 'frag';
+  damage: number;
+  penetration: number;
+  blast: { radius: number; damage: number; fragments: number; objectDamage: number };
+}
+
 export interface MagazineDefinition extends ItemDefinitionBase {
   kind: 'magazine';
   caliber: string;
   capacity: number;
+  /** Для пострілів гранатомета — тип бойової частини. */
+  warhead?: Warhead;
 }
 
 export interface GrenadeDefinition extends ItemDefinitionBase {
@@ -137,6 +147,12 @@ export interface GrenadeDefinition extends ItemDefinitionBase {
   radius: number;
   damage: number;
   fragments: number;
+  /** Шкода оточенню; звичайні осколкові гранати об'єкти не руйнують (0). */
+  objectDamage?: number;
+  /** Зміна дальності кидка (важка граната летить ближче). */
+  rangeMod?: number;
+  /** Димова: завіса на радіус і кількість ходів. */
+  smoke?: { radius: number; turns: number };
 }
 
 export type MedicalEffect = 'tourniquet' | 'packing' | 'bandage' | 'chestSeal' | 'needle' | 'pills';
@@ -163,6 +179,15 @@ export interface RigDefinition extends ItemDefinitionBase {
   pouches: number;
 }
 
+export interface HelmetMountDefinition extends ItemDefinitionBase {
+  kind: 'helmetMount';
+  mount: 'light' | 'nvg';
+  /** ПНБ: множник дальності огляду вночі. */
+  nightFactor?: number;
+  /** ПНБ: штраф влучання вночі замість стандартного. */
+  nightHitPenalty?: number;
+}
+
 export interface BackpackDefinition extends ItemDefinitionBase {
   kind: 'backpack';
   grid: [number, number];
@@ -175,7 +200,8 @@ export type ItemDefinition =
   | MedicalDefinition
   | ArmorDefinition
   | RigDefinition
-  | BackpackDefinition;
+  | BackpackDefinition
+  | HelmetMountDefinition;
 
 // ---------- Екземпляри ----------
 
@@ -224,6 +250,8 @@ export interface Inventory {
   belt: StackItem[];
   backpack: ItemInstance | null;
   backpackItems: BackpackEntry[];
+  /** Кріплення на каску: ліхтар, ПНБ (у старих збереженнях може бути відсутнє). */
+  helmetMounts?: ItemInstance[];
 }
 
 // ---------- Бійці ----------
@@ -314,6 +342,8 @@ export interface Unit {
   /** Кого несе (id). */
   carrying: string | null;
   carriedBy: string | null;
+  /** Ліхтар увімкнено (вночі видно далі, але й самого видно здалеку). */
+  lightOn?: boolean;
   aiStyle?: AiStyle;
   stats_mission: UnitMissionStats;
   /** Хід, на якому має з'явитися підкріплення (для резерву). */
@@ -340,6 +370,8 @@ export interface MapCell {
   elevation: number;
   /** rot — поворот моделі об'єкта на 90° (лише вигляд). */
   object: { defId: string; hp: number; rot?: number } | null;
+  /** Димова завіса: скільки ходів ще тримається. */
+  smoke?: number;
   /** Сходи з цього поверху на наступний. */
   stairsUp?: boolean;
   buildingId?: number;
@@ -395,6 +427,8 @@ export interface SideLoadout {
   extraGrenades: number;
   /** Без бронежилетів і касок. */
   noArmor: boolean;
+  /** Кріплення на каску для всієї сторони. */
+  helmetMount?: 'none' | 'flashlight' | 'nvg_mono' | 'nvg_bino';
 }
 
 export interface Scenario {

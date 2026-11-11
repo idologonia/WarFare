@@ -9,6 +9,7 @@ import {
   Camera,
   Color3,
   Color4,
+  CreateCylinder,
   CreateSphere,
   CreateTorus,
   DirectionalLight,
@@ -23,7 +24,7 @@ import {
   type StandardMaterial,
 } from './babylon';
 import { Animator, ease, lerp } from './anim';
-import { GeoBuilder, hex, type RGB } from './geo';
+import { GeoBuilder, hash2, hex, type RGB } from './geo';
 import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
 import { camoMaterial } from './camo';
@@ -51,6 +52,9 @@ export class Renderer {
   map!: MapView;
   private shadowGen: ShadowGenerator | null = null;
   private light!: DirectionalLight;
+  private hemi!: HemisphericLight;
+  private beams = new Map<string, Mesh>();
+  private beamMat!: StandardMaterial;
   private units = new Map<string, UnitModel>();
   private unitMats: Record<string, StandardMaterial> = {};
   private silhouetteMat!: StandardMaterial;
@@ -90,7 +94,7 @@ export class Renderer {
     cam.minZ = 0.1;
     cam.maxZ = 400;
 
-    const hemi = new HemisphericLight('hemi', new Vector3(0.2, 1, -0.3), scene);
+    const hemi = (this.hemi = new HemisphericLight('hemi', new Vector3(0.2, 1, -0.3), scene));
     hemi.intensity = 0.62;
     hemi.groundColor = new Color3(0.32, 0.3, 0.36);
     this.light = new DirectionalLight('sun', new Vector3(-0.55, -1, 0.4), scene);
@@ -104,6 +108,8 @@ export class Renderer {
     this.silhouetteMat.emissiveColor = new Color3(0.12, 0.12, 0.14);
     this.overlayMat = makeMaterial(scene, 'overlay', 0.5, true);
     this.fxMat = makeMaterial(scene, 'fx', 1, true);
+    this.beamMat = makeMaterial(scene, 'beam', 0.16, true);
+    this.beamMat.emissiveColor = new Color3(1, 0.95, 0.7);
 
     this.selRing = CreateTorus('sel', { diameter: 0.8, thickness: 0.05, tessellation: 24 }, scene);
     const ringMat = makeMaterial(scene, 'ring', 1, true);
@@ -229,6 +235,8 @@ export class Renderer {
     this.viewSide = viewSide;
     for (const u of this.units.values()) u.root.dispose();
     this.units.clear();
+    this.beams.clear();
+    this.applyEnvironment(state);
     this.map?.dispose();
     for (const o of this.overlays.values()) o.dispose();
     this.overlays.clear();
@@ -268,10 +276,77 @@ export class Renderer {
       if (!u.pos) continue;
       m.root.position = cellWorld(u.pos, groundHeight(s.map, u.pos));
       applyPose(m, u.stance, u.weaponState, u.status);
+      this.updateBeam(u, m);
       const identified = u.side === this.viewSide || s.revealAll || s.contacts[this.viewSide][u.id]?.identified;
       for (const mesh of m.meshes) mesh.material = identified ? this.unitMats[u.side] : this.silhouetteMat;
     }
     this.refreshVisibility();
+  }
+
+  /** Освітлення й атмосфера за сценарієм: день/ніч, туман, дощ. */
+  applyEnvironment(state: MissionState): void {
+    const sc = state.scenario ?? ({} as MissionState['scenario']);
+    const night = sc.timeOfDay === 'night';
+    const scene = this.scene;
+    this.hemi.intensity = night ? 0.2 : sc.weather === 'rain' ? 0.5 : 0.62;
+    this.hemi.diffuse = night ? new Color3(0.45, 0.55, 0.85) : new Color3(1, 1, 1);
+    this.hemi.groundColor = night ? new Color3(0.08, 0.08, 0.14) : new Color3(0.32, 0.3, 0.36);
+    this.light.intensity = night ? 0.22 : sc.weather === 'rain' ? 0.55 : 0.85;
+    this.light.diffuse = night ? new Color3(0.6, 0.7, 1) : new Color3(1, 0.98, 0.92);
+    scene.clearColor = night ? new Color4(0.02, 0.03, 0.06, 1) : new Color4(0.07, 0.08, 0.1, 1);
+    if (sc.weather === 'fog' || sc.weather === 'rain') {
+      scene.fogMode = Scene.FOGMODE_LINEAR;
+      scene.fogColor = night ? new Color3(0.05, 0.06, 0.09) : sc.weather === 'fog' ? new Color3(0.62, 0.64, 0.66) : new Color3(0.35, 0.38, 0.42);
+      scene.fogStart = sc.weather === 'fog' ? 48 : 58;
+      scene.fogEnd = sc.weather === 'fog' ? 76 : 100;
+    } else scene.fogMode = Scene.FOGMODE_NONE;
+  }
+
+  /** Промінь ліхтаря (уночі, якщо ліхтар увімкнено і бійця видно). */
+  private updateBeam(u: Unit, m: UnitModel): void {
+    const want = u.lightOn && this.state.scenario?.timeOfDay === 'night' && u.status === 'active';
+    let beam = this.beams.get(u.id);
+    if (!want) {
+      beam?.setEnabled(false);
+      return;
+    }
+    if (!beam) {
+      beam = CreateCylinder('beam', { height: 3.2, diameterTop: 0.08, diameterBottom: 1.6, tessellation: 12 }, this.scene);
+      beam.material = this.beamMat;
+      beam.isPickable = false;
+      beam.rotation.x = Math.PI / 2;
+      beam.position.set(0, 0.95, 1.75);
+      beam.parent = m.root;
+      this.beams.set(u.id, beam);
+    }
+    beam.setEnabled(true);
+  }
+
+  /** Димові завіси: напівпрозорі клуби в клітинках із димом. */
+  refreshSmoke(): void {
+    this.overlays.get('smoke')?.dispose();
+    this.overlays.delete('smoke');
+    const g = new GeoBuilder();
+    const m = this.state.map;
+    m.cells.forEach((lvl, z) =>
+      lvl.forEach((row, y) =>
+        row.forEach((c, x) => {
+          if (!c.smoke || z > this.viewLevel) return;
+          const p = cellWorld({ x, y, z }, groundHeight(m, { x, y, z }));
+          const k = Math.min(1, c.smoke / 3);
+          for (let i = 0; i < 3; i++) {
+            const a = hash2(x, y, i);
+            const b = hash2(y, x, i + 3);
+            g.box(p.x + (a - 0.5) * 0.4, p.y + 0.35 + i * 0.4, p.z + (b - 0.5) * 0.4, 0.9 - i * 0.15, 0.55, 0.9 - i * 0.15, [0.78, 0.78, 0.76], 0.28 + 0.2 * k);
+          }
+        }),
+      ),
+    );
+    if (g.empty) return;
+    const mesh = g.build('ov_smoke', this.scene, this.overlayMat);
+    mesh.isPickable = false;
+    mesh.hasVertexAlpha = true;
+    this.overlays.set('smoke', mesh);
   }
 
   refreshVisibility(): void {
@@ -283,6 +358,7 @@ export class Renderer {
       if (b !== undefined && cellAt(s.map, u.pos)!.terrain === 'floor') inside.add(b);
     }
     this.map.applyVisibility(this.viewLevel, inside);
+    this.refreshSmoke();
     for (const u of s.units) {
       const m = this.units.get(u.id);
       if (m && u.pos && u.pos.z > this.viewLevel) m.root.setEnabled(false);
@@ -457,6 +533,9 @@ export class Renderer {
         case 'rocket':
           await this.animateRocket(e.from, e.to);
           break;
+        case 'smoke':
+          this.refreshSmoke();
+          break;
         case 'explosion':
           await this.animateExplosion(e.at, e.radius);
           break;
@@ -508,6 +587,7 @@ export class Renderer {
     }
     m.root.position = cellWorld(u.pos, groundHeight(this.state.map, u.pos));
     applyPose(m, u.stance, u.weaponState, u.status);
+    this.updateBeam(u, m);
   }
 
   private face(m: UnitModel, from: Vector3, to: Vector3): void {

@@ -7,6 +7,7 @@ import namesJson from './names.json';
 import factionsJson from './factions.json';
 import villageMap from './maps/village.json';
 import firstMission from './scenarios/first_mission.json';
+import nightRaid from './scenarios/night_raid.json';
 import modsJson from './mods.json';
 import type {
   ItemDefinition,
@@ -26,6 +27,7 @@ export interface ClassKit {
   primaryMods?: string[];
   secondary?: string;
   secondaryMag?: string;
+  helmetMounts?: string[];
   armor?: string;
   helmet?: string;
   rig?: string;
@@ -69,7 +71,7 @@ export function loadContent(): ContentDb {
     classes: byId(classesJson.classes as ClassDefinition[]),
     names: namesJson,
     maps: byId([villageMap as unknown as MapDefinition]),
-    scenarios: byId([firstMission as unknown as Scenario]),
+    scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario]),
     factions: factionsJson.factions,
     mods: byId(modsJson.mods as WeaponModDefinition[]),
   };
@@ -99,7 +101,7 @@ export function terrainDef(id: string): TerrainDefinition {
 }
 
 /** Вбудовані (не користувацькі) карти й сценарії — їх не можна перезаписати з редактора. */
-export const BUILTIN_IDS = new Set(['village', 'first_mission']);
+export const BUILTIN_IDS = new Set(['village', 'first_mission', 'night_raid']);
 
 /** Додати або оновити користувацьку карту/сценарій у реєстрі контенту. */
 export function registerMap(def: MapDefinition): void {

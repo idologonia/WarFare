@@ -5,7 +5,7 @@ import { applyHit } from '@/game/injuries/injuries';
 import { float, onField, type Ctx, type MissionState } from '@/game/simulation/state';
 import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
-import type { MagazineInstance, Unit, WeaponDefinition } from '@/game/types';
+import type { MagazineDefinition, MagazineInstance, Unit, Warhead, WeaponDefinition } from '@/game/types';
 import { damageEdge, damageObject, explode } from './fire';
 
 /**
@@ -38,23 +38,46 @@ export function takeUglAmmo(u: Unit, loc: { where: 'pouch' | 'backpack'; index: 
   else u.inventory.backpackItems.splice(loc.index, 1);
 }
 
-/** Запасний постріл до гранатомета: з підсумків або рюкзака. */
-export function findRocket(u: Unit): { where: 'pouch' | 'backpack'; index: number } | null {
+/** Запасний постріл до гранатомета (певного типу або будь-який): з підсумків або рюкзака. */
+export function findRocket(u: Unit, ammoId?: string): { where: 'pouch' | 'backpack'; index: number } | null {
   const l = launcherOf(u);
   if (!l) return null;
-  const pi = u.inventory.pouches.findIndex((p) => l.def.magazines.includes(p.defId));
+  const ok = (id: string) => (ammoId ? id === ammoId : l.def.magazines.includes(id));
+  const pi = u.inventory.pouches.findIndex((p) => ok(p.defId));
   if (pi >= 0) return { where: 'pouch', index: pi };
-  const bi = u.inventory.backpackItems.findIndex((e) => l.def.magazines.includes(e.item.defId));
+  const bi = u.inventory.backpackItems.findIndex((e) => ok(e.item.defId));
   return bi >= 0 ? { where: 'backpack', index: bi } : null;
 }
 
-export function reloadLauncher(u: Unit): boolean {
+/** Кількість запасних пострілів кожного типу. */
+export function rocketStock(u: Unit): { id: string; name: string; count: number }[] {
+  const l = launcherOf(u);
+  if (!l) return [];
+  return l.def.magazines.map((id) => ({
+    id,
+    name: itemDef(id).name,
+    count: u.inventory.pouches.filter((p) => p.defId === id).length + u.inventory.backpackItems.filter((e) => e.item.defId === id).length,
+  }));
+}
+
+export function reloadLauncher(u: Unit, ammoId?: string): boolean {
   const w = u.inventory.secondary;
-  const f = findRocket(u);
+  const f = findRocket(u, ammoId);
   if (!w || !f) return false;
   const item = (f.where === 'pouch' ? u.inventory.pouches.splice(f.index, 1)[0] : u.inventory.backpackItems.splice(f.index, 1)[0].item) as MagazineInstance;
   w.magazine = { ...item, rounds: 1 };
   return true;
+}
+
+/** Бойова частина зарядженого пострілу (або вбудована в одноразовий гранатомет). */
+export function warheadOf(def: WeaponDefinition, ammoId?: string | null): Warhead {
+  const w = ammoId ? itemDef<MagazineDefinition>(ammoId).warhead : undefined;
+  return w ?? { type: 'heat', damage: def.damage, penetration: def.penetration, blast: def.blast! };
+}
+
+export function loadedAmmo(u: Unit): string | null {
+  const w = u.inventory.secondary;
+  return w?.magazine && w.magazine.rounds > 0 ? w.magazine.defId : null;
 }
 
 /** Одноразовий гранатомет у спорядженні (рюкзак або пояс). */
@@ -89,9 +112,8 @@ export function canLobTo(s: MissionState, u: Unit, cell: Cell): boolean {
 }
 
 /** Постріл РПГ у клітинку (або в бійця, що стоїть у ній). AP і наявність пострілу перевіряє команда. */
-export function resolveRocket(ctx: Ctx, u: Unit, target: Cell, def: WeaponDefinition): void {
+export function resolveRocket(ctx: Ctx, u: Unit, target: Cell, def: WeaponDefinition, wh: Warhead = warheadOf(def)): void {
   const s = ctx.s;
-  const l = { def };
   u.stats_mission.grenades++;
   const tUnit = s.units.find((v) => onField(v) && v.pos && sameCell(v.pos, target) && v.status !== 'dead');
   const aim: Point = tUnit ? targetPoints(s, target, tUnit.stance)[0] : cellCenter(target, groundHeight(s.map, target) + 0.35);
@@ -126,9 +148,9 @@ export function resolveRocket(ctx: Ctx, u: Unit, target: Cell, def: WeaponDefini
     if (hitUnit) applyHit(ctx, hitUnit, 20, 2, 'bullet', { attacker: hitUnit.side === u.side ? undefined : u });
     return;
   }
-  if (hitUnit) applyHit(ctx, hitUnit, l.def.damage, l.def.penetration, 'bullet', { attacker: hitUnit.side === u.side ? undefined : u, part: 'torso' });
-  const blast = l.def.blast!;
-  // Влучання в стіну/об'єкт: потужна шкода саме цій перешкоді (пролом), вибух — з боку стрільця.
+  if (hitUnit) applyHit(ctx, hitUnit, wh.damage, wh.penetration, 'bullet', { attacker: hitUnit.side === u.side ? undefined : u, part: 'torso' });
+  const blast = wh.blast;
+  // Влучання в стіну/об'єкт: кумулятивний робить пролом, осколковий — лише вибухає біля перешкоди.
   let land = impactCell;
   if (!hitUnit && tr.blocked) {
     if (tr.blockEdge) damageEdge(ctx, tr.blockEdge.cell, tr.blockEdge.side, blast.objectDamage, true);

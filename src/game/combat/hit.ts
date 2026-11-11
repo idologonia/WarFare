@@ -1,7 +1,7 @@
 import { dist2d, type Cell } from '@/core/grid';
 import { content, itemDef, objectDef } from '@/content';
 import { edgeBetween, groundHeight, objAt } from '@/game/maps/map';
-import { primaryDef } from '@/game/inventory/inventory';
+import { helmetMount, primaryDef } from '@/game/inventory/inventory';
 import { modEffects } from '@/game/equipment/mods';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
 import { trace } from '@/game/visibility/los';
@@ -116,7 +116,14 @@ export function estimateHit(
   if (shooter.weaponState === 'carry') add('Зброя не готова', -R.carryStatePenalty);
   if (shooter.injuries.some((i) => i.part === 'leftArm' || i.part === 'rightArm')) add('Поранення рук', -R.armWoundPenalty);
   if (shooter.injuries.some((i) => i.part === 'head')) add('Поранення голови', -R.headWoundPenalty);
-  if (s.scenario.timeOfDay === 'night') add('Ніч', -R.nightPenalty);
+  if (s.scenario.timeOfDay === 'night') {
+    const nvg = helmetMount(shooter, 'nvg');
+    if (nvg) add('Ніч (ПНБ)', -(nvg.nightHitPenalty ?? R.nightPenalty));
+    else if (shooter.lightOn && distance <= R.flashlightRange) add('Ніч (ліхтар)', -R.flashlightHitPenalty);
+    else if (target.lightOn) add('Ніч (ціль із ліхтарем)', -R.flashlightHitPenalty);
+    else add('Ніч', -R.nightPenalty);
+  }
+  if (s.scenario.weather === 'rain') add('Дощ', -R.rainPenalty);
 
   const eye = eyePoint(s, from, stance);
   let lineOfFire = false;
@@ -128,7 +135,7 @@ export function estimateHit(
       conceal = Math.min(conceal, tr.concealment);
     }
   }
-  if (lineOfFire && conceal > 0) add('Рослинність', -conceal * R.concealmentPerCell / 4);
+  if (lineOfFire && conceal > 0) add('Рослинність / дим', -conceal * R.concealmentPerCell / 4);
   if (opts.identified === false) add('Ціль не ідентифікована', -R.notIdentifiedPenalty);
   if (opts.extra) add(opts.extra.label, opts.extra.value);
 

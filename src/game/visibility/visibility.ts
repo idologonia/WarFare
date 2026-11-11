@@ -31,7 +31,9 @@ export interface SightResult {
 export function canSeeFrom(s: MissionState, observer: Unit, from: Cell, fromStance: Stance, target: Unit): SightResult {
   const to = target.pos!;
   const distance = dist2d(from, to) + Math.abs(from.z - to.z) * 0.5;
-  const range = visionRange(s, observer);
+  let range = visionRange(s, observer);
+  // Увімкнений ліхтар уночі видно здалеку (якщо є пряма видимість).
+  if (s.scenario.timeOfDay === 'night' && target.lightOn) range = Math.max(range, content().rules.vision.lightVisibleRange);
   const none = { seen: false, identified: false, concealment: 0, distance };
   if (distance > range) return none;
   const eye = eyePoint(s, from, fromStance);
@@ -42,6 +44,7 @@ export function canSeeFrom(s: MissionState, observer: Unit, from: Cell, fromStan
   }
   if (best === null) return none;
   let conceal = best;
+  if (s.map.cells[to.z][to.y][to.x].smoke) conceal += 6;
   const own = objAt(s.map, to);
   if (own && own.cover === 0 && own.concealment) conceal += own.concealment * (target.stance === 'prone' ? 2 : target.stance === 'crouched' ? 1.5 : 1);
   const effRange = range - conceal;

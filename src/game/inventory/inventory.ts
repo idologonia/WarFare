@@ -10,6 +10,7 @@ import type {
   ItemDefinition,
   MagazineDefinition,
   MagazineInstance,
+  HelmetMountDefinition,
   MedicalDefinition,
   MedicalEffect,
   RigDefinition,
@@ -98,6 +99,7 @@ export function buildInventory(kit: ClassKit, id: IdGen): Inventory {
     else placeInBackpack(inv, it);
   }
   for (const b of kit.belt) inv.belt.push(createItem(b, id) as StackItem);
+  inv.helmetMounts = inv.helmet ? (kit.helmetMounts ?? []).map((m) => ({ id: id('i'), defId: m })) : [];
   for (const b of kit.backpackItems) placeInBackpack(inv, createItem(b, id));
   return inv;
 }
@@ -113,7 +115,7 @@ function itemWeight(item: AnyItem | { defId: string } | null): number {
 
 export function totalWeight(inv: Inventory): number {
   let w = 0;
-  for (const it of [inv.primary, inv.secondary, inv.helmet, inv.armor, inv.rig, inv.backpack]) w += itemWeight(it);
+  for (const it of [inv.primary, inv.secondary, inv.helmet, inv.armor, inv.rig, inv.backpack, ...(inv.helmetMounts ?? [])]) w += itemWeight(it);
   for (const it of inv.pouches) w += itemWeight(it);
   for (const it of inv.belt) w += itemWeight(it);
   for (const e of inv.backpackItems) w += itemWeight(e.item);
@@ -225,4 +227,13 @@ export function countItems(u: Unit, pred: (d: ItemDefinition) => boolean): numbe
   for (const it of [...inv.belt, ...(inv.pouches as StackItem[]), ...inv.backpackItems.map((e) => e.item as StackItem)])
     if (pred(itemDef(it.defId))) n += 'uses' in it ? it.uses : 1;
   return n;
+}
+
+/** Кріплення на каску певного типу (ліхтар / ПНБ). */
+export function helmetMount(u: Unit, mount: 'light' | 'nvg'): HelmetMountDefinition | null {
+  for (const m of u.inventory.helmetMounts ?? []) {
+    const d = itemDef(m.defId) as HelmetMountDefinition;
+    if (d.mount === mount) return d;
+  }
+  return null;
 }

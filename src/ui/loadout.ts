@@ -1,5 +1,5 @@
 import { content, itemDef } from '@/content';
-import { equipWeapon, grenadeTypes, setGrenadeType } from '@/game/equipment/loadout';
+import { equipWeapon, grenadeTypes, helmetChoice, setGrenadeType, setHelmetMounts, type HelmetMountChoice } from '@/game/equipment/loadout';
 import { modNames, validateMods } from '@/game/equipment/mods';
 import { countItems, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
@@ -59,8 +59,16 @@ export function loadoutModal(s: MissionState, u: Unit, onChange: () => void): HT
     for (const id of wd.magazines) magSel.append(h('option', { value: id, selected: id === mag }, itemDef(id).name));
     magSel.addEventListener('change', () => ((mag = magSel.value), draw()));
     const errors = validateMods(weaponId, mods);
-    const hasNades = countItems(u, (d) => d.kind === 'grenade') > 0;
-    const curNade = [...u.inventory.belt, ...u.inventory.backpackItems.map((e) => e.item)].find((i) => itemDef(i.defId).kind === 'grenade')?.defId;
+    const fragIds = grenadeTypes().map((g) => g.id).concat('frag_g1');
+    const hasNades = countItems(u, (d) => fragIds.includes(d.id)) > 0;
+    const curNade = [...u.inventory.belt, ...u.inventory.backpackItems.map((e) => e.item)].find((i) => fragIds.includes(i.defId))?.defId;
+    const mountSel = h('select', { disabled: !u.inventory.helmet });
+    for (const [v, l] of [['none', 'Нічого'], ['flashlight', 'Ліхтар'], ['nvg_mono', 'ПНБ монокулярний + ліхтар'], ['nvg_bino', 'ПНБ бінокулярний + ліхтар']] as [HelmetMountChoice, string][])
+      mountSel.append(h('option', { value: v, selected: helmetChoice(u) === v }, l));
+    mountSel.addEventListener('change', () => {
+      setHelmetMounts(s, u, mountSel.value as HelmetMountChoice);
+      onChange();
+    });
     const nadeSel = h('select', {});
     for (const g of grenadeTypes()) nadeSel.append(h('option', { value: g.id, selected: g.id === curNade }, `${g.name} · радіус ${g.radius} кл.`));
     nadeSel.addEventListener('change', () => {
@@ -71,7 +79,8 @@ export function loadoutModal(s: MissionState, u: Unit, onChange: () => void): HT
       h('div', { class: 'field' }, h('label', {}, 'Зброя (клас не забороняє іншу)'), wSel),
       h('div', { class: 'field' }, h('label', {}, 'Модифікації'), modBox),
       h('div', { class: 'field' }, h('label', {}, 'Магазини'), magSel),
-      hasNades ? h('div', { class: 'field' }, h('label', {}, 'Гранати'), nadeSel) : null,
+      hasNades ? h('div', { class: 'field' }, h('label', {}, 'Осколкові гранати'), nadeSel) : null,
+      h('div', { class: 'field' }, h('label', {}, 'На каску'), mountSel),
       errors.length ? h('div', { class: 'neg' }, errors.join('; ')) : null,
       h(
         'div',

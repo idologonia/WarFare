@@ -11,7 +11,7 @@ import { adjacent, unitReachable } from '@/game/combat/movement';
 import { canSeeFrom } from '@/game/visibility/visibility';
 import { isActive, other, sideUnits, type MissionState } from '@/game/simulation/state';
 import type { Command } from '@/game/simulation/commands';
-import type { AiStyle, FireMode, MedicalDefinition, Unit } from '@/game/types';
+import type { AiStyle, FireMode, GrenadeDefinition, MedicalDefinition, Unit } from '@/game/types';
 
 interface Known {
   unit: Unit;
@@ -135,7 +135,8 @@ export class AiPlanner {
     const L = R.launcher;
     const lau = launcherOf(u);
     if (lau && !lau.loaded && findRocket(u) && u.ap >= toTenths(L.rpgReload) && (visible.length === 0 || u.ap >= toTenths(L.rpgReload + L.rpgAp)))
-      return { type: 'reloadLauncher', unitId: u.id };
+      // Кумулятивний — для цілей у будівлях (пробиває стіни), осколковий — для відкритих.
+      return { type: 'reloadLauncher', unitId: u.id, ammo: findRocket(u, known.some((k) => isIndoor(s.map, k.pos)) ? 'pg7' : 'og7') ? (known.some((k) => isIndoor(s.map, k.pos)) ? 'pg7' : 'og7') : undefined };
     for (const k of visible) {
       const d = dist2d(u.pos!, k.pos);
       const cover = coverAgainst(s, k.pos, u.pos!);
@@ -151,13 +152,21 @@ export class AiPlanner {
     }
 
     // 4. Граната по цілі в укритті.
-    if (visible.length && u.ap >= toTenths(R.actions.throw) && findItem(u, (d) => d.kind === 'grenade')) {
+    const frag = findItem(u, (d) => d.kind === 'grenade' && !(d as GrenadeDefinition).smoke && !(d as GrenadeDefinition).objectDamage);
+    const smoke = findItem(u, (d) => d.kind === 'grenade' && !!(d as GrenadeDefinition).smoke);
+    if (visible.length && u.ap >= toTenths(R.actions.throw) && frag) {
       for (const k of visible) {
         const cover = coverAgainst(s, k.pos, u.pos!);
         const allyNear = sideUnits(s, u.side).some((a) => a.pos && isActive(a) && a.pos.z === k.pos.z && dist2d(a.pos, k.pos) <= 3);
-        if (cover >= 1 && !allyNear && dist2d(u.pos!, k.pos) >= 4 && canThrowTo({ s }, u, k.pos) && this.rng.chance(s.scenario.difficulty === 'easy' ? 15 : 35))
-          return { type: 'throw', unitId: u.id, cell: k.pos };
+        if (cover >= 1 && !allyNear && dist2d(u.pos!, k.pos) >= 4 && canThrowTo({ s }, u, k.pos, frag.item.defId) && this.rng.chance(s.scenario.difficulty === 'easy' ? 15 : 35))
+          return { type: 'throw', unitId: u.id, cell: k.pos, grenade: frag.item.defId };
       }
+    }
+    // Димова завіса для відходу або коли боєць відкритий під вогнем.
+    if (smoke && visible.length && u.ap >= toTenths(R.actions.throw) && (retreating || u.suppression >= 50) && !s.map.cells[u.pos!.z][u.pos!.y][u.pos!.x].smoke) {
+      const k = visible.reduce((a, b) => (dist2d(u.pos!, a.pos) < dist2d(u.pos!, b.pos) ? a : b));
+      const mid = { x: Math.round((u.pos!.x * 2 + k.pos.x) / 3), y: Math.round((u.pos!.y * 2 + k.pos.y) / 3), z: u.pos!.z };
+      if (canThrowTo({ s }, u, mid, smoke.item.defId)) return { type: 'throw', unitId: u.id, cell: mid, grenade: smoke.item.defId };
     }
 
     // 5. Зміна позиції (один раз за хід).

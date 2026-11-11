@@ -12,10 +12,11 @@ export type Command =
   | { type: 'weaponState'; unitId: string; state: WeaponState }
   | { type: 'fire'; unitId: string; target: FireTarget; mode: FireMode }
   | { type: 'reload'; unitId: string }
-  | { type: 'throw'; unitId: string; cell: Cell }
+  | { type: 'throw'; unitId: string; cell: Cell; grenade?: string }
   | { type: 'overwatch'; unitId: string }
   | { type: 'launch'; unitId: string; kind: 'rpg' | 'ugl' | 'disposable'; cell: Cell }
-  | { type: 'reloadLauncher'; unitId: string }
+  | { type: 'reloadLauncher'; unitId: string; ammo?: string }
+  | { type: 'toggleLight'; unitId: string }
   | { type: 'treat'; unitId: string; patientId: string; effect: MedicalEffect; injuryId: string | null }
   | { type: 'pickUp'; unitId: string; targetId: string }
   | { type: 'drop'; unitId: string }

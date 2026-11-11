@@ -203,16 +203,17 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
   if (shooter.weaponState === 'carry') shooter.weaponState = 'low';
 }
 
-export function grenadeRange(u: Unit): number {
+export function grenadeRange(u: Unit, grenadeId?: string): number {
   const G = content().rules.grenade;
-  return G.rangeBase + u.stats.strength * G.rangePerStrength;
+  const mod = grenadeId ? itemDef<GrenadeDefinition>(grenadeId).rangeMod ?? 0 : 0;
+  return G.rangeBase + u.stats.strength * G.rangePerStrength + mod;
 }
 
 /** Чи можна докинути гранату в клітинку (дуга над низькими перешкодами, не крізь стіни й перекриття). */
-export function canThrowTo(ctx: Pick<Ctx, 's'>, u: Unit, cell: Cell): boolean {
+export function canThrowTo(ctx: Pick<Ctx, 's'>, u: Unit, cell: Cell, grenadeId?: string): boolean {
   const s = ctx.s;
   if (!u.pos || !cellAt(s.map, cell)?.floor) return false;
-  if (dist2d(u.pos, cell) > grenadeRange(u)) return false;
+  if (dist2d(u.pos, cell) > grenadeRange(u, grenadeId)) return false;
   const from = eyePoint(s, u.pos, 'standing');
   const to = cellCenter(cell, groundHeight(s.map, cell) + 0.3);
   return !trace(s.map, from, to, { skipStart: u.pos, skipEnd: cell, ignoreBelow: 0.6 }).blocked;
@@ -228,12 +229,46 @@ export function resolveGrenade(ctx: Ctx, u: Unit, defId: string, target: Cell): 
   const ang = ctx.rng.next() * Math.PI * 2;
   const r = Math.abs(ctx.rng.gaussian(0, scatter));
   const cand = { x: Math.round(target.x + Math.cos(ang) * r), y: Math.round(target.y + Math.sin(ang) * r), z: target.z };
-  if (cellAt(s.map, cand)?.floor && canThrowTo(ctx, u, cand)) land = cand;
+  if (cellAt(s.map, cand)?.floor && canThrowTo(ctx, u, cand, defId)) land = cand;
   const from = eyePoint(s, u.pos!, 'standing');
   const at = cellCenter(land, groundHeight(s.map, land) + 0.15);
   ctx.ev.push({ t: 'grenade', unitId: u.id, from, to: at });
   u.stats_mission.grenades++;
-  explode(ctx, land, at, { radius: g.radius, damage: g.damage, fragments: g.fragments, objectDamage: g.damage }, u);
+  if (g.smoke) {
+    deploySmoke(ctx, land, g.smoke.radius, g.smoke.turns);
+    return;
+  }
+  // Звичайні осколкові гранати не руйнують об'єкти; кумулятивна — пробиває стіну поруч.
+  explode(ctx, land, at, { radius: g.radius, damage: g.damage, fragments: g.fragments, objectDamage: g.objectDamage ?? 0 }, u);
+}
+
+/** Димова завіса: клітинки в радіусі (на тому ж поверсі) маскують огляд кілька ходів. */
+export function deploySmoke(ctx: Ctx, center: Cell, radius: number, turns: number): void {
+  const r = Math.ceil(radius);
+  const cells: Cell[] = [];
+  for (let y = center.y - r; y <= center.y + r; y++)
+    for (let x = center.x - r; x <= center.x + r; x++) {
+      const c = { x, y, z: center.z };
+      const cl = cellAt(ctx.s.map, c);
+      if (!cl || dist2d(c, center) > radius) continue;
+      cl.smoke = Math.max(cl.smoke ?? 0, turns);
+      cells.push(c);
+    }
+  ctx.ev.push({ t: 'smoke', cells });
+}
+
+/** Розсіювання диму: на початку кожного нового ходу. */
+export function decaySmoke(ctx: Ctx): void {
+  let any = false;
+  for (const lvl of ctx.s.map.cells)
+    for (const row of lvl)
+      for (const c of row)
+        if (c.smoke) {
+          c.smoke -= 1;
+          if (c.smoke <= 0) delete c.smoke;
+          any = true;
+        }
+  if (any) ctx.ev.push({ t: 'smoke', cells: [] });
 }
 
 export interface Blast {

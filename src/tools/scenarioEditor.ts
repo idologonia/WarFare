@@ -199,6 +199,7 @@ export class ScenarioEditor {
           number('Додаткові гранати', () => lo.extraGrenades, (v) => (lo.extraGrenades = v), 0, 4),
         ),
         check('Без бронежилетів і касок', () => lo.noArmor, (v) => (lo.noArmor = v)),
+        select<NonNullable<typeof lo.helmetMount>>('На каску', [['none', 'Нічого'], ['flashlight', 'Ліхтар'], ['nvg_mono', 'ПНБ моно + ліхтар'], ['nvg_bino', 'ПНБ біно + ліхтар']], () => lo.helmetMount ?? 'flashlight', (v) => (lo.helmetMount = v)),
       );
     };
 

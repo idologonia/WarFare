@@ -131,3 +131,12 @@ th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: lef
   .group { padding: 2px; }
   .group button { padding: 0 8px; }
 }
+
+/* Висувні меню дій */
+.menuwrap { position: relative; flex-shrink: 0; }
+.menupop { position: fixed; display: flex; flex-direction: column; gap: 3px; min-width: 210px; max-height: 55vh; overflow-y: auto; z-index: 35; transform: translateY(calc(-100% - var(--btn) - 12px)); }
+.menupop button { text-align: left; }
+
+/* Дощ — легкі косі струмені поверх сцени */
+.rain { pointer-events: none !important; background-image: repeating-linear-gradient(105deg, rgba(180, 200, 230, 0.16) 0 1px, transparent 1px 22px); background-size: 120px 120px; animation: rainfall 0.35s linear infinite; }
+@keyframes rainfall { from { background-position: 0 0; } to { background-position: -30px 120px; } }

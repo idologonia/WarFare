@@ -164,7 +164,8 @@
    ],
    "radius": 2.5,
    "damage": 40,
-   "fragments": 3
+   "fragments": 3,
+   "objectDamage": 0
   },
   {
    "id": "med_tourniquet",
@@ -665,7 +666,8 @@
    ],
    "radius": 2.2,
    "damage": 34,
-   "fragments": 3
+   "fragments": 3,
+   "objectDamage": 0
   },
   {
    "id": "f1",
@@ -678,7 +680,8 @@
    ],
    "radius": 3.5,
    "damage": 40,
-   "fragments": 5
+   "fragments": 5,
+   "objectDamage": 0
   },
   {
    "id": "rpg7",
@@ -692,7 +695,8 @@
    ],
    "caliber": "pg7",
    "magazines": [
-    "pg7"
+    "pg7",
+    "og7"
    ],
    "accuracy": 0,
    "damage": 70,
@@ -712,14 +716,25 @@
   {
    "id": "pg7",
    "kind": "magazine",
-   "name": "Постріл до РПГ-7",
+   "name": "Постріл ПГ-7 (кумулятивний)",
    "weight": 2.2,
    "size": [
     1,
     3
    ],
    "caliber": "pg7",
-   "capacity": 1
+   "capacity": 1,
+   "warhead": {
+    "type": "heat",
+    "damage": 70,
+    "penetration": 8,
+    "blast": {
+     "radius": 2.0,
+     "damage": 45,
+     "fragments": 4,
+     "objectDamage": 420
+    }
+   }
   },
   {
    "id": "vog",
@@ -760,6 +775,99 @@
     "fragments": 3,
     "objectDamage": 300
    }
+  },
+  {
+   "id": "og7",
+   "kind": "magazine",
+   "name": "Постріл ОГ-7 (осколковий)",
+   "weight": 2.0,
+   "size": [
+    1,
+    3
+   ],
+   "caliber": "pg7",
+   "capacity": 1,
+   "warhead": {
+    "type": "frag",
+    "damage": 40,
+    "penetration": 3,
+    "blast": {
+     "radius": 3.2,
+     "damage": 48,
+     "fragments": 6,
+     "objectDamage": 40
+    }
+   }
+  },
+  {
+   "id": "rkg3",
+   "kind": "grenade",
+   "name": "РКГ-3 (кумулятивна)",
+   "weight": 1.07,
+   "size": [
+    1,
+    2
+   ],
+   "radius": 1.3,
+   "damage": 34,
+   "fragments": 1,
+   "objectDamage": 420,
+   "rangeMod": -2.5
+  },
+  {
+   "id": "rdg2",
+   "kind": "grenade",
+   "name": "РДГ-2 (димова)",
+   "weight": 0.5,
+   "size": [
+    1,
+    1
+   ],
+   "radius": 0,
+   "damage": 0,
+   "fragments": 0,
+   "objectDamage": 0,
+   "smoke": {
+    "radius": 2.2,
+    "turns": 3
+   }
+  },
+  {
+   "id": "flashlight",
+   "kind": "helmetMount",
+   "name": "Ліхтар на каску",
+   "weight": 0.2,
+   "size": [
+    1,
+    1
+   ],
+   "mount": "light"
+  },
+  {
+   "id": "nvg_mono",
+   "kind": "helmetMount",
+   "name": "ПНБ монокулярний",
+   "weight": 0.5,
+   "size": [
+    1,
+    1
+   ],
+   "mount": "nvg",
+   "nightFactor": 1.7,
+   "nightHitPenalty": 8
+  },
+  {
+   "id": "nvg_bino",
+   "kind": "helmetMount",
+   "name": "ПНБ бінокулярний",
+   "weight": 0.7,
+   "size": [
+    1,
+    1
+   ],
+   "mount": "nvg",
+   "nightFactor": 2.0,
+   "nightHitPenalty": 5
   }
  ]
 }

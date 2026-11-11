@@ -19,6 +19,7 @@
     ],
     "belt": [
      "rgd5",
+     "rdg2",
      "med_tourniquet",
      "med_bandage"
     ],
@@ -29,6 +30,9 @@
      "med_seal",
      "med_needle",
      "med_pills"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -63,6 +67,9 @@
     ],
     "primaryMods": [
      "scope4"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -87,6 +94,9 @@
     "backpackItems": [
      "belt_pkm_100",
      "med_packing"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -107,6 +117,7 @@
     ],
     "belt": [
      "rgd5",
+     "rdg2",
      "med_tourniquet",
      "med_bandage"
     ],
@@ -116,6 +127,9 @@
      "med_packing",
      "med_seal",
      "med_needle"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -152,6 +166,9 @@
     "primaryMods": [
      "reddot",
      "magnifier"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -176,12 +193,17 @@
     ],
     "belt": [
      "rgd5",
+     "rkg3",
      "med_tourniquet",
      "med_bandage"
     ],
     "backpackItems": [
+     "og7",
      "pg7",
      "med_packing"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
@@ -215,11 +237,14 @@
     "backpackItems": [
      "bulspike",
      "pg7",
-     "pg7",
+     "og7",
      "vog",
      "vog",
      "med_packing",
      "med_seal"
+    ],
+    "helmetMounts": [
+     "flashlight"
     ]
    }
   },
