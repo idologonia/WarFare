@@ -17,6 +17,7 @@ import modsJson from './mods.json';
 import vehiclesJson from './vehicles.json';
 import dronesJson from './drones.json';
 import type {
+  FactionDefinition,
   ItemDefinition,
   MapDefinition,
   MapObjectDefinition,
@@ -65,7 +66,7 @@ export interface ContentDb {
   names: { first: string[]; last: string[]; callsigns: string[] };
   maps: Map<string, MapDefinition>;
   scenarios: Map<string, Scenario>;
-  factions: { id: string; name: string; classes: string[] }[];
+  factions: FactionDefinition[];
   mods: Map<string, WeaponModDefinition>;
   vehicles: Map<string, VehicleDefinition>;
   drones: Map<string, DroneDefinition>;
@@ -85,7 +86,7 @@ export function loadContent(): ContentDb {
     names: namesJson,
     maps: byId([villageMap, industrialMap, treelineMap] as unknown as MapDefinition[]),
     scenarios: byId([firstMission as unknown as Scenario, nightRaid as unknown as Scenario, armorAssault as unknown as Scenario, industrialAssault as unknown as Scenario, treelineNight as unknown as Scenario]),
-    factions: factionsJson.factions,
+    factions: factionsJson.factions as unknown as FactionDefinition[],
     mods: byId(modsJson.mods as WeaponModDefinition[]),
     vehicles: byId(vehiclesJson.vehicles as unknown as VehicleDefinition[]),
     drones: byId(dronesJson.drones as unknown as DroneDefinition[]),

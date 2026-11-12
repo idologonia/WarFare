@@ -177,7 +177,9 @@
     "smokePerCell": 6,
     "fov": 150,
     "peripheralRange": 2.5,
-    "flashlightCone": 50
+    "flashlightCone": 50,
+    "shotHearRange": 14,
+    "nightFlashRange": 20
   },
   "overwatch": {
     "baseChance": 45,

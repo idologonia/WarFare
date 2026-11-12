@@ -87,6 +87,57 @@ function drawRatnik(img: ImageData, size: number): void {
     }
 }
 
+const put = (img: ImageData, size: number, x: number, y: number, c: number[], grain = 8) => {
+  const i = (y * size + x) * 4;
+  const g = (hash(x, y, 77) - 0.5) * grain;
+  img.data[i] = c[0] + g;
+  img.data[i + 1] = c[1] + g;
+  img.data[i + 2] = c[2] + g;
+  img.data[i + 3] = 255;
+};
+
+/** «Мох»: оливкова основа з темно-зеленими й коричневими розмитими плямами. */
+function drawMoss(img: ImageData, size: number): void {
+  const base = rgb('#6f6c4a'), dk = rgb('#3f4630'), br = rgb('#5b4a33'), lt = rgb('#8d8a62');
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const n1 = fbm(x / 26, y / 26, 21), n2 = fbm(x / 18 + 3, y / 18, 22), n3 = fbm(x / 12, y / 12 + 5, 23);
+      let c = base;
+      if (n3 > 0.62) c = lt;
+      if (n1 > 0.58) c = dk;
+      if (n2 > 0.66) c = br;
+      put(img, size, x, y, c);
+    }
+}
+
+/** «Флора»: вертикальні хвилясті смуги — світло-зелена основа, темно-зелені й коричневі смуги. */
+function drawFlora(img: ImageData, size: number): void {
+  const base = rgb('#8a9a6a'), dk = rgb('#3f5a35'), br = rgb('#6d5a3b');
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const wave = x + Math.sin(y / 14 + fbm(x / 30, y / 40, 31) * 3) * 6;
+      const b1 = fbm(wave / 9, y / 70, 32);
+      const b2 = fbm(wave / 7 + 11, y / 60, 33);
+      let c = base;
+      if (b1 > 0.56) c = dk;
+      if (b2 > 0.63) c = br;
+      put(img, size, x, y, c);
+    }
+}
+
+/** «Гірка»: однотонна хакі-олива з темнішими накладками й грубою тканиною. */
+function drawGorka(img: ImageData, size: number): void {
+  const base = rgb('#7a7253'), patch = rgb('#5f5a40');
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const p = fbm(x / 40, y / 40, 41) > 0.6 ? patch : base;
+      put(img, size, x, y, p, 18);
+    }
+}
+
+/** Камуфляж за фракцією (null — за стороною: сині — мультикам, червоні — цифра). */
+export const camoFor = (camo: string | null | undefined, side: string): string => camo ?? (side === 'red' ? 'emr' : 'multicam');
+
 const cache = new WeakMap<Scene, Map<string, StandardMaterial>>();
 
 /**
@@ -99,11 +150,15 @@ export function camoMaterial(scene: Scene, side: string): StandardMaterial {
   const hit = perScene.get(side);
   if (hit) return hit;
   const size = 256;
-  const pixel = side === 'red';
+  const key = side === 'red' ? 'emr' : side === 'blue' ? 'multicam' : side;
+  const pixel = key === 'emr';
   const tex = new DynamicTexture(`camo_${side}`, { width: size, height: size }, scene, false, pixel ? Texture.NEAREST_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE);
   const ctx = tex.getContext() as CanvasRenderingContext2D;
   const img = ctx.createImageData(size, size);
-  if (pixel) drawRatnik(img, size);
+  if (key === 'emr') drawRatnik(img, size);
+  else if (key === 'moss') drawMoss(img, size);
+  else if (key === 'flora') drawFlora(img, size);
+  else if (key === 'gorka') drawGorka(img, size);
   else drawMulticam(img, size);
   ctx.putImageData(img, 0, 0);
   ctx.fillStyle = '#ffffff';
@@ -115,10 +170,11 @@ export function camoMaterial(scene: Scene, side: string): StandardMaterial {
   const m = new StandardMaterial(`unitMat_${side}`, scene);
   m.diffuseTexture = tex;
   m.specularColor = new Color3(0.06, 0.06, 0.06);
+  m.emissiveColor = new Color3(0.1, 0.1, 0.1); // бійці не тонуть у тінях
   m.backFaceCulling = false;
   perScene.set(side, m);
   return m;
 }
 
 /** Назва камуфляжу сторони (для інтерфейсу). */
-export const CAMO_NAMES: Record<string, string> = { blue: 'Мультикам', red: 'Ратник (цифра)' };
+export const CAMO_NAMES: Record<string, string> = { blue: 'Мультикам', red: 'Ратник (цифра)', multicam: 'Мультикам', emr: 'Ратник (цифра)', moss: 'Мох', flora: 'Флора', gorka: 'Гірка' };

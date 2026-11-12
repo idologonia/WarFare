@@ -17,7 +17,7 @@ import { countItems, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
 import { computeApMax, freeWeight } from '@/game/units/derived';
 import type { ArmorDefinition, Unit, WeaponDefinition } from '@/game/types';
-import { camoMaterial } from '@/rendering/camo';
+import { camoFor, camoMaterial } from '@/rendering/camo';
 import { GeoBuilder } from '@/rendering/geo';
 import { makeMaterial } from '@/rendering/mapView';
 import { applyPose, buildUnitModel } from '@/rendering/unitView';
@@ -35,6 +35,7 @@ const SLOT_DEFS: { id: string; title: string; mods: string[] }[] = [
   { id: 'optic', title: 'Приціл', mods: ['reddot', 'scope4'] },
   { id: 'magnifier', title: 'Магніфер', mods: ['magnifier'] },
   { id: 'grip', title: 'Цівка', mods: ['foregrip', 'underbarrel'] },
+  { id: 'muzzle', title: 'ДГК / глушник', mods: ['flashhider', 'compensator', 'suppressor'] },
 ];
 
 /** Екран спорядження бійця (лише перед місією): майстерня зброї та екіпірування з 3D-переглядом. */
@@ -68,7 +69,7 @@ export function openLoadout(s: MissionState, u: Unit, onChange: () => void): HTM
     });
   const showSoldier = () =>
     preview.setContent((scene, root) => {
-      const m = buildUnitModel(scene, camoMaterial(scene, u.side), u);
+      const m = buildUnitModel(scene, camoMaterial(scene, camoFor(content().factions.find((f) => f.id === s.scenario.sides[u.side].factionId)?.camo, u.side)), u);
       m.root.parent = root;
       applyPose(m, 'standing', 'low', 'active');
       m.hit.setEnabled(false);

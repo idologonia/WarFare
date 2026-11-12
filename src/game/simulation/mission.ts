@@ -23,7 +23,8 @@ import { adjacent, canUseMode, stepCost, unitReachable } from '@/game/combat/mov
 import { canSee, updateContacts } from '@/game/visibility/visibility';
 import { computeResult } from '@/game/scenarios/result';
 import { EXTRA_ARMOR } from '@/game/equipment/loadout';
-import type { ArmorDefinition, ControllerKind, MagazineInstance, MedicalDefinition, MoveMode, SideId, StackItem, Unit } from '@/game/types';
+import type { ArmorDefinition, ControllerKind, MagazineInstance, MedicalDefinition, MoveMode, SideId, StackItem, Unit, WeaponDefinition, HelmetMountDefinition } from '@/game/types';
+import { equipWeapon } from '@/game/equipment/loadout';
 import type { Command, CommandResult } from './commands';
 import {
   activeUnitAt,
@@ -44,6 +45,31 @@ export interface MissionOptions {
   controllers?: Partial<Record<SideId, ControllerKind>>;
   revealAll?: boolean;
   difficulty?: 'easy' | 'medium' | 'hard';
+  /** Перевизначити фракції сторін (інакше — зі сценарію). */
+  factions?: Partial<Record<SideId, string>>;
+}
+
+/** Набір фракції: зброя й обвіс за класом, легша броня, ПНБ. */
+export function applyFaction(s: MissionState, u: Unit, factionId: string): void {
+  const f = content().factions.find((x) => x.id === factionId);
+  if (!f) return;
+  const inv = u.inventory;
+  const k = f.weapons?.[u.classId] ?? (u.classId === 'mg1' ? undefined : f.weapons?.default);
+  if (k && inv.primary) {
+    const mods = [...k.mods];
+    const wd = itemDef<WeaponDefinition>(k.weapon);
+    if (inv.primary.mods.includes('underbarrel') && (wd.mods ?? []).includes('underbarrel')) {
+      mods.push('underbarrel');
+      if ((wd.mods ?? []).includes('rail') && !mods.includes('rail') && mods.includes('reddot')) mods.unshift('rail');
+    }
+    const keepUgl = inv.primary.mods.includes('underbarrel') && !mods.includes('underbarrel');
+    if (!keepUgl) equipWeapon(s, u, k.weapon, mods.filter((m) => !(m === 'foregrip' && mods.includes('underbarrel'))));
+  }
+  if (f.armor === 'light' && inv.armor?.defId === 'plate_carrier') inv.armor = { id: newId(s, 'a'), defId: 'rig_ballistic', durability: itemDef<ArmorDefinition>('rig_ballistic').durability };
+  if (inv.helmetMounts) {
+    if (f.noNvg) inv.helmetMounts = inv.helmetMounts.filter((m) => itemDef<HelmetMountDefinition>(m.defId).mount !== 'nvg');
+    else if (f.nvg) for (const m of inv.helmetMounts) if (itemDef<HelmetMountDefinition>(m.defId).mount === 'nvg') m.defId = f.nvg;
+  }
 }
 
 const DIFF_BONUS = { easy: -8, medium: 0, hard: 8 } as const;
@@ -78,14 +104,16 @@ export function createMission(scenarioId: string, opts: MissionOptions = {}): Mi
     result: null,
   };
   const idGen = (p: string) => newId(s, p);
+  for (const side of ['blue', 'red'] as SideId[]) if (opts.factions?.[side]) scenario.sides[side].factionId = opts.factions[side]!;
   for (const side of ['blue', 'red'] as SideId[]) {
     const setup = scenario.sides[side];
     const bonus = s.controllers[side] === 'ai' ? DIFF_BONUS[scenario.difficulty] : 0;
     for (const { classId, count } of setup.squad)
       for (let i = 0; i < count; i++) {
         const u = generateUnit(side, classId, rng, idGen, { statBonus: bonus, aiStyle: setup.aiStyle });
-        if (setup.loadout) applyLoadout(u, setup.loadout, idGen);
         s.units.push(u);
+        applyFaction(s, u, setup.factionId);
+        if (setup.loadout) applyLoadout(u, setup.loadout, idGen);
       }
   }
   const ctx: Ctx = { s, rng, ev: [] };

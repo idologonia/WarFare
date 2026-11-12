@@ -7,7 +7,7 @@ import { applyHit } from '@/game/injuries/injuries';
 import { activeUnitAt, float, onField, type Ctx } from '@/game/simulation/state';
 import { cellCenter, trace, type Point } from '@/game/visibility/los';
 import { eyePoint, targetPoints } from '@/game/visibility/visibility';
-import type { EdgeObject, EdgeSide, FireMode, GrenadeDefinition, Material, Unit } from '@/game/types';
+import type { EdgeObject, EdgeSide, FireMode, GrenadeDefinition, Material, SideId, Unit } from '@/game/types';
 import { coverAgainst, estimateHit, type HitFactor } from './hit';
 import { damageVehicle, vehicleById, vehicleDistance, vehicles } from '@/game/vehicles';
 import { modEffects } from '@/game/equipment/mods';
@@ -154,8 +154,34 @@ export interface FireTarget {
 }
 
 /** Постріл (одиночний, черга, прицільний, наосліп) у бійця або вільно в точку. AP списує команда. */
+/**
+ * Звук і спалах пострілу: вороги в радіусі чують стрільця й отримують його останню відому позицію
+ * (не бачать, а знають, звідки стріляли). Глушник скорочує радіус, полум'ягасник/глушник прибирають нічний спалах.
+ */
+export function revealShooter(ctx: Ctx, shooter: Unit): void {
+  const s = ctx.s;
+  if (!shooter.pos || s.revealAll) return;
+  const V = content().rules.vision;
+  let hear = V.shotHearRange;
+  let flash = true;
+  for (const id of shooter.inventory.primary?.mods ?? []) {
+    const n = content().mods.get(id)?.noise;
+    if (n?.hearRange !== undefined) hear = Math.min(hear, n.hearRange);
+    if (n?.nightFlash === false) flash = false;
+  }
+  const range = s.scenario.timeOfDay === 'night' && flash ? Math.max(hear, V.nightFlashRange) : hear;
+  for (const side of ['blue', 'red'] as SideId[]) {
+    if (side === shooter.side) continue;
+    const c = s.contacts[side][shooter.id];
+    if (c?.visible) continue;
+    const heard = s.units.some((u) => u.side === side && u.status === 'active' && u.pos && dist2d(u.pos, shooter.pos!) <= range);
+    if (heard) s.contacts[side][shooter.id] = { unitId: shooter.id, pos: { ...shooter.pos }, visible: false, identified: c?.identified ?? false, lastSeenTurn: s.turn.turn };
+  }
+}
+
 export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: FireMode, extra?: HitFactor): void {
   const s = ctx.s;
+  revealShooter(ctx, shooter);
   const R = content().rules;
   const wi = shooter.inventory.primary!;
   const w = primaryDef(shooter)!;

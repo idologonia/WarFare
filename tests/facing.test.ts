@@ -28,3 +28,28 @@ describe('напрямок погляду', () => {
     expect(a.facing).toBe(2);
   });
 });
+
+import { revealShooter } from '@/game/combat/fire';
+import { ctxOf } from './helpers';
+
+describe('звук пострілу й глушник', () => {
+  it('без глушника вороги в 14 клітинках чують стрільця; з глушником — лише впритул', () => {
+    const m = freshMission(12);
+    m.dispatch({ type: 'startBattle' });
+    const s = m.state;
+    const a = s.units.find((u) => u.side === 'blue' && !u.inVehicle)!;
+    const b = s.units.find((u) => u.side === 'red')!;
+    isolate(s, [a, b]);
+    a.status = b.status = 'active';
+    place(a, { x: 5, y: 20, z: 0 });
+    place(b, { x: 5, y: 10, z: 0 });
+    a.inventory.primary!.mods = ['suppressor'];
+    s.contacts.red = {};
+    revealShooter(ctxOf(s), a);
+    expect(s.contacts.red[a.id]).toBeUndefined();
+    a.inventory.primary!.mods = [];
+    revealShooter(ctxOf(s), a);
+    expect(s.contacts.red[a.id]?.pos).toEqual(a.pos);
+    expect(s.contacts.red[a.id]?.visible).toBe(false);
+  });
+});

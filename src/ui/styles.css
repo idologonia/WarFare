@@ -176,3 +176,12 @@ canvas.preview3d { width: 100%; max-width: 560px; aspect-ratio: 560 / 300; borde
 .item.kind-grenade { background: #2f3d2a; border-color: #7a9a5a; }
 .item.kind-weapon { background: #2a2f38; border-color: #5a6878; }
 .item.ghost { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); }
+
+/* Ростер (вибір бійців на місію) */
+.roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.roster-card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 2px; }
+.roster-card:hover { border-color: #6b7380; }
+.roster-card.on { border-color: var(--accent, #d9b44a); background: rgba(217,180,74,0.12); }
+.roster-card.off { opacity: 0.5; cursor: not-allowed; }
+.roster-card .rc-top { display: flex; justify-content: space-between; align-items: baseline; }
+.roster-card .rc-stats { font-size: 0.82em; }

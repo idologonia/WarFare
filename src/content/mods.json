@@ -77,6 +77,45 @@
    "excludes": [
     "foregrip"
    ]
+  },
+  {
+   "id": "flashhider",
+   "name": "Полум'ягасник",
+   "slot": "muzzle",
+   "weight": 0.1,
+   "requires": [],
+   "effects": {
+    "recoil": -1
+   },
+   "noise": {
+    "nightFlash": false
+   }
+  },
+  {
+   "id": "compensator",
+   "name": "Компенсатор (ДТК)",
+   "slot": "muzzle",
+   "weight": 0.15,
+   "requires": [],
+   "effects": {
+    "recoil": -4,
+    "burst": 3
+   }
+  },
+  {
+   "id": "suppressor",
+   "name": "Глушник",
+   "slot": "muzzle",
+   "weight": 0.45,
+   "requires": [],
+   "effects": {
+    "recoil": -1,
+    "range": -1
+   },
+   "noise": {
+    "hearRange": 4,
+    "nightFlash": false
+   }
   }
  ]
 }

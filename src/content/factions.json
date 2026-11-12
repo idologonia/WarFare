@@ -1,7 +1,166 @@
 {
-  "_comment": "Перша версія: одна умовна тестова фракція. Реальні фракції з GDD додаються пізніше.",
-  "factions": [
-    { "id": "test", "name": "Умовна фракція", "uniform": { "blue": ["#4d5b3a", "#3b4630"], "red": ["#6e5a3c", "#574730"] },
-      "classes": ["rifleman", "marksman", "mg1", "mg2", "scout"] }
-  ]
+ "_comment": "Фракції: спільна основа класів, різні форма (camo), зброя й обвіс (weapons: клас → зброя/модифікації), броня. Ігрові умовні набори.",
+ "factions": [
+  {
+   "id": "test",
+   "name": "Умовна фракція",
+   "camo": null,
+   "classes": []
+  },
+  {
+   "id": "ua_3oshb",
+   "name": "3 ОШБр",
+   "camo": "multicam",
+   "country": "UA",
+   "weapons": {
+    "default": {
+     "weapon": "ak74",
+     "mods": [
+      "rail",
+      "reddot",
+      "compensator"
+     ]
+    },
+    "scout": {
+     "weapon": "ar15",
+     "mods": [
+      "reddot",
+      "magnifier",
+      "suppressor"
+     ]
+    },
+    "marksman": {
+     "weapon": "ak12",
+     "mods": [
+      "scope4",
+      "suppressor"
+     ]
+    },
+    "droneOperator": {
+     "weapon": "ar15",
+     "mods": [
+      "reddot",
+      "flashhider"
+     ]
+    }
+   },
+   "nvg": "nvg_bino",
+   "classes": []
+  },
+  {
+   "id": "ru_20a",
+   "name": "20-та загальновійськова армія",
+   "camo": "emr",
+   "country": "RU",
+   "weapons": {
+    "default": {
+     "weapon": "ak12",
+     "mods": [
+      "reddot",
+      "flashhider"
+     ]
+    },
+    "scout": {
+     "weapon": "ak12",
+     "mods": [
+      "reddot",
+      "suppressor"
+     ]
+    },
+    "marksman": {
+     "weapon": "ak12",
+     "mods": [
+      "scope4"
+     ]
+    }
+   },
+   "classes": []
+  },
+  {
+   "id": "wagner",
+   "name": "Вагнер",
+   "camo": "moss",
+   "country": "RU",
+   "weapons": {
+    "default": {
+     "weapon": "ak74",
+     "mods": [
+      "rail",
+      "reddot",
+      "compensator"
+     ]
+    },
+    "scout": {
+     "weapon": "ak12",
+     "mods": [
+      "reddot",
+      "magnifier",
+      "suppressor"
+     ]
+    },
+    "marksman": {
+     "weapon": "ak12",
+     "mods": [
+      "scope4",
+      "suppressor"
+     ]
+    }
+   },
+   "classes": []
+  },
+  {
+   "id": "cossack",
+   "name": "Козацький батальйон",
+   "camo": "flora",
+   "country": "RU",
+   "weapons": {
+    "default": {
+     "weapon": "akm",
+     "mods": []
+    },
+    "scout": {
+     "weapon": "akm",
+     "mods": [
+      "rail",
+      "reddot"
+     ]
+    },
+    "marksman": {
+     "weapon": "ak74",
+     "mods": [
+      "rail",
+      "scope4"
+     ]
+    }
+   },
+   "armor": "light",
+   "classes": []
+  },
+  {
+   "id": "militia",
+   "name": "Народна міліція",
+   "camo": "gorka",
+   "country": "RU",
+   "weapons": {
+    "default": {
+     "weapon": "akm",
+     "mods": []
+    },
+    "scout": {
+     "weapon": "ak74",
+     "mods": []
+    },
+    "marksman": {
+     "weapon": "ak74",
+     "mods": [
+      "rail",
+      "scope4"
+     ]
+    }
+   },
+   "armor": "light",
+   "noNvg": true,
+   "classes": []
+  }
+ ]
 }

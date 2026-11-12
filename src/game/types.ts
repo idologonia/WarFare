@@ -117,8 +117,10 @@ export interface WeaponModEffects {
 export interface WeaponModDefinition {
   id: string;
   name: string;
-  slot: 'rail' | 'optic' | 'magnifier' | 'grip' | 'underbarrel';
+  slot: 'rail' | 'optic' | 'magnifier' | 'grip' | 'underbarrel' | 'muzzle';
   weight: number;
+  /** Дульний пристрій: як далеко чути постріл і чи видно спалах уночі. */
+  noise?: { hearRange?: number; nightFlash?: boolean };
   requires: string[];
   /** Несумісні одночасно модифікації. */
   excludes?: string[];
@@ -370,6 +372,8 @@ export interface Unit {
   lightOn?: boolean;
   /** Напрямок погляду 0..7 (див. units/facing.ts). */
   facing?: number;
+  /** Боєць із ростера (постійного загону) — id запису. */
+  rosterId?: string;
   /** ПНБ відкинуто (не працює, але й не засвічується). */
   nvgUp?: boolean;
   /** Боєць у техніці (id машини); pos при цьому null. */
@@ -578,6 +582,26 @@ export interface VehicleState {
   destroyed: boolean;
   /** Однотонне фарбування корпусу (замість камуфляжу сторони). */
   paint?: string;
+}
+
+// ---------- Фракції ----------
+
+export type CamoId = 'multicam' | 'emr' | 'moss' | 'flora' | 'gorka';
+
+export interface FactionDefinition {
+  id: string;
+  name: string;
+  /** Камуфляж форми; null — за стороною (умовна фракція). */
+  camo: CamoId | null;
+  country?: string;
+  /** Зброя за класом (ключ — classId або default; кулеметники й гранатометники РПГ лишаються зі своєю). */
+  weapons?: Record<string, { weapon: string; mods: string[] }>;
+  /** Тип ПНБ на касці (замість стандартного). */
+  nvg?: string;
+  /** light — бронежилет легший (без плитоноски). */
+  armor?: 'light';
+  noNvg?: boolean;
+  classes: string[];
 }
 
 // ---------- Дрони ----------

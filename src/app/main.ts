@@ -14,6 +14,8 @@ import { Music } from '@/ui/audio';
 import { Battle, type BattleMode } from '@/ui/battle';
 import { openOnlineMenu } from '@/ui/onlineMenu';
 import { openHgsMenu } from '@/ui/hgsMenu';
+import { openRosterPick } from '@/ui/rosterPick';
+import { applyMissionResult, applyRosterPicks, loadRoster, saveRoster } from '@/game/roster';
 import { hgsLink } from '@/net/hgsClient';
 import type { OnlineLink } from '@/net/link';
 import type { NetClient } from '@/net/client';
@@ -25,6 +27,13 @@ import { resultsBody, statusName } from '@/ui/panels';
 import { applySettings, loadSettings, saveSettings, type Settings } from '@/ui/settings';
 
 /** Життєвий цикл застосунку: меню → підготовка → бій → результати. */
+const FACTION_OPTS = (): [string, string][] => [
+  ['scenario', 'Як у сценарії'],
+  ...content()
+    .factions.filter((f) => f.id !== 'test')
+    .map((f) => [f.id, f.name] as [string, string]),
+];
+
 class App {
   settings: Settings = loadSettings();
   music = new Music();
@@ -47,6 +56,8 @@ class App {
   }
 
   private editor: { dispose(): void } | null = null;
+  /** Вибір фракцій сторін для нової місії ('scenario' — як у сценарії). */
+  private factionPick: Record<SideId, string> = { blue: 'ua_3oshb', red: 'ru_20a' };
   private net: NetClient | null = null;
 
   /** Гра по мережі через HOME GAME SERVER (основний варіант). */
@@ -184,6 +195,8 @@ class App {
       h('h2', {}, 'Нова місія'),
       h('div', { class: 'field' }, h('label', {}, 'Сценарій'), seg(sc.map((s) => [s.id, s.name] as [string, string]), () => scenarioId, (v) => ((scenarioId = v), describe(v)))),
       desc,
+      h('div', { class: 'field' }, h('label', {}, 'Фракція синіх'), seg(FACTION_OPTS(), () => this.factionPick.blue, (v) => (this.factionPick.blue = v))),
+      h('div', { class: 'field' }, h('label', {}, 'Фракція червоних'), seg(FACTION_OPTS(), () => this.factionPick.red, (v) => (this.factionPick.red = v))),
       h('div', { class: 'field' }, h('label', {}, 'Рівень AI'), seg<Difficulty>([['easy', 'Легкий'], ['medium', 'Середній'], ['hard', 'Важкий']], () => difficulty, (v) => (difficulty = v))),
       h(
         'div',
@@ -208,9 +221,37 @@ class App {
       if (controllers.blue === 'ai' && controllers.red === 'ai') controllers.blue = 'human';
       if (controllers.blue === 'human' && controllers.red === 'human') controllers.red = 'ai';
     }
-    const state = createMission(scenarioId, { seed, difficulty, controllers, revealAll: mode === 'test' });
+    const fp = this.factionPick;
+    const state = createMission(scenarioId, {
+      seed,
+      difficulty,
+      controllers,
+      revealAll: mode === 'test',
+      factions: { blue: fp.blue === 'scenario' ? undefined : fp.blue, red: fp.red === 'scenario' ? undefined : fp.red },
+    });
+    // Проти AI — вибір бійців із ростера фракції (як у Door Kickers).
+    const human: SideId | null = mode === 'ai' ? (state.controllers.blue === 'human' ? 'blue' : 'red') : null;
+    if (human) {
+      this.clear();
+      openRosterPick(
+        this.ui,
+        state,
+        human,
+        (picks) => {
+          applyRosterPicks(state, human, picks);
+          this.rosterSide = { side: human, factionId: state.scenario.sides[human].factionId };
+          this.renderPrep(state, scenarioId, difficulty, mode);
+        },
+        () => this.newMission(),
+      );
+      return;
+    }
+    this.rosterSide = null;
     this.renderPrep(state, scenarioId, difficulty, mode);
   }
+
+  /** Сторона гравця з ростером у поточній місії (для наслідків після бою). */
+  private rosterSide: { side: SideId; factionId: string } | null = null;
 
   /** Підготовка й управління підрозділом: характеристики, зброя, модифікації (лише до місії). */
   private renderPrep(state: MissionState, scenarioId: string, difficulty: Difficulty, mode: BattleMode): void {
@@ -351,6 +392,14 @@ class App {
 
   private results(m: Mission): void {
     const r = m.state.result ?? computeResult(m.state, null, 'withdrawal');
+    let rosterNotes: string[] = [];
+    const rs = this.rosterSide;
+    if (rs && m.state.units.some((u) => u.rosterId)) {
+      const roster = loadRoster(rs.factionId);
+      rosterNotes = applyMissionResult(roster, m.state, rs.side);
+      saveRoster(roster);
+      this.rosterSide = null;
+    }
     const viewer: SideId = this.battleMode === 'online' && this.battle ? this.battle.viewerSide : this.battleMode === 'ai' ? (m.state.controllers.blue === 'human' ? 'blue' : 'red') : 'blue';
     this.clear();
     this.music.play('menu');
@@ -359,6 +408,7 @@ class App {
       'div',
       { class: 'panel', style: 'width:min(980px,100%);padding:16px' },
       resultsBody(r, viewer),
+      rosterNotes.length ? h('div', { class: 'panel', style: 'padding:8px 12px;margin:8px 0' }, h('b', {}, 'Загін: '), rosterNotes.join(' · ')) : null,
       h('p', { class: 'muted' }, `Наслідки: поранені, яких евакуювали, повертаються відновленими. Неевакуйовані втрати: ${m.state.units.filter((u) => u.side === viewer && (u.status === 'dead' || u.status === 'down')).map((u) => `${u.callsign} (${statusName(u.status)})`).join(', ') || 'немає'}.`),
       h('div', { class: 'row' }, btn('Нова місія', () => this.newMission(), { cls: 'primary' }), btn('Головне меню', () => void this.mainMenu())),
     );

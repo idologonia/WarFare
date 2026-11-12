@@ -209,6 +209,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
         camo(g, false);
         g.box(-0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black); // рейки
         g.box(0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black);
+        g.box(-0.105, 0.51, 0.04, 0.012, 0.11, 0.012, black, 1, 0, 0.35); // підборідний ремінь
+        g.box(0.105, 0.51, 0.04, 0.012, 0.11, 0.012, black, 1, 0, 0.35);
         g.box(-0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black); // навушники
         g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
         g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
@@ -251,7 +253,10 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
           g.box(x > 0 ? 0.064 : -0.064, -0.13, 0, 0.004, 0.016, 0.05, [0.8, 0.1, 0.1]);
         }
         if (u.inventory.extraArmor?.some((a) => a.defId === 'shoulder_guards')) g.box(0, -0.02, 0, 0.14, 0.12, 0.15, gear);
+        g.box(0, -0.185, -0.005, 0.12, 0.05, 0.11, shade(gear, 0.85)); // налокітник
+        g.box(0, -0.335, 0, 0.112, 0.03, 0.122, shade(gear, 0.7)); // манжет рукава
         g.box(0, -0.39, 0.0, 0.1, 0.08, 0.1, gloves); // рукавиця
+        g.box(0, -0.4, 0.045, 0.085, 0.05, 0.03, shade(gloves, 1.3)); // пальці
       }),
     );
   };

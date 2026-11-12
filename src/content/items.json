@@ -351,7 +351,10 @@
     "magnifier",
     "scope4",
     "foregrip",
-    "underbarrel"
+    "underbarrel",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": 0,
    "suppression": 1
@@ -389,7 +392,10 @@
     "magnifier",
     "scope4",
     "foregrip",
-    "underbarrel"
+    "underbarrel",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": 3,
    "suppression": 1.2
@@ -427,7 +433,10 @@
     "magnifier",
     "scope4",
     "foregrip",
-    "underbarrel"
+    "underbarrel",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": -1,
    "suppression": 1
@@ -465,7 +474,10 @@
     "magnifier",
     "scope4",
     "foregrip",
-    "underbarrel"
+    "underbarrel",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": -1,
    "suppression": 1
@@ -501,7 +513,10 @@
     "reddot",
     "magnifier",
     "scope4",
-    "foregrip"
+    "foregrip",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": -2,
    "suppression": 1
@@ -539,7 +554,10 @@
    "mods": [
     "rail",
     "reddot",
-    "scope4"
+    "scope4",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": 1,
    "suppression": 2.5
@@ -578,7 +596,10 @@
    "mods": [
     "reddot",
     "scope4",
-    "foregrip"
+    "foregrip",
+    "flashhider",
+    "compensator",
+    "suppressor"
    ],
    "recoil": 0,
    "suppression": 2

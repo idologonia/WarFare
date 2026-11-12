@@ -31,8 +31,11 @@ export function buildWeaponGeo(g: GeoBuilder, weaponId: string, mods: string[], 
       g.prism(0, y + 0.012, z + 0.036, 0.03, 0.03, 0.004, 8, [0.85, 0.2, 0.2]);
     }
     if (has('magnifier')) {
-      g.prism(0, y + 0.015, z - 0.1, 0.045, 0.045, 0.09, 8, DARK);
-      g.prism(0, y + 0.015, z - 0.146, 0.034, 0.034, 0.004, 8, LENS);
+      // Кріплення на планці (відкидне) + труба магніфера на одній осі з коліматором.
+      g.box(0, y - 0.016, z - 0.1, 0.04, 0.022, 0.05, DARK);
+      g.box(0.022, y - 0.004, z - 0.1, 0.012, 0.03, 0.03, STEEL); // важіль відкидання
+      g.prism(0, y + 0.012, z - 0.1, 0.044, 0.044, 0.09, 8, DARK);
+      g.prism(0, y + 0.012, z - 0.146, 0.034, 0.034, 0.004, 8, LENS);
     }
     if (has('scope4')) {
       g.box(0, y - 0.012, z - 0.04, 0.03, 0.025, 0.03, DARK);
@@ -57,7 +60,23 @@ export function buildWeaponGeo(g: GeoBuilder, weaponId: string, mods: string[], 
     }
   };
   const pistolGrip = (z: number, col: RGB) => g.prism(0, -0.075, z, 0.045, 0.06, 0.11, 6, col, Math.PI / 2 + 0.35);
+  /** Дульний пристрій: штатний ДТК / полум'ягасник / компенсатор / глушник. */
   const muzzle = (z: number, r = 0.045) => {
+    if (has('suppressor')) {
+      g.prism(0, 0.012, z + 0.09, 0.06, 0.06, 0.22, 10, [0.11, 0.11, 0.12]);
+      g.prism(0, 0.012, z + 0.2, 0.05, 0.05, 0.004, 10, DARK);
+      return;
+    }
+    if (has('compensator')) {
+      g.prism(0, 0.012, z + 0.01, r * 1.15, r * 1.15, 0.09, 8, DARK);
+      for (let i = 0; i < 3; i++) g.box(0, 0.012 + r * 0.55, z - 0.015 + i * 0.022, r * 0.7, 0.01, 0.01, [0.03, 0.03, 0.03]); // вікна
+      return;
+    }
+    if (has('flashhider')) {
+      g.prism(0, 0.012, z + 0.01, r * 0.95, r * 0.95, 0.085, 6, DARK);
+      for (let i = 0; i < 4; i++) g.box(Math.cos(i * 1.57) * r * 0.4, 0.012 + Math.sin(i * 1.57) * r * 0.4, z + 0.035, 0.008, 0.008, 0.04, [0.03, 0.03, 0.03]);
+      return;
+    }
     g.prism(0, 0.012, z, r, r, 0.07, 8, STEEL);
     g.box(0, 0.012, z + 0.02, r * 1.1, 0.012, 0.02, DARK);
   };
@@ -113,6 +132,12 @@ export function buildWeaponGeo(g: GeoBuilder, weaponId: string, mods: string[], 
     g.box(0, -0.03, -0.2, 0.05, 0.1, 0.01, DARK);
     g.box(0, 0.06, 0.03, 0.03, 0.025, 0.04, DARK); // ручка зведення
     if (has('foregrip')) g.prism(0, -0.08, 0.38, 0.035, 0.035, 0.1, 8, POLY, Math.PI / 2);
+    if (has('underbarrel')) {
+      // M203-подібний модуль під цівкою.
+      g.box(0, -0.045, 0.38, 0.045, 0.025, 0.2, DARK);
+      g.prism(0, -0.075, 0.4, 0.062, 0.062, 0.26, 10, [0.17, 0.17, 0.16]);
+      g.box(0, -0.11, 0.29, 0.03, 0.05, 0.04, DARK);
+    }
     optics(0.075, 0.18, 0.4);
     return;
   }
@@ -140,9 +165,11 @@ export function buildWeaponGeo(g: GeoBuilder, weaponId: string, mods: string[], 
   if (id === 'ak12' || id === 'ak200') g.box(0, 0.065, 0.2, 0.045, 0.015, 0.36, DARK); // довга планка на кришці
   if (has('foregrip')) g.prism(0, -0.08, 0.38, 0.035, 0.035, 0.1, 8, POLY, Math.PI / 2);
   if (has('underbarrel')) {
-    // Підствольний модуль.
-    g.prism(0, -0.075, 0.42, 0.06, 0.06, 0.22, 10, STEEL);
-    g.prism(0, -0.075, 0.535, 0.045, 0.045, 0.01, 10, DARK);
+    // Підствольний модуль ГП-25: кронштейн на цівці, ствол, руків'я зі спуском.
+    g.box(0, -0.04, 0.42, 0.04, 0.03, 0.16, STEEL); // кронштейн
+    g.prism(0, -0.07, 0.43, 0.062, 0.062, 0.24, 10, STEEL);
+    g.prism(0, -0.07, 0.552, 0.046, 0.046, 0.01, 10, DARK);
+    g.box(0, -0.09, 0.33, 0.05, 0.03, 0.05, STEEL);
     g.prism(0, -0.13, 0.32, 0.035, 0.05, 0.07, 6, POLY, Math.PI / 2 + 0.3);
   }
   optics(0.085, 0.15);

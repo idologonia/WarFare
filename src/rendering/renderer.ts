@@ -33,14 +33,14 @@ import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitVie
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
 import { buildDroneModel, type DroneModel } from './droneView';
 import { sfx, type Sfx } from './sound';
-import { itemDef } from '@/content';
+import { content, itemDef } from '@/content';
 import type { WeaponDefinition } from '@/game/types';
 import { visibleCells } from '@/game/visibility/visibility';
 import { facingOf, facingRotation } from '@/game/units/facing';
 import { droneAltitude, droneNoticedBy } from '@/game/drones';
 import { vehicleDef } from '@/content';
 import { vehicleSeenBy } from '@/game/visibility/visibility';
-import { camoMaterial } from './camo';
+import { camoFor, camoMaterial } from './camo';
 
 export interface GraphicsSettings {
   shadows: boolean;
@@ -74,6 +74,13 @@ export class Renderer {
   private fireLights: PointLight[] = [];
   private units = new Map<string, UnitModel>();
   private unitMats: Record<string, StandardMaterial> = {};
+
+  /** Матеріал форми сторони: камуфляж її фракції. */
+  private sideMat(side: SideId): StandardMaterial {
+    const fid = this.state?.scenario?.sides?.[side]?.factionId;
+    const camo = camoFor(content().factions.find((f) => f.id === fid)?.camo, side);
+    return (this.unitMats[camo] ??= camoMaterial(this.scene, camo));
+  }
   private silhouetteMat!: StandardMaterial;
   private overlayMat!: StandardMaterial;
   private fxMat!: StandardMaterial;
@@ -147,7 +154,7 @@ export class Renderer {
     this.light.position = new Vector3(30, 40, -10);
     this.setShadows(this.gfx.shadows);
 
-    this.unitMats = { blue: camoMaterial(scene, 'blue'), red: camoMaterial(scene, 'red') };
+    this.unitMats = {};
     this.silhouetteMat = makeMaterial(scene, 'silhouette');
     this.silhouetteMat.diffuseColor = new Color3(0.15, 0.15, 0.17);
     this.silhouetteMat.emissiveColor = new Color3(0.12, 0.12, 0.14);
@@ -330,7 +337,7 @@ export class Renderer {
   private ensureUnit(u: Unit): UnitModel {
     let m = this.units.get(u.id);
     if (!m) {
-      m = buildUnitModel(this.scene, this.unitMats[u.side], u);
+      m = buildUnitModel(this.scene, this.sideMat(u.side), u);
       for (const mesh of m.meshes) {
         mesh.receiveShadows = true;
         this.shadowGen?.addShadowCaster(mesh);
@@ -359,7 +366,7 @@ export class Renderer {
       applyPose(m, u.stance, u.weaponState, u.status);
       this.updateBeam(u, m);
       const identified = u.side === this.viewSide || s.revealAll || s.contacts[this.viewSide][u.id]?.identified;
-      for (const mesh of m.meshes) mesh.material = identified ? this.unitMats[u.side] : this.silhouetteMat;
+      for (const mesh of m.meshes) mesh.material = identified ? this.sideMat(u.side) : this.silhouetteMat;
     }
     this.refreshVisibility();
   }
@@ -778,7 +785,7 @@ export class Renderer {
   private ensureVehicle(v: VehicleState): VehicleModel {
     let m = this.vehicleModels.get(v.id);
     if (!m) {
-      m = buildVehicleModel(this.scene, this.unitMats[v.side], v);
+      m = buildVehicleModel(this.scene, this.sideMat(v.side), v);
       for (const mesh of m.meshes) {
         mesh.receiveShadows = true;
         this.shadowGen?.addShadowCaster(mesh);
