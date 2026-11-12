@@ -25,6 +25,7 @@ export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: Vehicl
   // Однотонне фарбування замість камуфляжу (М113 — койот, L200 — випадковий колір).
   const paint: RGB | null = v.paint ? hex(v.paint) : null;
   g.tile = tile;
+  g.smooth = true;
   const camo = (on: boolean) => (g.camo = on && !paint ? 0.35 : null);
   const HULL: RGB = paint ?? WHITE;
   switch (v.defId) {

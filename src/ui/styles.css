@@ -185,3 +185,6 @@ canvas.preview3d { width: 100%; max-width: 560px; aspect-ratio: 560 / 300; borde
 .roster-card.off { opacity: 0.5; cursor: not-allowed; }
 .roster-card .rc-top { display: flex; justify-content: space-between; align-items: baseline; }
 .roster-card .rc-stats { font-size: 0.82em; }
+
+select.select { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: #151920; color: inherit; font: inherit; }
+select.select:focus { outline: 1px solid #d9b44a; }

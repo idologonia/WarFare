@@ -14,6 +14,7 @@ import { Music } from '@/ui/audio';
 import { Battle, type BattleMode } from '@/ui/battle';
 import { openOnlineMenu } from '@/ui/onlineMenu';
 import { openHgsMenu } from '@/ui/hgsMenu';
+import { UNIFORM_NAMES } from '@/rendering/camo';
 import { openRosterPick } from '@/ui/rosterPick';
 import { applyMissionResult, applyRosterPicks, loadRoster, saveRoster } from '@/game/roster';
 import { hgsLink } from '@/net/hgsClient';
@@ -33,6 +34,20 @@ const FACTION_OPTS = (): [string, string][] => [
     .factions.filter((f) => f.id !== 'test')
     .map((f) => [f.id, f.name] as [string, string]),
 ];
+
+/** Випадне меню фракції з підписом форми. */
+function factionSelect(value: string, set: (v: string) => void): HTMLSelectElement {
+  const sel = h('select', { class: 'select' }) as HTMLSelectElement;
+  for (const [id, name] of FACTION_OPTS()) {
+    const f = content().factions.find((x) => x.id === id);
+    const forms = f?.uniform ? [...new Set(f.uniform.jackets)].map((j) => UNIFORM_NAMES[j] ?? j).slice(0, 4).join(', ') : '';
+    const o = h('option', { value: id }, forms ? `${name} — ${forms}${f!.uniform!.jackets.length > 4 ? '…' : ''}` : name) as HTMLOptionElement;
+    if (id === value) o.selected = true;
+    sel.append(o);
+  }
+  sel.addEventListener('change', () => set(sel.value));
+  return sel;
+}
 
 class App {
   settings: Settings = loadSettings();
@@ -195,8 +210,10 @@ class App {
       h('h2', {}, 'Нова місія'),
       h('div', { class: 'field' }, h('label', {}, 'Сценарій'), seg(sc.map((s) => [s.id, s.name] as [string, string]), () => scenarioId, (v) => ((scenarioId = v), describe(v)))),
       desc,
-      h('div', { class: 'field' }, h('label', {}, 'Фракція синіх'), seg(FACTION_OPTS(), () => this.factionPick.blue, (v) => (this.factionPick.blue = v))),
-      h('div', { class: 'field' }, h('label', {}, 'Фракція червоних'), seg(FACTION_OPTS(), () => this.factionPick.red, (v) => (this.factionPick.red = v))),
+      h('div', { class: 'row', style: 'gap:12px;flex-wrap:wrap' },
+        h('div', { class: 'field', style: 'flex:1;min-width:200px' }, h('label', {}, 'Фракція синіх'), factionSelect(this.factionPick.blue, (v) => (this.factionPick.blue = v))),
+        h('div', { class: 'field', style: 'flex:1;min-width:200px' }, h('label', {}, 'Фракція червоних'), factionSelect(this.factionPick.red, (v) => (this.factionPick.red = v))),
+      ),
       h('div', { class: 'field' }, h('label', {}, 'Рівень AI'), seg<Difficulty>([['easy', 'Легкий'], ['medium', 'Середній'], ['hard', 'Важкий']], () => difficulty, (v) => (difficulty = v))),
       h(
         'div',

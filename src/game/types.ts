@@ -613,6 +613,10 @@ export interface FactionDefinition {
     gear?: string;
     /** Спорядження різних відтінків. */
     mixedGear?: boolean;
+    /** Варіанти кольору спорядження (кожен боєць — свій). */
+    gearMix?: string[];
+    /** Варіанти чохла шолома. */
+    helmetCovers?: string[];
   };
   classes: string[];
 }

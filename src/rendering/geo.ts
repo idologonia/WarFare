@@ -32,6 +32,8 @@ export class GeoBuilder {
   uvs: number[] = [];
   /** Якщо задано — грані отримують UV для камуфляжної текстури (масштаб на одиницю світу). */
   camo: number | null = null;
+  /** Згладжені нормалі бічних граней призм (округлий вигляд замість «рубленого»). */
+  smooth = false;
   /** Світові UV (масштаб повторень на одиницю): текстура деталей поверхні (surfaces.ts). */
   worldUV: number | null = null;
   /** Тайл атласу форми (camo.ts: tileRect); null — стара окрема текстура. */
@@ -124,14 +126,17 @@ export class GeoBuilder {
     this.camoSeed = (this.camoSeed * 9301 + 0.4927) % 1;
     const off = 0.08 + this.camoSeed * 0.1;
     const per = (Math.PI * (w + h)) / 2;
-    const push = (pts: [number, number, number][], n: [number, number, number], k: number, uv?: [number, number][]) => {
+    const push = (pts: [number, number, number][], n: [number, number, number], k: number, uv?: [number, number][], vn?: [number, number, number][]) => {
       const base = this.positions.length / 3;
       const nt = tf(n[0], n[1], n[2]);
       pts.forEach(([x, y, z], j) => {
         const p = tf(x, y, z);
         this.positions.push(cx + p[0], cy + p[1], cz + p[2]);
-        this.normals.push(nt[0], nt[1], nt[2]);
-        this.colors.push(color[0] * k, color[1] * k, color[2] * k, alpha);
+        // Згладжування: нормаль вершини — радіальна (від осі призми), затінення — плавне.
+        const nn = vn ? tf(vn[j][0], vn[j][1], vn[j][2]) : nt;
+        this.normals.push(nn[0], nn[1], nn[2]);
+        const kk = vn ? 0.86 + nn[1] * 0.14 : k;
+        this.colors.push(color[0] * kk, color[1] * kk, color[2] * kk, alpha);
         if (camo === null && this.worldUV !== null) {
           const S = this.worldUV;
           const wx = cx + p[0], wy = cy + p[1], wz = cz + p[2];
@@ -159,7 +164,17 @@ export class GeoBuilder {
       const ua = (i / sides) * per * (camo ?? 0);
       const ub = ((i + 1) / sides) * per * (camo ?? 0);
       const L = len * (camo ?? 0);
-      push([[x0, y0, -hz], [x1, y1, -hz], [x1, y1, hz], [x0, y0, hz]], [nx / nl, ny2, 0], k, [[ua, 0], [ub, 0], [ub, L], [ua, L]]);
+      let vn: [number, number, number][] | undefined;
+      if (this.smooth) {
+        const rn = (px: number, py: number): [number, number, number] => {
+          const ax = px / ((w / 2) ** 2 || 1), ay = py / ((h / 2) ** 2 || 1);
+          const l = Math.hypot(ax, ay) || 1;
+          return [ax / l, ay / l, 0];
+        };
+        const a = rn(x0, y0), b = rn(x1, y1);
+        vn = [a, b, b, a];
+      }
+      push([[x0, y0, -hz], [x1, y1, -hz], [x1, y1, hz], [x0, y0, hz]], [nx / nl, ny2, 0], k, [[ua, 0], [ub, 0], [ub, L], [ua, L]], vn);
     }
     push(ring.map(([x, y]) => [x, y, hz] as [number, number, number]), [0, 0, 1], 0.9);
     push(ring.map(([x, y]) => [x, y, -hz] as [number, number, number]).reverse(), [0, 0, -1], 0.7);

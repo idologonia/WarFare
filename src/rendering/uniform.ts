@@ -27,8 +27,8 @@ const GEAR_MIX = ['#5d5a3e', '#4a4a3c', '#6b5a40', '#3f4433', '#555046', '#2e2f2
 export function lookFor(u: Unit, factionId: string | undefined, side: SideId): UnitLook {
   const f = content().factions.find((x) => x.id === factionId);
   const uf = f?.uniform;
-  const h = hashStr(u.id + u.name);
-  const pick = <T>(arr: T[], salt: number): T => arr[(h >>> salt) % arr.length];
+  // Окремий хеш на кожну частину вигляду — незалежний вибір для кожного бійця.
+  const pick = <T>(arr: T[], salt: number): T => arr[hashStr(`${u.id}|${u.name}|${u.callsign}|${salt}`) % arr.length];
   if (!uf) {
     const t = uniformTile(camoFor(f?.camo, side));
     return { jacket: t, pants: t, helmetCover: t, helmet: side === 'red' ? '6b47' : 'highcut', headgear: 'none', gear: side === 'red' ? '#4f5438' : '#7d6847' };
@@ -38,10 +38,10 @@ export function lookFor(u: Unit, factionId: string | undefined, side: SideId): U
   return {
     jacket,
     pants,
-    helmetCover: uf.helmet === 'ssh68' ? uniformTile('olive') : jacket,
+    helmetCover: uf.helmetCovers ? uniformTile(pick(uf.helmetCovers, 23)) : uf.helmet === 'ssh68' ? uniformTile(pick(['olive', 'olive', 'afghanka'], 23)) : jacket,
     helmet: uf.helmet ?? 'highcut',
     headgear: (uf.headgear ? pick(uf.headgear, 13) : 'none') as UnitLook['headgear'],
-    gear: uf.mixedGear ? pick(GEAR_MIX, 17) : uf.gear ?? '#7d6847',
+    gear: uf.gearMix ? pick(uf.gearMix, 17) : uf.mixedGear ? pick(GEAR_MIX, 17) : uf.gear ?? '#7d6847',
     civilian: CIVIL.has(pick(uf.jackets, 1)),
   };
 }

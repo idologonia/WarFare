@@ -22,6 +22,7 @@ function defaultLook(u: Unit): UnitLook & { civilian?: boolean } {
 /** Частина моделі: сітка з точкою обертання у початку координат вузла. */
 function part(scene: Scene, mat: StandardMaterial, parent: TransformNode, name: string, build: (g: GeoBuilder) => void): Mesh {
   const g = new GeoBuilder();
+  g.smooth = true;
   build(g);
   const m = g.build(name, scene, mat);
   m.parent = parent;
@@ -54,6 +55,12 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
   const root = new TransformNode(`unit_${u.id}`, scene);
   const body = new TransformNode('body', scene);
   body.parent = root;
+  // Індивідуальна статура: зріст і ширина трохи різняться в кожного бійця.
+  let hs = 2166136261;
+  for (const ch of u.id + u.name) hs = Math.imul(hs ^ ch.charCodeAt(0), 16777619);
+  const r1 = ((hs >>> 0) % 1000) / 1000;
+  const r2 = ((hs >>> 10) % 1000) / 1000;
+  body.scaling.set(0.95 + r2 * 0.1, 0.94 + r1 * 0.12, 0.95 + r2 * 0.1);
   const side = hex(SIDE_COLOR[u.side]);
   const gear = hex(L.gear);
   const gearDark = shade(gear, 0.78);
@@ -87,8 +94,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
     return reg(
       part(scene, mat, n, 'leg', (g) => {
         camo(g, L.pants);
-        g.prism(0, -0.125, 0.004, 0.155, 0.165, 0.25, 8, WHITE, V); // стегно
-        g.prism(0, -0.355, 0, 0.125, 0.135, 0.21, 8, WHITE, V); // гомілка
+        g.prism(0, -0.125, 0.004, 0.155, 0.165, 0.25, 12, WHITE, V); // стегно
+        g.prism(0, -0.355, 0, 0.125, 0.135, 0.21, 12, WHITE, V); // гомілка
         camo(g, false);
         g.prism(0, -0.255, 0.07, 0.1, 0.06, 0.08, 6, black, V); // наколінник
         if (u.inventory.extraArmor?.some((a) => a.defId === 'leg_guards')) g.box(0, -0.13, 0.085, 0.14, 0.16, 0.035, gear);
@@ -108,10 +115,10 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
   reg(
     part(scene, mat, torso, 'torso', (g) => {
       camo(g, L.pants);
-      g.prism(0, 0.055, 0, 0.3, 0.19, 0.12, 8, WHITE, V); // таз
+      g.prism(0, 0.055, 0, 0.3, 0.19, 0.12, 12, WHITE, V); // таз
       camo(g, L.jacket);
-      g.prism(0, 0.17, 0, 0.305, 0.195, 0.13, 8, WHITE, V); // живіт
-      g.prism(0, 0.32, 0.005, 0.345, 0.215, 0.2, 8, WHITE, V); // груди
+      g.prism(0, 0.17, 0, 0.305, 0.195, 0.13, 12, WHITE, V); // живіт
+      g.prism(0, 0.32, 0.005, 0.345, 0.215, 0.2, 12, WHITE, V); // груди
       g.prism(0, 0.415, 0, 0.13, 0.13, 0.4, 8, WHITE, 0, V); // плечі
       camo(g, false);
       if (u.inventory.rig) {
@@ -195,17 +202,17 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
           break;
       }
       // ---- Шия й голова ----
-      g.prism(0, 0.495, 0.005, 0.085, 0.09, 0.07, 8, skin, V); // шия
-      g.prism(0, 0.605, 0.01, 0.15, 0.17, 0.165, 8, skin, V); // голова
+      g.prism(0, 0.495, 0.005, 0.085, 0.09, 0.07, 12, skin, V); // шия
+      g.prism(0, 0.605, 0.01, 0.15, 0.17, 0.165, 12, skin, V); // голова
       g.box(0, 0.53, 0.035, 0.11, 0.035, 0.1, skin); // щелепа
       g.box(0, 0.6, 0.095, 0.025, 0.04, 0.02, shade(skin, 0.92)); // ніс
       g.box(-0.035, 0.622, 0.085, 0.025, 0.012, 0.006, [0.16, 0.13, 0.1]); // очі
       g.box(0.035, 0.622, 0.085, 0.025, 0.012, 0.006, [0.16, 0.13, 0.1]);
       g.box(0, 0.642, 0.087, 0.1, 0.01, 0.006, hair); // брови
       for (const x of [-0.077, 0.077]) g.box(x, 0.605, 0.0, 0.012, 0.04, 0.03, shade(skin, 0.9)); // вуха
-      if (u.appearance.face % 3 === 0) g.prism(0, 0.545, 0.035, 0.13, 0.11, 0.06, 8, hair, V); // борода
+      if (u.appearance.face % 3 === 0) g.prism(0, 0.545, 0.035, 0.13, 0.11, 0.06, 12, hair, V); // борода
       else if (u.appearance.face % 3 === 1) g.box(0, 0.572, 0.088, 0.065, 0.015, 0.01, hair); // вуса
-      g.prism(0, 0.6, -0.04, 0.15, 0.1, 0.12, 8, hair, V); // потилиця
+      g.prism(0, 0.6, -0.04, 0.15, 0.1, 0.12, 12, hair, V); // потилиця
       const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
       if (u.inventory.helmet) {
         camo(g, L.helmetCover);
@@ -270,8 +277,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
     return reg(
       part(scene, mat, n, 'arm', (g) => {
         camo(g, L.jacket);
-        g.prism(0, -0.1, 0, 0.1, 0.105, 0.2, 8, WHITE, V);
-        g.prism(0, -0.28, 0.005, 0.09, 0.095, 0.17, 8, WHITE, V);
+        g.prism(0, -0.1, 0, 0.1, 0.105, 0.2, 12, WHITE, V);
+        g.prism(0, -0.28, 0.005, 0.09, 0.095, 0.17, 12, WHITE, V);
         camo(g, false);
         g.prism(0, -0.05, 0, 0.108, 0.113, 0.05, 8, side, V); // пов'язка сторони
         if (u.classId === 'medic') {

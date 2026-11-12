@@ -48,13 +48,32 @@
    "classes": [],
    "uniform": {
     "jackets": [
-     "multicam"
+     "multicam",
+     "multicam",
+     "multicam",
+     "olive"
     ],
     "pants": [
-     "multicam"
+     "multicam",
+     "multicam",
+     "olive",
+     "civkhaki"
     ],
     "helmet": "highcut",
-    "gear": "#7d6847"
+    "helmetCovers": [
+     "multicam",
+     "olive",
+     "civkhaki",
+     "multicam"
+    ],
+    "gearMix": [
+     "#7d6847",
+     "#5d6340",
+     "#6e6a55",
+     "#8a7a5a",
+     "#4a4f3a"
+    ],
+    "mixedGear": false
    }
   },
   {
@@ -87,13 +106,30 @@
    "classes": [],
    "uniform": {
     "jackets": [
-     "emr"
+     "emr",
+     "emr",
+     "emr",
+     "gorka"
     ],
     "pants": [
-     "emr"
+     "emr",
+     "emr",
+     "olive",
+     "gorka"
     ],
     "helmet": "6b47",
-    "gear": "#4f5438"
+    "helmetCovers": [
+     "emr",
+     "olive",
+     "emr"
+    ],
+    "gearMix": [
+     "#4f5438",
+     "#5d6340",
+     "#3f4433",
+     "#55573f"
+    ],
+    "mixedGear": false
    }
   },
   {
@@ -131,15 +167,34 @@
     "jackets": [
      "moss",
      "moss",
-     "multicam"
+     "multicam",
+     "olive",
+     "gorka"
     ],
     "pants": [
      "moss",
-     "moss",
-     "olive"
+     "olive",
+     "multicam",
+     "gorka"
     ],
     "helmet": "highcut",
-    "gear": "#5a553c"
+    "helmetCovers": [
+     "moss",
+     "olive",
+     "multicam"
+    ],
+    "gearMix": [
+     "#5a553c",
+     "#4a4a3c",
+     "#6b5a40",
+     "#3f4433"
+    ],
+    "headgear": [
+     "cap",
+     "none",
+     "beanie"
+    ],
+    "mixedGear": false
    }
   },
   {

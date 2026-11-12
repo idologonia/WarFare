@@ -285,6 +285,7 @@ export class MapView {
       let b = tex.get(sf);
       if (!b) {
         b = new GeoBuilder();
+        b.smooth = true;
         b.worldUV = SURFACE_SCALE[sf];
         tex.set(sf, b);
       }
@@ -375,7 +376,15 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
       const rows = o.id === 'sandbags' ? 3 : 2;
       for (let r = 0; r < rows; r++)
         for (let i = 0; i < 3; i++)
-          put(-0.33 + i * 0.33 + (r % 2) * 0.08 - 0.04, 0.08 + r * (h / rows), (hash2(x + i, y + r) - 0.5) * 0.04, 0.32, h / rows - 0.02, 0.3, shade(col, 0.92 + hash2(i, r, x) * 0.18));
+        {
+          // Мішок — округла «подушка» вздовж межі.
+          const a = -0.33 + i * 0.33 + (r % 2) * 0.08 - 0.04;
+          const bb = (hash2(x + i, y + r) - 0.5) * 0.04;
+          const yy = 0.08 + r * (h / rows);
+          const c = shade(col, 0.92 + hash2(i, r, x) * 0.18);
+          if (horizontal) g.prism(ex + a, b0 + yy, ez + bb, 0.3, h / rows + 0.01, 0.34, 10, c, 0, Math.PI / 2);
+          else g.prism(ex + bb, b0 + yy, ez - a, 0.3, h / rows + 0.01, 0.34, 10, c);
+        }
       break;
     }
     case 'parapet':

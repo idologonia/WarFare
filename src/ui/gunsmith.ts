@@ -56,6 +56,7 @@ export function openLoadout(s: MissionState, u: Unit, onChange: () => void): HTM
   const showWeapon = () =>
     preview.setContent((scene, root) => {
       const g = new GeoBuilder();
+      g.smooth = true;
       buildWeaponGeo(g, weaponId, mods, mag);
       const mesh = g.build('pw', scene, makeMaterial(scene, 'pwm'));
       mesh.parent = root;
