@@ -87,6 +87,8 @@ function drawRatnik(img: ImageData, size: number): void {
     }
 }
 
+const cache = new WeakMap<Scene, Map<string, StandardMaterial>>();
+
 const put = (img: ImageData, size: number, x: number, y: number, c: number[], grain = 8) => {
   const i = (y * size + x) * 4;
   const g = (hash(x, y, 77) - 0.5) * grain;
@@ -135,10 +137,121 @@ function drawGorka(img: ImageData, size: number): void {
     }
 }
 
+/** «Березка» (КЛМК): світла хакі-зелена основа з дрібними темно-зеленими «листочками». */
+function drawBerezka(img: ImageData, size: number): void {
+  const base = rgb('#a7ad84'), leaf = rgb('#5d6b3e'), dk = rgb('#46512f');
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const n = fbm(x / 6, y / 11, 51) + (hash(x >> 1, y >> 2, 52) - 0.5) * 0.25;
+      const big = fbm(x / 34, y / 34, 53);
+      let c = base;
+      if (n > 0.6) c = leaf;
+      if (n > 0.6 && big > 0.6) c = dk;
+      put(img, size, x, y, c, 6);
+    }
+}
+
+/** «Бутан» / ТТсКО: чотириколірні чіткі плями — світло-зелений, коричневий, темно-зелений, чорний. */
+function drawTtsko(img: ImageData, size: number): void {
+  const base = rgb('#8d9a5e'), br = rgb('#6b4f35'), dg = rgb('#3d4a2c'), bk = rgb('#23231f');
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const n1 = fbm(x / 22, y / 15, 61), n2 = fbm(x / 18 + 9, y / 14, 62), n3 = fbm(x / 12, y / 10 + 4, 63);
+      let c = base;
+      if (n1 > 0.55) c = br;
+      if (n2 > 0.6) c = dg;
+      if (n3 > 0.7) c = bk;
+      put(img, size, x, y, c, 5);
+    }
+}
+
+/** Однотонна тканина з фактурою (афганка, цивільний одяг). twill — діагональне плетіння (джинс). */
+function drawPlain(img: ImageData, size: number, hexc: string, grain = 14, twill = false, stripes?: string): void {
+  const c0 = rgb(hexc);
+  const st = stripes ? rgb(stripes) : null;
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      let k = 1 + (fbm(x / 50, y / 50, 71) - 0.5) * 0.12;
+      if (twill) k += ((x + y) % 4 < 2 ? 0.05 : -0.05) + (hash(x, y, 72) - 0.5) * 0.08;
+      let c = [c0[0] * k, c0[1] * k, c0[2] * k];
+      // Лампаси спортивного костюма: дві світлі смуги.
+      if (st && (Math.abs((x % 128) - 20) < 3 || Math.abs((x % 128) - 30) < 3)) c = st;
+      put(img, size, x, y, c, grain);
+    }
+}
+
+/**
+ * Атлас форми: 8×2 унікальних тайлів по 256 px (+ дзеркальні 2 нижні рядки — щоб не залежати
+ * від перевертання текстури). Тайл 0 — білий (однотонні деталі, колір у вершинах).
+ */
+export const UNIFORMS = ['white', 'multicam', 'emr', 'moss', 'flora', 'gorka', 'berezka', 'ttsko', 'afghanka', 'denim', 'black', 'tracksuit', 'civkhaki', 'olive', 'hoodie', 'brownjacket'] as const;
+export type UniformId = (typeof UNIFORMS)[number];
+export const UNIFORM_NAMES: Record<string, string> = {
+  multicam: 'Мультикам', emr: 'Ратник (цифра)', moss: 'Мох', flora: 'Флора', gorka: 'Гірка', berezka: 'Березка', ttsko: 'Бутан (ТТсКО)', afghanka: 'Афганка',
+  denim: 'Джинси', black: 'Чорна куртка', tracksuit: 'Спортивний костюм', civkhaki: 'Цивільне хакі', olive: 'Олива', hoodie: 'Худі', brownjacket: 'Коричнева куртка',
+};
+export const uniformTile = (id: string): number => Math.max(0, UNIFORMS.indexOf(id as UniformId));
+
+function drawTile(id: UniformId, img: ImageData, size: number): void {
+  switch (id) {
+    case 'white': for (let i = 0; i < img.data.length; i++) img.data[i] = 255; return;
+    case 'multicam': return drawMulticam(img, size);
+    case 'emr': return drawRatnik(img, size);
+    case 'moss': return drawMoss(img, size);
+    case 'flora': return drawFlora(img, size);
+    case 'gorka': return drawGorka(img, size);
+    case 'berezka': return drawBerezka(img, size);
+    case 'ttsko': return drawTtsko(img, size);
+    case 'afghanka': return drawPlain(img, size, '#a2976a', 12);
+    case 'denim': return drawPlain(img, size, '#3e5677', 10, true);
+    case 'black': return drawPlain(img, size, '#26272a', 10);
+    case 'tracksuit': return drawPlain(img, size, '#1f2b4d', 8, false, '#d8d8d8');
+    case 'civkhaki': return drawPlain(img, size, '#8b7f60', 12);
+    case 'olive': return drawPlain(img, size, '#5d6340', 12);
+    case 'hoodie': return drawPlain(img, size, '#5b5c61', 14);
+    case 'brownjacket': return drawPlain(img, size, '#5c4231', 12);
+  }
+}
+
+/** Атласний матеріал форми (один на сцену для всіх бійців і техніки). */
+export function uniformAtlas(scene: Scene): StandardMaterial {
+  let perScene = cache.get(scene);
+  if (!perScene) cache.set(scene, (perScene = new Map()));
+  const hit = perScene.get('__atlas');
+  if (hit) return hit;
+  const T = 256;
+  const tex = new DynamicTexture('uniformAtlas', { width: T * 8, height: T * 4 }, scene, true, Texture.TRILINEAR_SAMPLINGMODE);
+  const ctx = tex.getContext() as CanvasRenderingContext2D;
+  UNIFORMS.forEach((id, i) => {
+    const img = ctx.createImageData(T, T);
+    drawTile(id, img, T);
+    const col = i % 8;
+    const row = Math.floor(i / 8);
+    ctx.putImageData(img, col * T, row * T); // ряди 0–1
+    ctx.putImageData(img, col * T, (3 - row) * T); // дзеркально 2–3
+  });
+  tex.update(false);
+  tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+  tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+  const m = new StandardMaterial('uniformAtlasMat', scene);
+  m.diffuseTexture = tex;
+  m.specularColor = new Color3(0.05, 0.05, 0.05);
+  m.emissiveColor = new Color3(0.1, 0.1, 0.1);
+  m.backFaceCulling = false;
+  perScene.set('__atlas', m);
+  return m;
+}
+
+/** UV-прямокутник тайла атласу: [u0, v0, du, dv]. Ряд 0/1 у UV — дзеркальний, тож байдуже на перевертання. */
+export function tileRect(tile: number): [number, number, number, number] {
+  const col = tile % 8;
+  const row = Math.floor(tile / 8);
+  return [col / 8, row / 4, 1 / 8, 1 / 4];
+}
+
 /** Камуфляж за фракцією (null — за стороною: сині — мультикам, червоні — цифра). */
 export const camoFor = (camo: string | null | undefined, side: string): string => camo ?? (side === 'red' ? 'emr' : 'multicam');
 
-const cache = new WeakMap<Scene, Map<string, StandardMaterial>>();
 
 /**
  * Текстура 256×256 з камуфляжем сторони і білими ділянками в кутах

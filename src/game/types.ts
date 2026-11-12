@@ -601,6 +601,19 @@ export interface FactionDefinition {
   /** light — бронежилет легший (без плитоноски). */
   armor?: 'light';
   noNvg?: boolean;
+  /** Форма: з чого вибирається куртка й штани кожного бійця (мікс — для добровольців і міліції). */
+  uniform?: {
+    jackets: string[];
+    pants: string[];
+    /** Вигляд шолома: highcut — сучасний, 6b47 — «Ратник», ssh68 — радянська каска. */
+    helmet?: 'highcut' | '6b47' | 'ssh68';
+    /** Головні убори тих, хто без каски. */
+    headgear?: string[];
+    /** Колір спорядження. */
+    gear?: string;
+    /** Спорядження різних відтінків. */
+    mixedGear?: boolean;
+  };
   classes: string[];
 }
 

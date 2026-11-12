@@ -17,7 +17,8 @@ import { countItems, totalWeight } from '@/game/inventory/inventory';
 import type { MissionState } from '@/game/simulation/state';
 import { computeApMax, freeWeight } from '@/game/units/derived';
 import type { ArmorDefinition, Unit, WeaponDefinition } from '@/game/types';
-import { camoFor, camoMaterial } from '@/rendering/camo';
+import { uniformAtlas } from '@/rendering/camo';
+import { lookFor } from '@/rendering/uniform';
 import { GeoBuilder } from '@/rendering/geo';
 import { makeMaterial } from '@/rendering/mapView';
 import { applyPose, buildUnitModel } from '@/rendering/unitView';
@@ -60,7 +61,7 @@ export function openLoadout(s: MissionState, u: Unit, onChange: () => void): HTM
       mesh.parent = root;
       mesh.scaling.setAll(4.2);
       mesh.position.set(0, 0, -1.0);
-      mesh.enableEdgesRendering(0.95);
+      mesh.enableEdgesRendering(0.6);
       mesh.edgesWidth = 2.5;
       mesh.edgesColor.set(0.02, 0.02, 0.03, 0.9);
       preview.camera.setTarget(new Vector3(0, 0.05, 0));
@@ -69,7 +70,7 @@ export function openLoadout(s: MissionState, u: Unit, onChange: () => void): HTM
     });
   const showSoldier = () =>
     preview.setContent((scene, root) => {
-      const m = buildUnitModel(scene, camoMaterial(scene, camoFor(content().factions.find((f) => f.id === s.scenario.sides[u.side].factionId)?.camo, u.side)), u);
+      const m = buildUnitModel(scene, uniformAtlas(scene), u, lookFor(u, s.scenario.sides[u.side].factionId, u.side));
       m.root.parent = root;
       applyPose(m, 'standing', 'low', 'active');
       m.hit.setEnabled(false);

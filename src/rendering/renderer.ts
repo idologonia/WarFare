@@ -40,7 +40,8 @@ import { facingOf, facingRotation } from '@/game/units/facing';
 import { droneAltitude, droneNoticedBy } from '@/game/drones';
 import { vehicleDef } from '@/content';
 import { vehicleSeenBy } from '@/game/visibility/visibility';
-import { camoFor, camoMaterial } from './camo';
+import { camoFor, uniformAtlas, uniformTile } from './camo';
+import { lookFor } from './uniform';
 
 export interface GraphicsSettings {
   shadows: boolean;
@@ -75,11 +76,19 @@ export class Renderer {
   private units = new Map<string, UnitModel>();
   private unitMats: Record<string, StandardMaterial> = {};
 
-  /** Матеріал форми сторони: камуфляж її фракції. */
-  private sideMat(side: SideId): StandardMaterial {
+  /** Атлас форми (усі бійці й техніка — один матеріал). */
+  private sideMat(_side?: SideId): StandardMaterial {
+    return (this.unitMats.atlas ??= uniformAtlas(this.scene));
+  }
+
+  /** Тайл основного камуфляжу фракції сторони (для техніки). */
+  private sideTile(side: SideId): number {
     const fid = this.state?.scenario?.sides?.[side]?.factionId;
-    const camo = camoFor(content().factions.find((f) => f.id === fid)?.camo, side);
-    return (this.unitMats[camo] ??= camoMaterial(this.scene, camo));
+    return uniformTile(camoFor(content().factions.find((f) => f.id === fid)?.camo, side));
+  }
+
+  private lookOf(u: Unit) {
+    return lookFor(u, this.state?.scenario?.sides?.[u.side]?.factionId, u.side);
   }
   private silhouetteMat!: StandardMaterial;
   private overlayMat!: StandardMaterial;
@@ -337,7 +346,7 @@ export class Renderer {
   private ensureUnit(u: Unit): UnitModel {
     let m = this.units.get(u.id);
     if (!m) {
-      m = buildUnitModel(this.scene, this.sideMat(u.side), u);
+      m = buildUnitModel(this.scene, this.sideMat(u.side), u, this.lookOf(u));
       for (const mesh of m.meshes) {
         mesh.receiveShadows = true;
         this.shadowGen?.addShadowCaster(mesh);
@@ -785,7 +794,7 @@ export class Renderer {
   private ensureVehicle(v: VehicleState): VehicleModel {
     let m = this.vehicleModels.get(v.id);
     if (!m) {
-      m = buildVehicleModel(this.scene, this.sideMat(v.side), v);
+      m = buildVehicleModel(this.scene, this.sideMat(v.side), v, this.sideTile(v.side));
       for (const mesh of m.meshes) {
         mesh.receiveShadows = true;
         this.shadowGen?.addShadowCaster(mesh);
@@ -1049,11 +1058,18 @@ export class Renderer {
       if (m.root.isEnabled()) sfx('step', this.sdist(b) + (mode === 'careful' ? 12 : 0));
       await this.anim.tween(per, (t) => {
         m.root.position = Vector3.Lerp(a, b, t);
+        // Хода: ноги, легке підстрибування тіла й похитування корпусу.
+        const sw = Math.sin(t * Math.PI * 2);
         if (u.stance === 'standing') {
-          const sw = Math.sin(t * Math.PI * 2) * 0.5;
-          (legL as any).rotation.x = sw;
-          (legR as any).rotation.x = -sw;
-        }
+          (legL as any).rotation.x = sw * 0.55;
+          (legR as any).rotation.x = -sw * 0.55;
+          m.body.position.y = Math.abs(sw) * 0.035;
+          m.torso.rotation.y = sw * 0.06;
+        } else if (u.stance === 'crouched') {
+          (legL as any).rotation.x = -1.35 + sw * 0.25;
+          (legR as any).rotation.x = 0.35 - sw * 0.25;
+          m.body.position.y = Math.abs(sw) * 0.015;
+        } else m.body.position.z = -0.3 + sw * 0.04;
       });
     }
     applyPose(m, u.stance, u.weaponState, u.status);

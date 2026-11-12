@@ -45,7 +45,17 @@
     }
    },
    "nvg": "nvg_bino",
-   "classes": []
+   "classes": [],
+   "uniform": {
+    "jackets": [
+     "multicam"
+    ],
+    "pants": [
+     "multicam"
+    ],
+    "helmet": "highcut",
+    "gear": "#7d6847"
+   }
   },
   {
    "id": "ru_20a",
@@ -74,7 +84,17 @@
      ]
     }
    },
-   "classes": []
+   "classes": [],
+   "uniform": {
+    "jackets": [
+     "emr"
+    ],
+    "pants": [
+     "emr"
+    ],
+    "helmet": "6b47",
+    "gear": "#4f5438"
+   }
   },
   {
    "id": "wagner",
@@ -106,7 +126,21 @@
      ]
     }
    },
-   "classes": []
+   "classes": [],
+   "uniform": {
+    "jackets": [
+     "moss",
+     "moss",
+     "multicam"
+    ],
+    "pants": [
+     "moss",
+     "moss",
+     "olive"
+    ],
+    "helmet": "highcut",
+    "gear": "#5a553c"
+   }
   },
   {
    "id": "cossack",
@@ -134,7 +168,34 @@
     }
    },
    "armor": "light",
-   "classes": []
+   "classes": [],
+   "uniform": {
+    "jackets": [
+     "flora",
+     "berezka",
+     "ttsko",
+     "afghanka",
+     "gorka",
+     "flora",
+     "moss"
+    ],
+    "pants": [
+     "flora",
+     "afghanka",
+     "ttsko",
+     "gorka",
+     "olive",
+     "flora"
+    ],
+    "helmet": "ssh68",
+    "headgear": [
+     "ushanka",
+     "cap",
+     "beanie"
+    ],
+    "gear": "#5d5a3e",
+    "mixedGear": true
+   }
   },
   {
    "id": "militia",
@@ -160,7 +221,38 @@
    },
    "armor": "light",
    "noNvg": true,
-   "classes": []
+   "classes": [],
+   "uniform": {
+    "jackets": [
+     "black",
+     "brownjacket",
+     "tracksuit",
+     "civkhaki",
+     "hoodie",
+     "gorka",
+     "flora",
+     "afghanka",
+     "berezka"
+    ],
+    "pants": [
+     "denim",
+     "black",
+     "tracksuit",
+     "flora",
+     "civkhaki",
+     "denim",
+     "afghanka"
+    ],
+    "helmet": "ssh68",
+    "headgear": [
+     "beanie",
+     "cap",
+     "none",
+     "ushanka"
+    ],
+    "gear": "#4c4a3a",
+    "mixedGear": true
+   }
   }
  ]
 }

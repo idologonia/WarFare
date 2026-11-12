@@ -18,12 +18,13 @@ const GLASS: RGB = [0.35, 0.5, 0.6];
  * Модель техніки з блоків. Початок координат — центр площі 2×2, «перед» — уздовж +Z.
  * Корпус — у камуфляжі сторони (текстура матеріалу), деталі — однотонні.
  */
-export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: VehicleState): VehicleModel {
+export function buildVehicleModel(scene: Scene, mat: StandardMaterial, v: VehicleState, tile: number | null = null): VehicleModel {
   const root = new TransformNode(`veh_${v.id}`, scene);
   const g = new GeoBuilder();
   const L = LH();
   // Однотонне фарбування замість камуфляжу (М113 — койот, L200 — випадковий колір).
   const paint: RGB | null = v.paint ? hex(v.paint) : null;
+  g.tile = tile;
   const camo = (on: boolean) => (g.camo = on && !paint ? 0.35 : null);
   const HULL: RGB = paint ?? WHITE;
   switch (v.defId) {

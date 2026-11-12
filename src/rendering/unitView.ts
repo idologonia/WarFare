@@ -3,6 +3,8 @@ import type { Stance, Unit, WeaponDefinition, WeaponState } from '@/game/types';
 import { Color4, Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
 import { GeoBuilder, hex, shade, type RGB } from './geo';
 import { buildWeaponGeo } from './weaponGeo';
+import type { UnitLook } from './uniform';
+import { uniformTile } from './camo';
 
 const SKIN = ['#e8c39e', '#d4a373', '#a87449', '#7a4e2d'];
 const HAIR = ['#2b2118', '#4a3524', '#7a5a35', '#1a1a1a', '#8a7a6a'];
@@ -10,6 +12,12 @@ export const SIDE_COLOR: Record<string, string> = { blue: '#3d82e8', red: '#e546
 /** Колір спорядження (плитоноска, підсумки, рюкзак) за стороною. */
 const GEAR: Record<string, string> = { blue: '#7d6847', red: '#4f5438' };
 const CAMO_SCALE = 1.15;
+
+/** Вигляд за замовчуванням (без фракції): за стороною. */
+function defaultLook(u: Unit): UnitLook & { civilian?: boolean } {
+  const t = uniformTile(u.side === 'red' ? 'emr' : 'multicam');
+  return { jacket: t, pants: t, helmetCover: t, helmet: u.side === 'red' ? '6b47' : 'highcut', headgear: 'none', gear: GEAR[u.side] };
+}
 
 /** Частина моделі: сітка з точкою обертання у початку координат вузла. */
 function part(scene: Scene, mat: StandardMaterial, parent: TransformNode, name: string, build: (g: GeoBuilder) => void): Mesh {
@@ -37,15 +45,17 @@ export interface UnitModel {
 const WHITE: RGB = [1, 1, 1];
 
 /**
- * Модель бійця з блоків у ретро-стилі: камуфляжна форма (текстура сторони),
- * однотонне спорядження, кольорові пов'язки сторони, контур граней.
+ * Модель бійця: реалістичні пропорції (ноги ≈ половина зросту, вужчі плечі, менша голова),
+ * округлі кінцівки з багатогранних призм. Форма — з атласу (куртка й штани можуть різнитися),
+ * однотонне спорядження, кольорові пов'язки сторони.
  */
-export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): UnitModel {
+export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, look?: UnitLook): UnitModel {
+  const L = look ?? defaultLook(u);
   const root = new TransformNode(`unit_${u.id}`, scene);
   const body = new TransformNode('body', scene);
   body.parent = root;
   const side = hex(SIDE_COLOR[u.side]);
-  const gear = hex(GEAR[u.side]);
+  const gear = hex(L.gear);
   const gearDark = shade(gear, 0.78);
   const skin = hex(SKIN[u.appearance.skin % SKIN.length]);
   const hair = hex(HAIR[u.appearance.hair % HAIR.length]);
@@ -58,35 +68,38 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
     meshes.push(m);
     return m;
   };
-  const camo = (g: GeoBuilder, on: boolean) => {
-    g.camo = on ? CAMO_SCALE : null;
+  /** Увімкнути візерунок тайла атласу (або вимкнути — однотонні деталі). */
+  const camo = (g: GeoBuilder, tile: number | false) => {
+    g.camo = tile === false ? null : CAMO_SCALE;
+    g.tile = tile === false ? null : tile;
   };
+  const V = Math.PI / 2; // призма вертикально
 
   const hips = new TransformNode('hips', scene);
   hips.parent = body;
   hips.position.y = 0.5;
 
-  // ---- Ноги ----
+  // ---- Ноги: стегно, коліно, гомілка, черевик ----
   const leg = (x: number) => {
     const n = new TransformNode('legPivot', scene);
     n.parent = hips;
     n.position.x = x;
     return reg(
       part(scene, mat, n, 'leg', (g) => {
-        camo(g, true);
-        g.box(0, -0.12, 0, 0.16, 0.24, 0.18, WHITE); // стегно
-        g.box(0, -0.33, 0, 0.145, 0.2, 0.16, WHITE); // гомілка
+        camo(g, L.pants);
+        g.prism(0, -0.125, 0.004, 0.155, 0.165, 0.25, 8, WHITE, V); // стегно
+        g.prism(0, -0.355, 0, 0.125, 0.135, 0.21, 8, WHITE, V); // гомілка
         camo(g, false);
-        g.box(0, -0.25, 0.085, 0.12, 0.09, 0.04, black); // наколінник
-        if (u.inventory.extraArmor?.some((a) => a.defId === 'leg_guards')) g.box(0, -0.13, 0.09, 0.15, 0.17, 0.04, gear);
-        g.box(0, -0.45, 0.025, 0.16, 0.09, 0.24, boots); // черевик
-        g.box(0, -0.495, 0.025, 0.17, 0.02, 0.25, shade(boots, 0.6)); // підошва
-        if (x < 0) g.box(-0.085, -0.1, 0.02, 0.03, 0.1, 0.1, gearDark); // кишеня
+        g.prism(0, -0.255, 0.07, 0.1, 0.06, 0.08, 6, black, V); // наколінник
+        if (u.inventory.extraArmor?.some((a) => a.defId === 'leg_guards')) g.box(0, -0.13, 0.085, 0.14, 0.16, 0.035, gear);
+        g.prism(0, -0.445, 0.03, 0.13, 0.1, 0.23, 8, boots); // черевик
+        g.box(0, -0.492, 0.03, 0.135, 0.018, 0.235, shade(boots, 0.55)); // підошва
+        if (x < 0 && !L.civilian) g.box(-0.08, -0.11, 0.015, 0.03, 0.1, 0.09, gearDark); // кишеня
       }),
     );
   };
-  const legL = leg(-0.095);
-  const legR = leg(0.095);
+  const legL = leg(-0.085);
+  const legR = leg(0.085);
 
   // ---- Тулуб, голова, шолом ----
   const torso = new TransformNode('torso', scene);
@@ -94,174 +107,187 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
   const armorId = u.inventory.armor?.defId ?? null;
   reg(
     part(scene, mat, torso, 'torso', (g) => {
-      camo(g, true);
-      g.box(0, 0.22, 0, 0.34, 0.42, 0.2, WHITE); // куртка
+      camo(g, L.pants);
+      g.prism(0, 0.055, 0, 0.3, 0.19, 0.12, 8, WHITE, V); // таз
+      camo(g, L.jacket);
+      g.prism(0, 0.17, 0, 0.305, 0.195, 0.13, 8, WHITE, V); // живіт
+      g.prism(0, 0.32, 0.005, 0.345, 0.215, 0.2, 8, WHITE, V); // груди
+      g.prism(0, 0.415, 0, 0.13, 0.13, 0.4, 8, WHITE, 0, V); // плечі
       camo(g, false);
       if (u.inventory.rig) {
         // Пояс рейнджера з підсумками.
-        g.box(0, 0.02, 0, 0.38, 0.08, 0.24, gearDark);
-        for (const x of [-0.14, 0.14]) g.box(x, 0.02, 0.12, 0.07, 0.09, 0.05, gear);
-        g.box(0.19, 0.0, -0.04, 0.04, 0.1, 0.1, gear); // аптечка
-        g.box(0, 0.02, 0.125, 0.06, 0.05, 0.02, [0.55, 0.5, 0.4]); // пряжка
-      } else g.box(0, 0.02, 0, 0.36, 0.04, 0.22, [0.2, 0.17, 0.12]); // звичайний ремінь
+        g.prism(0, 0.03, 0, 0.33, 0.22, 0.07, 8, gearDark, V);
+        for (const x of [-0.12, 0.12]) g.box(x, 0.03, 0.115, 0.07, 0.085, 0.045, gear);
+        g.box(0.17, 0.02, -0.04, 0.045, 0.1, 0.1, gear); // аптечка
+        g.box(0, 0.03, 0.118, 0.06, 0.045, 0.02, [0.55, 0.5, 0.4]); // пряжка
+      } else g.prism(0, 0.03, 0, 0.31, 0.2, 0.035, 8, [0.2, 0.17, 0.12], V); // звичайний ремінь
       if (armorId === 'plate_carrier') {
-        // Плитоноска: передня й задня плити, камербанд, три магазинні підсумки, адмін-панель.
-        g.box(0, 0.28, 0.065, 0.31, 0.3, 0.1, gear);
-        g.box(0, 0.28, -0.065, 0.31, 0.3, 0.1, gear);
-        g.box(-0.18, 0.2, 0, 0.04, 0.16, 0.2, gearDark);
-        g.box(0.18, 0.2, 0, 0.04, 0.16, 0.2, gearDark);
-        g.box(-0.12, 0.44, 0, 0.07, 0.04, 0.24, gearDark);
-        g.box(0.12, 0.44, 0, 0.07, 0.04, 0.24, gearDark);
-        for (const x of [-0.1, 0, 0.1]) {
-          g.box(x, 0.19, 0.13, 0.085, 0.13, 0.05, shade(gear, 1.08));
-          g.box(x, 0.255, 0.133, 0.085, 0.02, 0.05, gearDark);
+        // Плитоноска: передня й задня плити, камербанд, підсумки, адмін-панель.
+        g.box(0, 0.29, 0.085, 0.29, 0.28, 0.06, gear);
+        g.box(0, 0.29, -0.085, 0.29, 0.28, 0.06, gear);
+        g.prism(0, 0.22, 0, 0.36, 0.23, 0.14, 8, gearDark, V); // камербанд
+        for (const x of [-0.105, 0.105]) g.box(x, 0.445, 0, 0.065, 0.035, 0.22, gearDark); // лямки
+        for (const x of [-0.095, 0, 0.095]) {
+          g.box(x, 0.2, 0.135, 0.08, 0.12, 0.045, shade(gear, 1.08));
+          g.box(x, 0.262, 0.137, 0.08, 0.018, 0.048, gearDark);
         }
-        g.box(0, 0.34, 0.12, 0.16, 0.07, 0.03, gearDark);
-        g.box(0, 0.345, 0.137, 0.1, 0.035, 0.005, side);
-        g.box(0, 0.38, -0.12, 0.12, 0.06, 0.02, gearDark); // ручка евакуації
+        g.box(0, 0.35, 0.122, 0.15, 0.065, 0.025, gearDark);
+        g.box(0, 0.354, 0.136, 0.09, 0.032, 0.005, side);
+        g.box(0, 0.4, -0.12, 0.11, 0.05, 0.02, gearDark); // ручка евакуації
       } else if (armorId) {
-        // РПС з балістичним захистом: нагрудник із двома рядами підсумків, X-лямки на спині.
-        g.box(0, 0.22, 0.08, 0.32, 0.22, 0.07, gear);
-        for (const x of [-0.11, -0.037, 0.037, 0.11]) {
-          g.box(x, 0.15, 0.125, 0.065, 0.09, 0.04, shade(gear, 1.1));
-          g.box(x, 0.25, 0.125, 0.065, 0.08, 0.04, shade(gear, 0.95));
+        // РПС із балістичним захистом: нагрудник, два ряди підсумків, X-лямки на спині.
+        g.box(0, 0.23, 0.09, 0.3, 0.2, 0.05, gear);
+        for (const x of [-0.105, -0.035, 0.035, 0.105]) {
+          g.box(x, 0.16, 0.125, 0.062, 0.085, 0.035, shade(gear, 1.1));
+          g.box(x, 0.255, 0.125, 0.062, 0.075, 0.035, shade(gear, 0.95));
         }
-        g.box(-0.1, 0.38, 0.06, 0.05, 0.14, 0.03, gearDark);
-        g.box(0.1, 0.38, 0.06, 0.05, 0.14, 0.03, gearDark);
-        g.box(0, 0.28, -0.105, 0.05, 0.3, 0.02, gearDark, 1, 0.6);
-        g.box(0, 0.28, -0.105, 0.05, 0.3, 0.02, gearDark, 1, -0.6);
-        g.box(-0.18, 0.15, 0, 0.04, 0.12, 0.14, gearDark); // бічний підсумок
-        g.box(0, 0.335, 0.118, 0.08, 0.03, 0.005, side);
+        g.box(-0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark);
+        g.box(0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark);
+        g.box(0, 0.29, -0.11, 0.045, 0.3, 0.018, gearDark, 1, 0.6);
+        g.box(0, 0.29, -0.11, 0.045, 0.3, 0.018, gearDark, 1, -0.6);
+        g.box(-0.165, 0.15, 0, 0.04, 0.11, 0.13, gearDark); // бічний підсумок
+        g.box(0, 0.34, 0.115, 0.08, 0.028, 0.005, side);
       } else {
-        g.box(0.13, 0.36, 0.105, 0.08, 0.05, 0.01, side); // нашивка сторони на куртці
+        g.box(0.11, 0.37, 0.108, 0.07, 0.045, 0.01, side); // нашивка сторони на куртці
       }
       if (u.inventory.secondary && itemDef<WeaponDefinition>(u.inventory.secondary.defId).category === 'launcher') {
         // Труба гранатомета за спиною.
-        g.box(0.12, 0.3, -0.27, 0.09, 0.09, 0.09, [0.3, 0.33, 0.22]);
         const tube: RGB = [0.27, 0.3, 0.2];
-        for (let i = 0; i < 6; i++) g.box(0.12 - 0.04 * i * 0.6, 0.12 + i * 0.1, -0.26, 0.08, 0.1, 0.08, tube);
-        g.box(0.12 - 0.15, 0.72, -0.26, 0.12, 0.12, 0.12, [0.3, 0.35, 0.25]); // постріл
+        g.prism(0.05, 0.38, -0.2, 0.08, 0.08, 0.62, 10, tube, V - 0.35);
+        g.prism(0.12, 0.66, -0.26, 0.11, 0.11, 0.12, 8, [0.3, 0.35, 0.25], V - 0.35); // постріл
       }
       const extra = new Set((u.inventory.extraArmor ?? []).map((a) => a.defId));
-      if (extra.has('neck_guard')) g.box(0, 0.45, 0.02, 0.24, 0.07, 0.24, gearDark);
-      if (extra.has('groin_guard')) g.box(0, -0.06, 0.12, 0.14, 0.12, 0.04, gear);
+      if (extra.has('neck_guard')) g.prism(0, 0.465, 0.01, 0.2, 0.2, 0.06, 10, gearDark, V);
+      if (extra.has('groin_guard')) g.box(0, -0.05, 0.11, 0.13, 0.11, 0.035, gear);
       if (extra.has('side_plates')) {
-        g.box(-0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
-        g.box(0.19, 0.22, 0, 0.04, 0.2, 0.16, gear);
+        g.box(-0.18, 0.23, 0, 0.035, 0.18, 0.15, gear);
+        g.box(0.18, 0.23, 0, 0.035, 0.18, 0.15, gear);
       }
       if (u.inventory.backpack) {
-        g.box(0, 0.27, -0.19, 0.26, 0.3, 0.13, shade(gear, 0.92));
-        g.box(0, 0.4, -0.2, 0.22, 0.05, 0.14, gearDark);
-        g.box(0, 0.18, -0.26, 0.18, 0.12, 0.03, gearDark); // кишеня рюкзака
+        g.prism(0, 0.27, -0.185, 0.25, 0.13, 0.3, 8, shade(gear, 0.92), V);
+        g.box(0, 0.41, -0.19, 0.2, 0.045, 0.13, gearDark);
+        g.box(0, 0.19, -0.255, 0.17, 0.11, 0.03, gearDark); // кишеня рюкзака
       }
       // Відмінності класів — щоб бійця можна було впізнати на полі.
       switch (u.classId) {
         case 'medic':
-          // Біла пов'язка з червоним хрестом на плечі й медична сумка збоку.
-          g.box(-0.2, 0.36, 0, 0.03, 0.07, 0.12, [0.92, 0.92, 0.9]);
-          g.box(-0.216, 0.36, 0, 0.005, 0.05, 0.02, [0.8, 0.1, 0.1]);
-          g.box(-0.216, 0.36, 0, 0.005, 0.02, 0.05, [0.8, 0.1, 0.1]);
-          g.box(0.21, 0.08, -0.02, 0.08, 0.14, 0.16, [0.35, 0.33, 0.22]);
-          g.box(0.252, 0.08, -0.02, 0.004, 0.05, 0.05, [0.8, 0.1, 0.1]);
+          g.box(0.19, 0.08, -0.02, 0.07, 0.13, 0.15, [0.35, 0.33, 0.22]);
+          g.box(0.227, 0.08, -0.02, 0.004, 0.045, 0.045, [0.8, 0.1, 0.1]);
           break;
         case 'mg1':
         case 'mg2':
-          // Короби зі стрічкою на боці та запасна стрічка через плече.
-          g.box(0.2, 0.1, 0.02, 0.07, 0.12, 0.16, [0.28, 0.3, 0.22]);
-          for (let i = 0; i < 7; i++) g.box(-0.12 + i * 0.04, 0.42 - i * 0.045, 0.125, 0.03, 0.03, 0.02, [0.75, 0.6, 0.25]);
+          g.box(0.185, 0.1, 0.02, 0.065, 0.11, 0.15, [0.28, 0.3, 0.22]);
+          for (let i = 0; i < 7; i++) g.box(-0.11 + i * 0.037, 0.43 - i * 0.043, 0.13, 0.028, 0.028, 0.02, [0.75, 0.6, 0.25]);
           break;
         case 'droneOperator':
-          // Антена ретранслятора над рюкзаком і пульт на грудях.
-          g.box(0.08, 0.55, -0.22, 0.015, 0.35, 0.015, [0.12, 0.12, 0.12]);
-          g.box(-0.08, 0.5, -0.22, 0.015, 0.25, 0.015, [0.12, 0.12, 0.12]);
-          g.box(0, 0.16, 0.16, 0.16, 0.08, 0.05, [0.15, 0.15, 0.16]);
-          g.box(0, 0.19, 0.19, 0.12, 0.05, 0.005, [0.25, 0.45, 0.6]);
+          g.box(0.08, 0.55, -0.22, 0.012, 0.35, 0.012, [0.12, 0.12, 0.12]);
+          g.box(-0.08, 0.5, -0.22, 0.012, 0.25, 0.012, [0.12, 0.12, 0.12]);
+          g.box(0, 0.16, 0.16, 0.15, 0.075, 0.045, [0.15, 0.15, 0.16]);
+          g.box(0, 0.19, 0.185, 0.11, 0.045, 0.005, [0.25, 0.45, 0.6]);
           break;
         case 'scout':
-          // Біноклі на грудях і рація з антеною.
-          g.box(0, 0.2, 0.15, 0.12, 0.05, 0.05, [0.13, 0.13, 0.12]);
-          g.box(-0.17, 0.32, -0.12, 0.06, 0.1, 0.05, [0.15, 0.16, 0.14]);
-          g.box(-0.17, 0.48, -0.12, 0.012, 0.22, 0.012, [0.1, 0.1, 0.1]);
+          g.prism(0, 0.2, 0.15, 0.11, 0.05, 0.05, 8, [0.13, 0.13, 0.12], 0, V);
+          g.box(-0.16, 0.33, -0.12, 0.055, 0.09, 0.045, [0.15, 0.16, 0.14]);
+          g.box(-0.16, 0.48, -0.12, 0.01, 0.22, 0.01, [0.1, 0.1, 0.1]);
           break;
         case 'marksman':
-          // Маскувальні смуги (гілі) на плечах.
-          for (let i = 0; i < 5; i++) g.box(-0.16 + i * 0.08, 0.43, -0.02 + (i % 2) * 0.03, 0.05, 0.07, 0.05, shade(gear, 0.8 + (i % 3) * 0.1));
-          break;
-        case 'driver':
-          // Без рюкзака, з рукавицями й шоломофоном замість каски (якщо каски нема).
-          if (!u.inventory.helmet) g.box(0, 0.69, -0.01, 0.23, 0.1, 0.23, [0.18, 0.17, 0.15]);
+          for (let i = 0; i < 5; i++) g.prism(-0.15 + i * 0.075, 0.44, -0.02 + (i % 2) * 0.03, 0.05, 0.05, 0.07, 6, shade(gear, 0.8 + (i % 3) * 0.1), V);
           break;
       }
-      // Шия й голова.
-      g.box(0, 0.45, 0.0, 0.1, 0.05, 0.1, skin);
-      g.box(0, 0.56, 0.01, 0.2, 0.2, 0.19, skin);
-      g.box(-0.045, 0.575, 0.102, 0.03, 0.016, 0.006, [0.16, 0.13, 0.1]); // очі
-      g.box(0.045, 0.575, 0.102, 0.03, 0.016, 0.006, [0.16, 0.13, 0.1]);
-      g.box(0, 0.6, 0.104, 0.13, 0.014, 0.008, shade(hair, 1)); // брови
-      if (u.appearance.face % 3 === 0) g.box(0, 0.495, 0.07, 0.19, 0.07, 0.07, hair); // борода
-      else if (u.appearance.face % 3 === 1) g.box(0, 0.523, 0.103, 0.09, 0.02, 0.01, hair); // вуса
-      g.box(0, 0.53, -0.09, 0.18, 0.1, 0.03, hair); // потилиця
+      // ---- Шия й голова ----
+      g.prism(0, 0.495, 0.005, 0.085, 0.09, 0.07, 8, skin, V); // шия
+      g.prism(0, 0.605, 0.01, 0.15, 0.17, 0.165, 8, skin, V); // голова
+      g.box(0, 0.53, 0.035, 0.11, 0.035, 0.1, skin); // щелепа
+      g.box(0, 0.6, 0.095, 0.025, 0.04, 0.02, shade(skin, 0.92)); // ніс
+      g.box(-0.035, 0.622, 0.085, 0.025, 0.012, 0.006, [0.16, 0.13, 0.1]); // очі
+      g.box(0.035, 0.622, 0.085, 0.025, 0.012, 0.006, [0.16, 0.13, 0.1]);
+      g.box(0, 0.642, 0.087, 0.1, 0.01, 0.006, hair); // брови
+      for (const x of [-0.077, 0.077]) g.box(x, 0.605, 0.0, 0.012, 0.04, 0.03, shade(skin, 0.9)); // вуха
+      if (u.appearance.face % 3 === 0) g.prism(0, 0.545, 0.035, 0.13, 0.11, 0.06, 8, hair, V); // борода
+      else if (u.appearance.face % 3 === 1) g.box(0, 0.572, 0.088, 0.065, 0.015, 0.01, hair); // вуса
+      g.prism(0, 0.6, -0.04, 0.15, 0.1, 0.12, 8, hair, V); // потилиця
+      const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
       if (u.inventory.helmet) {
-        // Шолом (high-cut) у чохлі з камуфляжем.
-        camo(g, true);
-        g.box(0, 0.69, -0.005, 0.25, 0.09, 0.25, WHITE);
-        g.box(0, 0.745, -0.005, 0.2, 0.04, 0.2, WHITE);
+        camo(g, L.helmetCover);
+        if (L.helmet === 'ssh68') {
+          // Радянська каска СШ-68: висока куля з невеликими полями.
+          g.prism(0, 0.675, 0.0, 0.2, 0.215, 0.09, 12, WHITE, V);
+          g.prism(0, 0.735, 0.0, 0.165, 0.18, 0.04, 12, WHITE, V);
+          g.prism(0, 0.632, 0.0, 0.225, 0.24, 0.016, 12, WHITE, V); // поля
+        } else {
+          g.prism(0, 0.682, -0.005, 0.195, 0.21, 0.085, 12, WHITE, V);
+          g.prism(0, 0.735, -0.005, 0.15, 0.165, 0.035, 12, WHITE, V);
+          if (L.helmet === '6b47') g.prism(0, 0.636, -0.01, 0.205, 0.22, 0.03, 12, WHITE, V); // довші боки «Ратника»
+        }
         camo(g, false);
-        g.box(-0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black); // рейки
-        g.box(0.13, 0.66, 0.0, 0.02, 0.04, 0.17, black);
-        g.box(-0.105, 0.51, 0.04, 0.012, 0.11, 0.012, black, 1, 0, 0.35); // підборідний ремінь
-        g.box(0.105, 0.51, 0.04, 0.012, 0.11, 0.012, black, 1, 0, 0.35);
-        g.box(-0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black); // навушники
-        g.box(0.12, 0.575, 0.0, 0.05, 0.08, 0.08, black);
-        g.box(0, 0.7, 0.128, 0.06, 0.04, 0.02, black); // кріплення ПНБ
-        g.box(0, 0.69, -0.13, 0.12, 0.04, 0.012, side); // мітка сторони на шоломі
-        const mounts = (u.inventory.helmetMounts ?? []).map((m) => m.defId);
+        if (L.helmet !== 'ssh68') {
+          g.box(-0.103, 0.67, 0.0, 0.016, 0.03, 0.15, black); // рейки
+          g.box(0.103, 0.67, 0.0, 0.016, 0.03, 0.15, black);
+          g.box(-0.1, 0.6, 0.0, 0.04, 0.07, 0.07, black); // навушники
+          g.box(0.1, 0.6, 0.0, 0.04, 0.07, 0.07, black);
+          g.box(0, 0.705, 0.1, 0.05, 0.035, 0.02, black); // кріплення ПНБ
+          g.box(0, 0.7, -0.1, 0.1, 0.035, 0.012, side); // мітка сторони
+        }
+        g.box(-0.08, 0.55, 0.04, 0.01, 0.11, 0.01, black, 1, 0, 0.3); // підборідний ремінь
+        g.box(0.08, 0.55, 0.04, 0.01, 0.11, 0.01, black, 1, 0, 0.3);
         // ПНБ: опущений — перед очима, відкинутий — догори на кріпленні.
-        const ny = u.nvgUp ? 0.77 : 0.66;
-        const nz = u.nvgUp ? 0.11 : 0.16;
-        if (mounts.includes('nvg_mono')) g.box(0.045, ny, nz, 0.05, u.nvgUp ? 0.08 : 0.05, u.nvgUp ? 0.05 : 0.08, [0.1, 0.12, 0.1]);
-        if (mounts.includes('nvg_bino')) {
-          g.box(-0.04, ny, nz, 0.05, u.nvgUp ? 0.08 : 0.05, u.nvgUp ? 0.05 : 0.08, [0.1, 0.12, 0.1]);
-          g.box(0.04, ny, nz, 0.05, u.nvgUp ? 0.08 : 0.05, u.nvgUp ? 0.05 : 0.08, [0.1, 0.12, 0.1]);
-        }
+        const ny = u.nvgUp ? 0.745 : 0.64;
+        const nz = u.nvgUp ? 0.095 : 0.135;
+        const nh = u.nvgUp ? 0.07 : 0.045;
+        const nd = u.nvgUp ? 0.045 : 0.07;
+        if (mounts.includes('nvg_mono')) g.prism(0.035, ny, nz, 0.045, nh, nd, 8, [0.1, 0.12, 0.1]);
+        if (mounts.includes('nvg_bino')) for (const x of [-0.033, 0.033]) g.prism(x, ny, nz, 0.042, nh, nd, 8, [0.1, 0.12, 0.1]);
         if (mounts.includes('flashlight')) {
-          g.box(0.15, 0.68, 0.05, 0.04, 0.04, 0.09, black);
-          g.box(0.15, 0.68, 0.096, 0.03, 0.03, 0.004, [1, 0.95, 0.7]);
+          g.prism(0.118, 0.675, 0.04, 0.035, 0.035, 0.085, 8, black);
+          g.prism(0.118, 0.675, 0.084, 0.028, 0.028, 0.004, 8, [1, 0.95, 0.7]);
         }
+      } else if (u.classId === 'driver') {
+        g.prism(0, 0.675, -0.01, 0.2, 0.215, 0.1, 10, [0.18, 0.17, 0.15], V); // шоломофон
+      } else if (L.headgear === 'cap') {
+        camo(g, L.jacket);
+        g.prism(0, 0.685, 0.0, 0.165, 0.18, 0.065, 10, WHITE, V);
+        camo(g, false);
+        g.box(0, 0.665, 0.11, 0.13, 0.012, 0.07, shade(gear, 0.6)); // козирок
+      } else if (L.headgear === 'beanie') {
+        g.prism(0, 0.685, -0.005, 0.165, 0.18, 0.08, 10, shade(gear, 0.7), V);
+        g.prism(0, 0.73, -0.005, 0.12, 0.13, 0.03, 10, shade(gear, 0.7), V);
+      } else if (L.headgear === 'ushanka') {
+        const fur: RGB = [0.32, 0.26, 0.2];
+        g.prism(0, 0.69, -0.005, 0.19, 0.2, 0.09, 10, [0.25, 0.27, 0.2], V);
+        g.prism(0, 0.66, -0.005, 0.2, 0.215, 0.04, 10, fur, V);
+        for (const x of [-0.095, 0.095]) g.box(x, 0.61, 0.0, 0.03, 0.09, 0.1, fur); // вуха шапки
       } else {
-        g.box(0, 0.665, -0.005, 0.21, 0.05, 0.2, hair); // зачіска
+        g.prism(0, 0.69, -0.01, 0.155, 0.17, 0.04, 10, hair, V); // зачіска
       }
     }),
   );
 
-  // ---- Руки ----
+  // ---- Руки: плече, лікоть, передпліччя, кисть ----
   const arm = (x: number) => {
     const n = new TransformNode('armPivot', scene);
     n.parent = torso;
-    n.position.set(x, 0.4, 0);
+    n.position.set(x, 0.41, 0);
     return reg(
       part(scene, mat, n, 'arm', (g) => {
-        camo(g, true);
-        g.box(0, -0.09, 0, 0.115, 0.2, 0.125, WHITE);
-        g.box(0, -0.27, 0, 0.105, 0.18, 0.115, WHITE);
+        camo(g, L.jacket);
+        g.prism(0, -0.1, 0, 0.1, 0.105, 0.2, 8, WHITE, V);
+        g.prism(0, -0.28, 0.005, 0.09, 0.095, 0.17, 8, WHITE, V);
         camo(g, false);
-        g.box(0, -0.06, 0, 0.122, 0.06, 0.132, side); // пов'язка сторони
+        g.prism(0, -0.05, 0, 0.108, 0.113, 0.05, 8, side, V); // пов'язка сторони
         if (u.classId === 'medic') {
-          // Нашивка медика: білий квадрат із червоним хрестом.
-          g.box(x > 0 ? 0.061 : -0.061, -0.13, 0, 0.004, 0.07, 0.07, [0.92, 0.92, 0.9]);
-          g.box(x > 0 ? 0.064 : -0.064, -0.13, 0, 0.004, 0.05, 0.016, [0.8, 0.1, 0.1]);
-          g.box(x > 0 ? 0.064 : -0.064, -0.13, 0, 0.004, 0.016, 0.05, [0.8, 0.1, 0.1]);
+          g.box(x > 0 ? 0.053 : -0.053, -0.12, 0, 0.004, 0.06, 0.06, [0.92, 0.92, 0.9]);
+          g.box(x > 0 ? 0.056 : -0.056, -0.12, 0, 0.004, 0.045, 0.014, [0.8, 0.1, 0.1]);
+          g.box(x > 0 ? 0.056 : -0.056, -0.12, 0, 0.004, 0.014, 0.045, [0.8, 0.1, 0.1]);
         }
-        if (u.inventory.extraArmor?.some((a) => a.defId === 'shoulder_guards')) g.box(0, -0.02, 0, 0.14, 0.12, 0.15, gear);
-        g.box(0, -0.185, -0.005, 0.12, 0.05, 0.11, shade(gear, 0.85)); // налокітник
-        g.box(0, -0.335, 0, 0.112, 0.03, 0.122, shade(gear, 0.7)); // манжет рукава
-        g.box(0, -0.39, 0.0, 0.1, 0.08, 0.1, gloves); // рукавиця
-        g.box(0, -0.4, 0.045, 0.085, 0.05, 0.03, shade(gloves, 1.3)); // пальці
+        if (u.inventory.extraArmor?.some((a) => a.defId === 'shoulder_guards')) g.prism(0, -0.03, 0, 0.13, 0.135, 0.11, 8, gear, V);
+        if (!L.civilian) g.prism(0, -0.19, -0.005, 0.105, 0.11, 0.045, 8, shade(gear, 0.85), V); // налокітник
+        g.prism(0, -0.375, 0.005, 0.075, 0.08, 0.06, 8, gloves, V); // долоня
+        g.box(0, -0.405, 0.035, 0.065, 0.04, 0.03, shade(gloves, 1.3)); // пальці
       }),
     );
   };
-  const armL = arm(-0.235);
-  const armR = arm(0.235);
+  const armL = arm(-0.212);
+  const armR = arm(0.212);
 
   // ---- Зброя ----
   const weapon = new TransformNode('weapon', scene);
@@ -284,7 +310,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit): Un
   hit.metadata = { unitId: u.id, hitbox: true };
 
   for (const m of meshes) {
-    m.enableEdgesRendering(0.95);
+    // Контур лише на гострих гранях (округлі кінцівки без «сітки» ліній).
+    m.enableEdgesRendering(0.55);
     m.edgesWidth = 1.6;
     m.edgesColor = new Color4(0.04, 0.04, 0.05, 0.75);
   }

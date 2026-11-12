@@ -1,8 +1,9 @@
 import { content, objectDef, terrainDef } from '@/content';
 import type { Cell } from '@/core/grid';
 import type { EdgeSide, MapObjectDefinition, MapState } from '@/game/types';
-import { Color3, StandardMaterial, Vector3, type Mesh, type Scene } from './babylon';
+import { Color3, StandardMaterial, Vector3, Mesh, type Scene } from './babylon';
 import { GeoBuilder, hash2, hex, shade, type RGB } from './geo';
+import { SURFACE_SCALE, surfaceMaterial, surfaceOf, type Surface } from './surfaces';
 
 export const LH = () => content().rules.map.levelHeight;
 
@@ -37,18 +38,22 @@ function buildObject(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number
   const n = hash2(x, y, z);
   switch (o.id) {
     case 'bush':
-      g.box(cx - 0.12, b + 0.18, cz + 0.05, 0.55, 0.36, 0.5, shade(col, 0.95 + n * 0.2));
-      g.box(cx + 0.15, b + 0.28, cz - 0.1, 0.45, 0.4, 0.45, shade(col, 1.1));
-      g.box(cx, b + 0.5, cz, 0.3, 0.2, 0.3, shade(col, 1.2));
+      // Кущ: кілька округлих «куль» листя.
+      g.prism(cx - 0.12, b + 0.2, cz + 0.05, 0.58, 0.52, 0.38, 9, shade(col, 0.95 + n * 0.2), Math.PI / 2);
+      g.prism(cx + 0.15, b + 0.3, cz - 0.1, 0.48, 0.44, 0.42, 9, shade(col, 1.1), Math.PI / 2);
+      g.prism(cx, b + 0.5, cz, 0.32, 0.3, 0.22, 9, shade(col, 1.2), Math.PI / 2);
       break;
     case 'tree':
     case 'tree_damaged': {
-      g.box(cx, b + 0.55, cz, 0.22, 1.1, 0.22, col);
+      // Дерево: стовбур-призма, гілки й крона з кількох округлих ярусів.
+      g.prism(cx, b + 0.55, cz, 0.2, 0.2, 1.1, 7, col, Math.PI / 2);
+      g.prism(cx + 0.12, b + 1.0, cz, 0.07, 0.07, 0.35, 6, col, Math.PI / 2 - 0.6, 0.4);
       const leaf: RGB = o.id === 'tree' ? [0.22, 0.42, 0.14] : [0.3, 0.36, 0.15];
       const s = o.id === 'tree' ? 1 : 0.7;
-      g.box(cx, b + 1.35, cz, 0.95 * s, 0.6, 0.95 * s, shade(leaf, 0.9 + n * 0.2));
-      g.box(cx + 0.1, b + 1.8, cz - 0.05, 0.7 * s, 0.45, 0.7 * s, shade(leaf, 1.1));
-      g.box(cx - 0.05, b + 2.15, cz, 0.4 * s, 0.3, 0.4 * s, shade(leaf, 1.25));
+      g.prism(cx, b + 1.32, cz, 1.0 * s, 0.95 * s, 0.55, 10, shade(leaf, 0.9 + n * 0.2), Math.PI / 2);
+      g.prism(cx + 0.08, b + 1.72, cz - 0.04, 0.78 * s, 0.74 * s, 0.42, 10, shade(leaf, 1.05), Math.PI / 2);
+      g.prism(cx - 0.04, b + 2.05, cz + 0.02, 0.48 * s, 0.46 * s, 0.32, 10, shade(leaf, 1.2), Math.PI / 2);
+      g.prism(cx + 0.3 * s, b + 1.45, cz + 0.2 * s, 0.4 * s, 0.38 * s, 0.3, 8, shade(leaf, 1.0), Math.PI / 2);
       break;
     }
     case 'stump':
@@ -176,11 +181,15 @@ export class MapView {
   private buildLevel(z: number): Mesh {
     const m = this.map;
     const L = LH();
-      const g = new GeoBuilder();
+      // Окремі сітки за поверхнею: ґрунт, підлога, дах — кожна зі своєю текстурою деталей.
+      const groups: Record<'ground' | 'floor' | 'roof', GeoBuilder> = { ground: new GeoBuilder(), floor: new GeoBuilder(), roof: new GeoBuilder() };
+      for (const [k, b] of Object.entries(groups)) b.worldUV = SURFACE_SCALE[k as Surface];
+      let g = groups.ground;
       for (let y = 0; y < m.height; y++)
         for (let x = 0; x < m.width; x++) {
           const cell = m.cells[z][y][x];
           if (!cell.floor) continue;
+          g = cell.terrain === 'floor' ? groups.floor : cell.terrain === 'roof' ? groups.roof : groups.ground;
           const t = terrainDef(cell.terrain);
           const n = hash2(x, y, z);
           const col = shade(hex(t.color), 0.93 + n * 0.14);
@@ -230,9 +239,14 @@ export class MapView {
             for (let i = 0; i < 5; i++) g.box(x + 0.5, z * L + (i + 0.5) * (L / 5) / 2, -(y + 0.1 + i * 0.18), 0.8, (i + 1) * (L / 5), 0.18, shade([0.55, 0.45, 0.35], 0.9 + i * 0.04));
           }
         }
-    const mesh = g.build(`level${z}`, this.scene, this.solid);
-    this.onMesh(mesh, true);
-    return mesh;
+    const root = new Mesh(`level${z}`, this.scene);
+    for (const [k, b] of Object.entries(groups)) {
+      if (b.empty) continue;
+      const mesh = b.build(`level${z}_${k}`, this.scene, surfaceMaterial(this.scene, k as Surface));
+      mesh.parent = root;
+      this.onMesh(mesh, true);
+    }
+    return root;
   }
 
   /** Перебудувати плитки поверху (після зміни місцевості в редакторі). */
@@ -258,12 +272,24 @@ export class MapView {
 
   private rebuildChunk(z: number, cx: number, cy: number): void {
     const key = `${z}:${cx}:${cy}`;
-    for (const k of [`ch:${key}`, `chg:${key}`]) {
-      this.objects.get(k)?.mesh.dispose();
-      this.objects.delete(k);
-    }
+    for (const k of [...this.objects.keys()])
+      if (k === `ch:${key}` || k === `chg:${key}` || k.startsWith(`cht:${key}:`)) {
+        this.objects.get(k)?.mesh.dispose();
+        this.objects.delete(k);
+      }
     const g = new GeoBuilder();
     const gg = new GeoBuilder();
+    const tex = new Map<Surface, GeoBuilder>();
+    const forSurf = (sf: Surface | null): GeoBuilder => {
+      if (!sf) return g;
+      let b = tex.get(sf);
+      if (!b) {
+        b = new GeoBuilder();
+        b.worldUV = SURFACE_SCALE[sf];
+        tex.set(sf, b);
+      }
+      return b;
+    };
     let wall = false;
     const CH = MapView.CH;
     for (let y = cy * CH; y < Math.min(this.map.height, (cy + 1) * CH); y++)
@@ -272,7 +298,7 @@ export class MapView {
         const base = z + (z === 0 ? cell.elevation : 0);
         if (cell.object) {
           const o = objectDef(cell.object.defId);
-          const tgt = o.window ? gg : g;
+          const tgt = o.window ? gg : forSurf(surfaceOf(o.material, o.id));
           const from = tgt.positions.length;
           buildObject(tgt, o, x, y, z, base);
           if (cell.object.rot) rotateSince(tgt, from, x + 0.5, -(y + 0.5), (cell.object.rot * Math.PI) / 2);
@@ -281,7 +307,7 @@ export class MapView {
         if (cell.edges)
           for (const side of Object.keys(cell.edges) as EdgeSide[]) {
             const o = objectDef(cell.edges[side]!.defId);
-            buildEdge(g, o, x, y, z, side, z, gg);
+            buildEdge(forSurf(surfaceOf(o.material, o.id)), o, x, y, z, side, z, gg);
             if (o.wall || o.id === 'parapet') wall = true;
           }
       }
@@ -290,6 +316,13 @@ export class MapView {
       mesh.isPickable = false;
       this.onMesh(mesh, false);
       this.objects.set(`ch:${key}`, { mesh, level: z, buildingId: undefined, wall, glass: false });
+    }
+    for (const [sf, b] of tex) {
+      if (b.empty) continue;
+      const mesh = b.build(`cht_${key}_${sf}`, this.scene, surfaceMaterial(this.scene, sf));
+      mesh.isPickable = false;
+      this.onMesh(mesh, false);
+      this.objects.set(`cht:${key}:${sf}`, { mesh, level: z, buildingId: undefined, wall, glass: false });
     }
     if (!gg.empty) {
       const mesh = gg.build(`chg_${key}`, this.scene, this.glass);
@@ -306,7 +339,6 @@ export class MapView {
       info.mesh.setEnabled(info.level <= viewLevel);
       // Стіни не робимо прозорими: огляд усередину — поворотом камери й перемиканням поверхів.
       void transparentBuildings;
-      info.mesh.material = info.glass ? this.glass : this.solid;
     }
   }
 }
@@ -386,7 +418,6 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
         }
       } else {
         put(0, h / 2, 0, LEN, h, T, shade(col, 0.95 + n * 0.1));
-        if (o.material === 'brick') for (let r = 1; r < 5; r++) put(0, (h * r) / 5, 0, LEN - 0.002, 0.025, T + 0.012, shade(col, 0.75));
         put(0, h + 0.02, 0, LEN + (horizontal ? 0.02 : -0.002), 0.04, T + (horizontal ? 0.03 : 0.026), shade(col, 1.15));
       }
   }
