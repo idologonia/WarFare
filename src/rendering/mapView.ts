@@ -207,7 +207,11 @@ export class MapView {
   glass: StandardMaterial;
   private base: Mesh | null = null;
 
-  constructor(private scene: Scene, private map: MapState, private onMesh: (m: Mesh, receive: boolean) => void) {
+  /** Світні елементи вночі (вікна, ліхтарі) — емісивний матеріал, підхоплюється світінням. */
+  private litMat: StandardMaterial;
+
+  constructor(private scene: Scene, private map: MapState, private onMesh: (m: Mesh, receive: boolean) => void, private night = false) {
+    this.litMat = makeMaterial(scene, 'litWin', 1, true);
     this.solid = makeMaterial(scene, 'solid');
     this.ghost = makeMaterial(scene, 'ghost', 0.22);
     this.glass = makeMaterial(scene, 'glass', 0.999);
@@ -239,6 +243,7 @@ export class MapView {
       }
     }
     this.base = bg.build('base', this.scene, this.solid);
+    this.buildLamps();
     this.onMesh(this.base, true);
     for (let z = 0; z < m.levels; z++) this.levelMeshes.push(this.buildLevel(z));
     for (let z = 0; z < m.levels; z++)
@@ -258,6 +263,21 @@ export class MapView {
           if (!cell.floor) continue;
           g = cell.terrain === 'floor' ? groups.floor : cell.terrain === 'roof' ? groups.roof : groups.ground;
           if (cell.terrain === 'roof' && z > 0) {
+            // Обладнання на даху: вентиляція, кондиціонери, антени (рідко, біля краю клітинки).
+            const rr = hash2(x * 11, y * 7, z * 3 + 41);
+            const ox = x + 0.25 + hash2(x, y, 42) * 0.1, oz = -(y + 0.25 + hash2(y, x, 43) * 0.1);
+            const metal: RGB = [0.55, 0.56, 0.56];
+            if (rr < 0.07) {
+              g.chamferBox(ox, z * L + 0.12, oz, 0.26, 0.22, 0.26, metal, 0.03); // вентиляційна шахта
+              g.box(ox, z * L + 0.25, oz, 0.32, 0.03, 0.32, shade(metal, 0.8));
+              for (let i = 0; i < 3; i++) g.box(ox + 0.131, z * L + 0.07 + i * 0.05, oz, 0.004, 0.02, 0.2, [0.15, 0.15, 0.15]);
+            } else if (rr < 0.11) {
+              g.chamferBox(ox, z * L + 0.14, oz, 0.34, 0.26, 0.22, [0.78, 0.78, 0.76], 0.02); // кондиціонер
+              g.prism(ox, z * L + 0.14, oz + 0.112, 0.18, 0.18, 0.006, 14, [0.25, 0.25, 0.27]); // решітка вентилятора
+            } else if (rr < 0.125) {
+              g.prism(ox, z * L + 0.45, oz, 0.025, 0.025, 0.9, 6, [0.35, 0.35, 0.35], Math.PI / 2); // антена
+              for (let i = 0; i < 3; i++) g.box(ox, z * L + 0.6 + i * 0.12, oz, 0.3 - i * 0.07, 0.012, 0.012, [0.35, 0.35, 0.35]);
+            }
             // Бортик (відлив) уздовж краю даху.
             const ry = z * L + 0.04;
             const lip: RGB = [0.42, 0.42, 0.42];
@@ -352,11 +372,53 @@ export class MapView {
 
   dispose(): void {
     this.base?.dispose();
+    for (const d of this.decor) d.dispose();
+    this.decor = [];
     for (const m of this.levelMeshes) m.dispose();
     for (const o of this.objects.values()) o.mesh.dispose();
     this.objects.clear();
     this.levelMeshes = [];
   }
+
+  /** Вуличні ліхтарі вздовж доріг (лише вигляд). Уночі — світні плафони й світлові плями на землі. */
+  lamps: { x: number; y: number }[] = [];
+  private buildLamps(): void {
+    const m = this.map;
+    const pole = new GeoBuilder();
+    pole.smooth = true;
+    const glow = new GeoBuilder();
+    const road = (x: number, y: number) => m.cells[0][y]?.[x]?.terrain === 'road';
+    for (let y = 0; y < m.height; y++)
+      for (let x = 0; x < m.width; x++) {
+        const c = m.cells[0][y][x];
+        if (!road(x, y) || c.object || (x * 7 + y * 13) % 9 !== 0) continue;
+        const side = !road(x - 1, y) ? [-1, 0] : !road(x + 1, y) ? [1, 0] : !road(x, y - 1) ? [0, -1] : !road(x, y + 1) ? [0, 1] : null;
+        if (!side) continue;
+        const px = x + 0.5 + side[0] * 0.42;
+        const pz = -(y + 0.5 + side[1] * 0.42);
+        const H = 1.7;
+        pole.prism(px, H / 2, pz, 0.06, 0.06, H, 8, [0.3, 0.31, 0.32], Math.PI / 2);
+        pole.prism(px - side[0] * 0.2, H - 0.02, pz + side[1] * 0.2, 0.035, 0.035, 0.42, 6, [0.3, 0.31, 0.32], 0, Math.atan2(-side[0], side[1]) + Math.PI);
+        const hx = px - side[0] * 0.38, hz = pz + side[1] * 0.38;
+        pole.chamferBox(hx, H - 0.06, hz, 0.18, 0.06, 0.18, [0.25, 0.26, 0.27], 0.02);
+        (this.night ? glow : pole).box(hx, H - 0.1, hz, 0.12, 0.03, 0.12, this.night ? [1, 0.85, 0.55] : [0.75, 0.75, 0.7]);
+        if (this.night) glow.prism(hx, 0.02, hz, 1.6, 1.6, 0.004, 16, [0.55, 0.42, 0.22], Math.PI / 2, 0, 0.22); // пляма світла
+        this.lamps.push({ x: hx, y: hz });
+      }
+    if (!pole.empty) {
+      const mesh = pole.build('lamps', this.scene, this.solid);
+      mesh.isPickable = false;
+      this.onMesh(mesh, false);
+      this.decor.push(mesh);
+    }
+    if (!glow.empty) {
+      const mesh = glow.build('lampGlow', this.scene, this.litMat);
+      mesh.isPickable = false;
+      mesh.hasVertexAlpha = true;
+      this.decor.push(mesh);
+    }
+  }
+  private decor: Mesh[] = [];
 
   /** Об'єкти карти зібрані блоками CH×CH клітинок на поверх: мало draw calls. */
   static readonly CH = 8;
@@ -374,6 +436,7 @@ export class MapView {
       }
     const g = new GeoBuilder();
     const gg = new GeoBuilder();
+    const gl = new GeoBuilder(); // освітлені вікна (вночі)
     const tex = new Map<Surface, GeoBuilder>();
     const forSurf = (sf: Surface | null): GeoBuilder => {
       if (!sf) return g;
@@ -404,7 +467,8 @@ export class MapView {
         if (cell.edges)
           for (const side of Object.keys(cell.edges) as EdgeSide[]) {
             const o = objectDef(cell.edges[side]!.defId);
-            buildEdge(forSurf(surfaceOf(o.material, o.id)), o, x, y, z, side, z, gg, isTopWall(this.map, x, y, z));
+            const lit = this.night && !!o.window && !o.id.endsWith('_broken') && hash2(x * 3 + z, y * 5, side.charCodeAt(0)) < 0.35;
+            buildEdge(forSurf(surfaceOf(o.material, o.id)), o, x, y, z, side, z, lit ? gl : gg, isTopWall(this.map, x, y, z));
             if (o.wall || o.id === 'parapet') wall = true;
           }
       }
@@ -426,6 +490,20 @@ export class MapView {
       mesh.isPickable = false;
       this.onMesh(mesh, false);
       this.objects.set(`chg:${key}`, { mesh, level: z, buildingId: undefined, wall, glass: true });
+    }
+    if (!gl.empty) {
+      // Тепле світло у вікні: перефарбувати скло.
+      for (let i = 0; i < gl.colors.length; i += 4) {
+        const k = 0.75 + hash2(i, z, 5) * 0.25;
+        gl.colors[i] = 1 * k;
+        gl.colors[i + 1] = 0.76 * k;
+        gl.colors[i + 2] = 0.4 * k;
+        gl.colors[i + 3] = 0.9;
+      }
+      const mesh = gl.build(`chl_${key}`, this.scene, this.litMat);
+      mesh.isPickable = false;
+      mesh.hasVertexAlpha = true;
+      this.objects.set(`chl:${key}`, { mesh, level: z, buildingId: undefined, wall, glass: true });
     }
   }
 

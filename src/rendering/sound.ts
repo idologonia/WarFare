@@ -122,6 +122,112 @@ function gunshot(c: AudioContext, d: AudioNode, t: number, power: number) {
   burstNoise(c, d, t + 0.03, 0.04, 0.12, 'bandpass', 3500, 6); // затвор
 }
 
+/**
+ * Двигун техніки на час руху: дизель (гармоніки + пульсація циліндрів + вихлоп),
+ * для гусеничної — брязкіт траків і свист турбіни; для колісної — шелест шин. Набір і скидання обертів.
+ */
+export function engineSfx(dist: number, seconds: number, tracked: boolean): void {
+  const c = ac();
+  if (!c) return;
+  const t = c.currentTime + 0.01;
+  const T = Math.max(0.8, seconds) + 0.6;
+  const d = out(c, dist);
+  const f0 = tracked ? 34 : 48;
+  const bus = c.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.exponentialRampToValueAtTime(0.5, t + 0.35);
+  bus.gain.setValueAtTime(0.5, t + T - 0.5);
+  bus.gain.exponentialRampToValueAtTime(0.0001, t + T);
+  // Пульсація циліндрів (амплітудна модуляція «тук-тук-тук»).
+  const am = c.createGain();
+  am.gain.value = 0.6;
+  const lfo = c.createOscillator();
+  lfo.frequency.setValueAtTime(f0 / 2.2, t);
+  lfo.frequency.linearRampToValueAtTime(f0 / 1.6, t + 0.6);
+  lfo.frequency.setValueAtTime(f0 / 1.6, t + T - 0.6);
+  lfo.frequency.linearRampToValueAtTime(f0 / 2.4, t + T);
+  const lg = c.createGain();
+  lg.gain.value = 0.4;
+  lfo.connect(lg).connect(am.gain);
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = tracked ? 420 : 650;
+  am.connect(lp).connect(bus).connect(d);
+  const oscs: OscillatorNode[] = [lfo];
+  [1, 2, 3, 4.02].forEach((k, i) => {
+    const o = c.createOscillator();
+    o.type = i === 0 ? 'sawtooth' : 'square';
+    o.frequency.setValueAtTime(f0 * k * 0.8, t);
+    o.frequency.exponentialRampToValueAtTime(f0 * k * 1.15, t + 0.6); // набір обертів
+    o.frequency.setValueAtTime(f0 * k * 1.15, t + T - 0.6);
+    o.frequency.exponentialRampToValueAtTime(f0 * k * 0.75, t + T);
+    const g = c.createGain();
+    g.gain.value = [0.5, 0.22, 0.12, 0.06][i];
+    o.connect(g).connect(am);
+    oscs.push(o);
+  });
+  // Вихлоп — шум низьких частот.
+  const ex = noise(c, T);
+  const exf = c.createBiquadFilter();
+  exf.type = 'lowpass';
+  exf.frequency.value = 260;
+  const exg = c.createGain();
+  exg.gain.value = 0.35;
+  ex.connect(exf).connect(exg).connect(am);
+  ex.start(t);
+  ex.stop(t + T);
+  if (tracked) {
+    // Турбіна: тихий свист, що росте з обертами.
+    const tb = c.createOscillator();
+    tb.type = 'sine';
+    tb.frequency.setValueAtTime(1800, t);
+    tb.frequency.exponentialRampToValueAtTime(2600, t + 0.8);
+    const tg = c.createGain();
+    tg.gain.value = 0.012;
+    tb.connect(tg).connect(bus);
+    oscs.push(tb);
+    // Брязкіт траків: часті металеві клацання з розкидом.
+    const rate = 11;
+    for (let k = 0.3; k < T - 0.4; k += 1 / rate) {
+      const tt = t + k + (Math.random() - 0.5) * 0.02;
+      burstNoise(c, d, tt, 0.035, 0.09 + Math.random() * 0.05, 'bandpass', 1800 + Math.random() * 1600, 7);
+      if (Math.random() < 0.15) tone(c, d, tt, 0.08, 0.03, 900 + Math.random() * 500, 850, 'triangle'); // дзенькіт
+    }
+    burstNoise(c, d, t + 0.25, T - 0.6, 0.12, 'lowpass', 180, 0.7, 0.2); // гуркіт ходової
+  } else {
+    burstNoise(c, d, t + 0.2, T - 0.5, 0.1, 'bandpass', 700, 0.6, 0.25); // шелест шин по ґрунту
+    for (let k = 0.4; k < T - 0.4; k += 0.35 + Math.random() * 0.4) burstNoise(c, d, t + k, 0.05, 0.05, 'lowpass', 400, 1); // вибоїни
+  }
+  for (const o of oscs) {
+    o.start(t);
+    o.stop(t + T + 0.05);
+  }
+}
+
+/** Постріл із великокаліберного / кулемета техніки (важчий, із луною від броні). */
+export function vehicleGunSfx(dist: number, rounds: number): void {
+  const c = ac();
+  if (!c) return;
+  const d = out(c, dist);
+  const t = c.currentTime + 0.01;
+  for (let i = 0; i < Math.max(1, rounds); i++) {
+    gunshot(c, d, t + i * 0.11, 1.6);
+    tone(c, d, t + i * 0.11 + 0.01, 0.12, 0.08, 520, 480, 'triangle'); // дзвін броні
+  }
+}
+
+/** Знищення техніки: вибух, детонація боєкомплекту (тріск), дзвін металу. */
+export function vehicleDestroyedSfx(dist: number): void {
+  const c = ac();
+  if (!c) return;
+  sfx('boom', dist);
+  const d = out(c, dist);
+  const t = c.currentTime + 0.4;
+  for (let i = 0; i < 14; i++) burstNoise(c, d, t + Math.random() * 2.2, 0.06, 0.25, 'bandpass', 1200 + Math.random() * 2500, 3); // детонація БК
+  for (let i = 0; i < 3; i++) tone(c, d, t + Math.random() * 1.5, 0.7, 0.12, 300 + Math.random() * 300, 220, 'triangle');
+  burstNoise(c, d, t, 3, 0.25, 'lowpass', 600, 0.7, 0.3); // полум'я
+}
+
 export function sfx(kind: Sfx, dist = 12): void {
   const c = ac();
   if (!c) return;
@@ -188,9 +294,12 @@ export function sfx(kind: Sfx, dist = 12): void {
       break;
     }
     case 'clang':
-      tone(c, d, t, 0.6, 0.35, 820, 760, 'triangle');
-      tone(c, d, t, 0.4, 0.2, 1730, 1650, 'sine');
-      burstNoise(c, d, t, 0.06, 0.5, 'highpass', 3000);
+      // Влучання в броню: удар, металевий резонанс (неблагозвучні обертони), рикошет.
+      burstNoise(c, d, t, 0.05, 0.8, 'highpass', 2200);
+      tone(c, d, t, 0.9, 0.3, 610, 585, 'triangle');
+      tone(c, d, t, 0.7, 0.18, 1437, 1410, 'sine');
+      tone(c, d, t, 0.5, 0.12, 2311, 2290, 'sine');
+      tone(c, d, t + 0.03, 0.35, 0.12, 3200, 900, 'sine'); // «вжиу» рикошету
       break;
     case 'engine': {
       // Дизель: низький пульсуючий гул.

@@ -458,8 +458,12 @@ export class Battle {
     }
   }
 
+  /** Поверх, вибраний гравцем вручну (не скидається після дій і вибору іншого бійця). */
+  private manualLevel: number | null = null;
+
   private changeLevel(d: number): void {
     this.r.setViewLevel(this.r.viewLevel + d);
+    this.manualLevel = this.r.viewLevel;
     this.r.sync();
     this.refresh();
   }
@@ -467,7 +471,10 @@ export class Battle {
   /** Автоматичний поверх: якщо вибраний боєць у будівлі — показуємо його поверх (стіни прозорі). */
   private autoView(): void {
     const u = this.selected();
-    if (u?.pos && isIndoor(this.s.map, u.pos)) this.r.setViewLevel(u.pos.z);
+    if (this.manualLevel !== null) {
+      // Вибір гравця зберігаємо; піднімаємо вид лише тоді, коли інакше бійця не видно.
+      this.r.setViewLevel(Math.max(this.manualLevel, u?.pos?.z ?? 0));
+    } else if (u?.pos && isIndoor(this.s.map, u.pos)) this.r.setViewLevel(u.pos.z);
     else this.r.setViewLevel(this.s.map.levels - 1);
     this.r.sync();
   }

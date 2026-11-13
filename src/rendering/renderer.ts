@@ -32,7 +32,7 @@ import { LH, MapView, cellWorld, makeMaterial, world } from './mapView';
 import { applyPose, buildUnitModel, SIDE_COLOR, type UnitModel } from './unitView';
 import { buildVehicleModel, facingAngle, type VehicleModel } from './vehicleView';
 import { buildDroneModel, type DroneModel } from './droneView';
-import { sfx, type Sfx } from './sound';
+import { engineSfx, sfx, vehicleDestroyedSfx, vehicleGunSfx, type Sfx } from './sound';
 import { content, itemDef } from '@/content';
 import type { WeaponDefinition } from '@/game/types';
 import { visibleCells } from '@/game/visibility/visibility';
@@ -333,7 +333,7 @@ export class Renderer {
     for (const o of this.overlays.values()) o.dispose();
     this.overlays.clear();
     this.scars = [];
-    this.map = new MapView(this.scene, state.map, this.registerMesh);
+    this.map = new MapView(this.scene, state.map, this.registerMesh, state.scenario?.timeOfDay === 'night');
     if (!keepCamera) this.camera.target = world(state.map.width / 2, state.map.height * 0.7, 0);
     for (const u of state.units) this.ensureUnit(u);
     this.sync();
@@ -929,7 +929,10 @@ export class Renderer {
           this.refreshFog(true);
           break;
         case 'vehicle':
-          if (e.path) sfx('engine', this.vehDist(e.vehicleId));
+          if (e.path) {
+            const vv = this.state.vehicles?.find((x) => x.id === e.vehicleId);
+            engineSfx(this.vehDist(e.vehicleId), (e.path.length - 1) * 0.14 / this.anim.speed, vv ? vehicleDef(vv.defId).kind === 'tracked' : true);
+          }
           if (e.path && this.vehicleModels.get(e.vehicleId)?.root.isEnabled()) await this.animateVehicle(e.vehicleId, e.path);
           this.syncVehicles();
           break;
@@ -939,6 +942,10 @@ export class Renderer {
           break;
         case 'vehicleHit':
           sfx('clang', this.vehDist(e.vehicleId));
+          if (this.state.vehicles?.find((x) => x.id === e.vehicleId)?.destroyed && !this.wrecked.has(e.vehicleId)) {
+            this.wrecked.add(e.vehicleId);
+            vehicleDestroyedSfx(this.vehDist(e.vehicleId));
+          }
           await this.animateVehicleHit(e.vehicleId, e.penetrated);
           break;
         case 'explosion':
@@ -1083,6 +1090,8 @@ export class Renderer {
   }
 
   private scars: { p: Vector3; r: number }[] = [];
+  /** Техніка, для якої вже прозвучав звук знищення. */
+  private wrecked = new Set<string>();
   private lastCam = '';
 
   /** Камера зрушилась (тіні від спрямованого світла залежать від кадру). */
@@ -1145,7 +1154,8 @@ export class Renderer {
       flash.position = from;
       flash.isPickable = false;
       flash.setEnabled(shooterShown);
-      sfx(snd, dist);
+      if (shooter?.inVehicle) vehicleGunSfx(dist, 1);
+      else sfx(snd, dist);
       // Віддача: корпус відкидає назад.
       if (m && shooterShown) {
         const r0 = m.torso.rotation.x;

@@ -197,6 +197,9 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
   const known = tUnit ? s.contacts[shooter.side][tUnit.id] : undefined;
   const est = tUnit ? estimateHit(s, shooter, tUnit, mode, { from: origin, stance, identified: known?.identified ?? true, extra }) : null;
   const shots: { to: Point; hitUnit: string | null }[] = [];
+  // Подія пострілу — у черзі ДО влучань (масив shots заповнюється нижче): спершу анімація пострілу, потім ураження.
+  ctx.ev.push({ t: 'fired', unitId: shooter.id, from, shots, targetUnit: tUnit?.id ?? null });
+  // Подію пострілу ставимо в чергу ДО влучань (масив shots заповнюється нижче): анімація — спершу постріл, потім ураження.
   const dist = dist2d(origin, aimCell);
   const lowCover = tUnit?.pos ? coverAgainst(s, tUnit.pos, origin) === 1 : false;
 
@@ -252,7 +255,6 @@ export function resolveFire(ctx: Ctx, shooter: Unit, target: FireTarget, mode: F
     }
     suppressAround(ctx, shots[shots.length - 1].to, shooter, R.suppression.perBullet * w.suppression);
   }
-  ctx.ev.push({ t: 'fired', unitId: shooter.id, from, shots, targetUnit: tUnit?.id ?? null });
   if (shooter.weaponState === 'carry') shooter.weaponState = 'low';
 }
 
