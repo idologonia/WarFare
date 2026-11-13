@@ -124,35 +124,35 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
       if (u.inventory.rig) {
         // Пояс рейнджера з підсумками.
         g.prism(0, 0.03, 0, 0.33, 0.22, 0.07, 8, gearDark, V);
-        for (const x of [-0.12, 0.12]) g.box(x, 0.03, 0.115, 0.07, 0.085, 0.045, gear);
-        g.box(0.17, 0.02, -0.04, 0.045, 0.1, 0.1, gear); // аптечка
+        for (const x of [-0.12, 0.12]) g.chamferBox(x, 0.03, 0.115, 0.07, 0.085, 0.045, gear, 0.014);
+        g.chamferBox(0.17, 0.02, -0.04, 0.045, 0.1, 0.1, gear, 0.014); // аптечка
         g.box(0, 0.03, 0.118, 0.06, 0.045, 0.02, [0.55, 0.5, 0.4]); // пряжка
       } else g.prism(0, 0.03, 0, 0.31, 0.2, 0.035, 8, [0.2, 0.17, 0.12], V); // звичайний ремінь
       if (armorId === 'plate_carrier') {
         // Плитоноска: передня й задня плити, камербанд, підсумки, адмін-панель.
-        g.box(0, 0.29, 0.085, 0.29, 0.28, 0.06, gear);
-        g.box(0, 0.29, -0.085, 0.29, 0.28, 0.06, gear);
+        g.chamferBox(0, 0.29, 0.085, 0.29, 0.28, 0.06, gear, 0.014);
+        g.chamferBox(0, 0.29, -0.085, 0.29, 0.28, 0.06, gear, 0.014);
         g.prism(0, 0.22, 0, 0.36, 0.23, 0.14, 8, gearDark, V); // камербанд
-        for (const x of [-0.105, 0.105]) g.box(x, 0.445, 0, 0.065, 0.035, 0.22, gearDark); // лямки
+        for (const x of [-0.105, 0.105]) g.chamferBox(x, 0.445, 0, 0.065, 0.035, 0.22, gearDark, 0.014); // лямки
         for (const x of [-0.095, 0, 0.095]) {
-          g.box(x, 0.2, 0.135, 0.08, 0.12, 0.045, shade(gear, 1.08));
-          g.box(x, 0.262, 0.137, 0.08, 0.018, 0.048, gearDark);
+          g.chamferBox(x, 0.2, 0.135, 0.08, 0.12, 0.045, shade(gear, 1.08), 0.014);
+          g.chamferBox(x, 0.262, 0.137, 0.08, 0.018, 0.048, gearDark, 0.014);
         }
-        g.box(0, 0.35, 0.122, 0.15, 0.065, 0.025, gearDark);
+        g.chamferBox(0, 0.35, 0.122, 0.15, 0.065, 0.025, gearDark, 0.014);
         g.box(0, 0.354, 0.136, 0.09, 0.032, 0.005, side);
-        g.box(0, 0.4, -0.12, 0.11, 0.05, 0.02, gearDark); // ручка евакуації
+        g.chamferBox(0, 0.4, -0.12, 0.11, 0.05, 0.02, gearDark, 0.014); // ручка евакуації
       } else if (armorId) {
         // РПС із балістичним захистом: нагрудник, два ряди підсумків, X-лямки на спині.
-        g.box(0, 0.23, 0.09, 0.3, 0.2, 0.05, gear);
+        g.chamferBox(0, 0.23, 0.09, 0.3, 0.2, 0.05, gear, 0.014);
         for (const x of [-0.105, -0.035, 0.035, 0.105]) {
-          g.box(x, 0.16, 0.125, 0.062, 0.085, 0.035, shade(gear, 1.1));
-          g.box(x, 0.255, 0.125, 0.062, 0.075, 0.035, shade(gear, 0.95));
+          g.chamferBox(x, 0.16, 0.125, 0.062, 0.085, 0.035, shade(gear, 1.1), 0.014);
+          g.chamferBox(x, 0.255, 0.125, 0.062, 0.075, 0.035, shade(gear, 0.95), 0.014);
         }
-        g.box(-0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark);
-        g.box(0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark);
+        g.chamferBox(-0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark, 0.014);
+        g.chamferBox(0.095, 0.39, 0.07, 0.045, 0.13, 0.025, gearDark, 0.014);
         g.box(0, 0.29, -0.11, 0.045, 0.3, 0.018, gearDark, 1, 0.6);
         g.box(0, 0.29, -0.11, 0.045, 0.3, 0.018, gearDark, 1, -0.6);
-        g.box(-0.165, 0.15, 0, 0.04, 0.11, 0.13, gearDark); // бічний підсумок
+        g.chamferBox(-0.165, 0.15, 0, 0.04, 0.11, 0.13, gearDark, 0.014); // бічний підсумок
         g.box(0, 0.34, 0.115, 0.08, 0.028, 0.005, side);
       } else {
         g.box(0.11, 0.37, 0.108, 0.07, 0.045, 0.01, side); // нашивка сторони на куртці
@@ -165,15 +165,15 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
       }
       const extra = new Set((u.inventory.extraArmor ?? []).map((a) => a.defId));
       if (extra.has('neck_guard')) g.prism(0, 0.465, 0.01, 0.2, 0.2, 0.06, 10, gearDark, V);
-      if (extra.has('groin_guard')) g.box(0, -0.05, 0.11, 0.13, 0.11, 0.035, gear);
+      if (extra.has('groin_guard')) g.chamferBox(0, -0.05, 0.11, 0.13, 0.11, 0.035, gear, 0.014);
       if (extra.has('side_plates')) {
-        g.box(-0.18, 0.23, 0, 0.035, 0.18, 0.15, gear);
-        g.box(0.18, 0.23, 0, 0.035, 0.18, 0.15, gear);
+        g.chamferBox(-0.18, 0.23, 0, 0.035, 0.18, 0.15, gear, 0.014);
+        g.chamferBox(0.18, 0.23, 0, 0.035, 0.18, 0.15, gear, 0.014);
       }
       if (u.inventory.backpack) {
         g.prism(0, 0.27, -0.185, 0.25, 0.13, 0.3, 8, shade(gear, 0.92), V);
-        g.box(0, 0.41, -0.19, 0.2, 0.045, 0.13, gearDark);
-        g.box(0, 0.19, -0.255, 0.17, 0.11, 0.03, gearDark); // кишеня рюкзака
+        g.chamferBox(0, 0.41, -0.19, 0.2, 0.045, 0.13, gearDark, 0.014);
+        g.chamferBox(0, 0.19, -0.255, 0.17, 0.11, 0.03, gearDark, 0.014); // кишеня рюкзака
       }
       // Відмінності класів — щоб бійця можна було впізнати на полі.
       switch (u.classId) {

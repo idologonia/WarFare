@@ -109,7 +109,17 @@ export class GeoBuilder {
    * Призма вздовж локальної осі Z: переріз — многокутник (sides) в еліпсі w×h, довжина len.
    * rotX — нахил (тангаж), rotY — поворот. Пласкі грані для «рубленого», але не квадратного вигляду.
    */
-  prism(cx: number, cy: number, cz: number, w: number, h: number, len: number, sides: number, color: RGB, rotX = 0, rotY = 0, alpha = 1): this {
+  /** Коробка зі скошеними ребрами (фаска c): менш «кубічний» вигляд корпусів, плит, підсумків. */
+  chamferBox(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, color: RGB, c = 0.03, rotY = 0, rotX = 0): this {
+    const hx = sx / 2, hy = sy / 2;
+    const k = Math.min(c, hx * 0.45, hy * 0.45);
+    const ring: [number, number][] = [
+      [hx, -(hy - k)], [hx, hy - k], [hx - k, hy], [-(hx - k), hy], [-hx, hy - k], [-hx, -(hy - k)], [-(hx - k), -hy], [hx - k, -hy],
+    ];
+    return this.prism(cx, cy, cz, sx, sy, sz, 8, color, rotX, rotY, 1, ring);
+  }
+
+  prism(cx: number, cy: number, cz: number, w: number, h: number, len: number, sides: number, color: RGB, rotX = 0, rotY = 0, alpha = 1, ringIn?: [number, number][]): this {
     const cxr = Math.cos(rotX), sxr = Math.sin(rotX), cyr = Math.cos(rotY), syr = Math.sin(rotY);
     const tf = (x: number, y: number, z: number): [number, number, number] => {
       // Нахил навколо X, потім поворот навколо Y.
@@ -117,11 +127,13 @@ export class GeoBuilder {
       const z1 = y * sxr + z * cxr;
       return [x * cyr + z1 * syr, y1, -x * syr + z1 * cyr];
     };
-    const ring: [number, number][] = [];
-    for (let i = 0; i < sides; i++) {
-      const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
-      ring.push([(Math.cos(a) * w) / 2, (Math.sin(a) * h) / 2]);
-    }
+    const ring: [number, number][] = ringIn ?? [];
+    if (!ringIn)
+      for (let i = 0; i < sides; i++) {
+        const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
+        ring.push([(Math.cos(a) * w) / 2, (Math.sin(a) * h) / 2]);
+      }
+    sides = ring.length;
     const camo = this.camo;
     this.camoSeed = (this.camoSeed * 9301 + 0.4927) % 1;
     const off = 0.08 + this.camoSeed * 0.1;
@@ -156,8 +168,8 @@ export class GeoBuilder {
     for (let i = 0; i < sides; i++) {
       const [x0, y0] = ring[i];
       const [x1, y1] = ring[(i + 1) % sides];
-      const nx = (y1 - y0) * h;
-      const ny = -(x1 - x0) * w;
+      const nx = (y1 - y0) * (ringIn ? 1 : h);
+      const ny = -(x1 - x0) * (ringIn ? 1 : w);
       const nl = Math.hypot(nx, ny) || 1;
       const ny2 = ny / nl;
       const k = ny2 > 0.5 ? 1.0 : ny2 < -0.5 ? 0.6 : 0.82;
@@ -165,7 +177,7 @@ export class GeoBuilder {
       const ub = ((i + 1) / sides) * per * (camo ?? 0);
       const L = len * (camo ?? 0);
       let vn: [number, number, number][] | undefined;
-      if (this.smooth) {
+      if (this.smooth && !ringIn) {
         const rn = (px: number, py: number): [number, number, number] => {
           const ax = px / ((w / 2) ** 2 || 1), ay = py / ((h / 2) ** 2 || 1);
           const l = Math.hypot(ax, ay) || 1;

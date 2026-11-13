@@ -152,7 +152,9 @@ export class MapView {
   private build(): void {
     const m = this.map;
     // Темна основа під картою — проміжки між плитками дають сітку.
-    const bg = new GeoBuilder().box(m.width / 2, -0.2, -m.height / 2, m.width + 0.2, 0.36, m.height + 0.2, [0.16, 0.14, 0.11]);
+    const bg = new GeoBuilder();
+    bg.smooth = true;
+    bg.box(m.width / 2, -0.2, -m.height / 2, m.width + 0.2, 0.36, m.height + 0.2, [0.16, 0.14, 0.11]);
     // Околиці за межами карти: поле з плямами й деревами вдалині (лише вигляд, ходити не можна).
     const O = 18;
     const fieldCol: RGB = [0.42, 0.52, 0.26];
@@ -166,9 +168,9 @@ export class MapView {
       else {
         // дерево
         const h = 1.2 + k * 1.4;
-        bg.box(a, h * 0.3 - 0.04, -b, 0.22, h * 0.6, 0.22, [0.25, 0.18, 0.12]);
-        bg.box(a, h * 0.75, -b, 1.1, h * 0.55, 1.1, shade([0.18, 0.3, 0.14], 0.85 + k * 0.3));
-        bg.box(a, h * 1.05, -b, 0.7, 0.35, 0.7, shade([0.2, 0.33, 0.15], 0.9 + k * 0.3));
+        bg.prism(a, h * 0.3 - 0.04, -b, 0.22, 0.22, h * 0.6, 7, [0.25, 0.18, 0.12], Math.PI / 2);
+        bg.prism(a, h * 0.75, -b, 1.15, 1.1, h * 0.55, 10, shade([0.18, 0.3, 0.14], 0.85 + k * 0.3), Math.PI / 2);
+        bg.prism(a, h * 1.05, -b, 0.72, 0.7, 0.35, 10, shade([0.2, 0.33, 0.15], 0.9 + k * 0.3), Math.PI / 2);
       }
     }
     this.base = bg.build('base', this.scene, this.solid);
@@ -190,6 +192,16 @@ export class MapView {
           const cell = m.cells[z][y][x];
           if (!cell.floor) continue;
           g = cell.terrain === 'floor' ? groups.floor : cell.terrain === 'roof' ? groups.roof : groups.ground;
+          if (cell.terrain === 'roof' && z > 0) {
+            // Бортик (відлив) уздовж краю даху.
+            const ry = z * L + 0.04;
+            const lip: RGB = [0.42, 0.42, 0.42];
+            const nb = (dx: number, dy: number) => m.cells[z][y + dy]?.[x + dx]?.terrain === 'roof';
+            if (!nb(0, -1)) g.box(x + 0.5, ry, -y - 0.03, 1.0, 0.08, 0.06, lip);
+            if (!nb(0, 1)) g.box(x + 0.5, ry, -y - 0.97, 1.0, 0.08, 0.06, lip);
+            if (!nb(-1, 0)) g.box(x + 0.03, ry, -(y + 0.5), 0.06, 0.08, 1.0, lip);
+            if (!nb(1, 0)) g.box(x + 0.97, ry, -(y + 0.5), 0.06, 0.08, 1.0, lip);
+          }
           const t = terrainDef(cell.terrain);
           const n = hash2(x, y, z);
           const col = shade(hex(t.color), 0.93 + n * 0.14);
@@ -308,7 +320,7 @@ export class MapView {
         if (cell.edges)
           for (const side of Object.keys(cell.edges) as EdgeSide[]) {
             const o = objectDef(cell.edges[side]!.defId);
-            buildEdge(forSurf(surfaceOf(o.material, o.id)), o, x, y, z, side, z, gg);
+            buildEdge(forSurf(surfaceOf(o.material, o.id)), o, x, y, z, side, z, gg, isTopWall(this.map, x, y, z));
             if (o.wall || o.id === 'parapet') wall = true;
           }
       }
@@ -348,7 +360,7 @@ export class MapView {
  * Тонкий об'єкт уздовж межі клітинки. Будується в локальних координатах:
  * a — уздовж межі (−0.5..0.5), b — поперек (товщина), y — висота.
  */
-function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, _z: number, side: EdgeSide, base: number, gGlass: GeoBuilder = g): void {
+function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, _z: number, side: EdgeSide, base: number, gGlass: GeoBuilder = g, top = false): void {
   const L = LH();
   const b0 = base * L;
   const col = hex(o.color);
@@ -414,6 +426,8 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
         const broken = o.id.endsWith('_broken');
         put(0, sill / 2, 0, LEN, sill, T, col);
         put(0, L * 0.97, 0, LEN, L * 0.06, T, col);
+        put(0, L * 0.9, 0, 0.92, 0.05, T + 0.05, shade(col, 0.82)); // перемичка над вікном
+        if (o.wall) wallTrim(put, h, LEN, T, col, _z, top, horizontal);
         put(-(LEN / 2) + 0.04, L * 0.6, 0, 0.08, L * 0.8, T, col);
         put(LEN / 2 - 0.04, L * 0.6, 0, 0.08, L * 0.8, T, col);
         put(0, sill + (L * 0.94 - sill) / 2, 0, 0.05, L * 0.94 - sill, 0.06, shade(col, 0.6));
@@ -428,6 +442,7 @@ function buildEdge(g: GeoBuilder, o: MapObjectDefinition, x: number, y: number, 
       } else {
         put(0, h / 2, 0, LEN, h, T, shade(col, 0.95 + n * 0.1));
         put(0, h + 0.02, 0, LEN + (horizontal ? 0.02 : -0.002), 0.04, T + (horizontal ? 0.03 : 0.026), shade(col, 1.15));
+        if (o.wall) wallTrim(put, h, LEN, T, col, _z, top, horizontal);
       }
   }
 }
@@ -445,5 +460,25 @@ function rotateSince(g: GeoBuilder, from: number, px: number, pz: number, a: num
     const nz = g.normals[i + 2];
     g.normals[i] = nx * c + nz * sn;
     g.normals[i + 2] = -nx * sn + nz * c;
+  }
+}
+
+/** Верхній поверх будівлі в цій клітинці (над стіною — дах або нічого). */
+function isTopWall(map: MapState, x: number, y: number, z: number): boolean {
+  if (z + 1 >= map.levels) return true;
+  const up = map.cells[z + 1][y][x];
+  return !up.floor || up.terrain === 'roof';
+}
+
+type PutFn = (a: number, yy: number, b: number, sa: number, sy: number, sb: number, c: RGB, alpha?: number) => void;
+
+/** Деталі стіни: цоколь на першому поверсі, міжповерховий пояс, карниз під дахом. */
+function wallTrim(put: PutFn, h: number, LEN: number, T: number, col: RGB, z: number, top: boolean, horizontal: boolean): void {
+  const ext = horizontal ? 0.03 : -0.002;
+  if (z === 0) put(0, 0.08, 0, LEN + ext, 0.16, T + 0.035, shade(col, 0.62)); // цоколь
+  else put(0, 0.03, 0, LEN + ext, 0.05, T + 0.03, shade(col, 0.82)); // міжповерховий пояс
+  if (top) {
+    put(0, h - 0.05, 0, LEN + ext, 0.06, T + 0.05, shade(col, 1.08)); // карниз
+    put(0, h - 0.1, 0, LEN + ext, 0.035, T + 0.025, shade(col, 0.9));
   }
 }
