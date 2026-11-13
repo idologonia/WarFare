@@ -24,6 +24,7 @@ import { losIgnore } from '@/game/visibility/los';
 import { cacheAsOwner, cacheById, cacheReachable, caches, isCacheId } from '@/game/logistics';
 import { DIR8_NAMES, dirTo, facingOf } from '@/game/units/facing';
 import { droneDefOfItem, PAYLOAD_NAMES } from '@/game/drones/payload';
+import { canCapture } from '@/game/simulation/mission';
 import type { DronePayload } from '@/game/types';
 import { droneAlt, droneById, droneItems, drones, moveCost, shootDroneChance } from '@/game/drones';
 
@@ -798,7 +799,7 @@ export class Battle {
           return null;
         },
         onClose: () => {
-          this.r.load(this.s, this.viewer, true);
+          this.r.refreshUnitModels();
           this.refresh();
         },
       }),
@@ -1712,11 +1713,14 @@ export class Battle {
     for (const v of vehicles(s))
       if (v.side === u.side && !v.destroyed && u.pos && adjacentToVehicle(v, u.pos) && freeSeats(v) > 0)
         other.push({ label: `Сісти в ${vehicleDef(v.defId).name} — ${content().rules.actions.embark} AP`, disabled: !can || !!u.carrying, run: () => void this.exec({ type: 'embark', unitId: u.id, vehicleId: v.id }).then((ok) => ok && this.selectVehicle(v.id)) });
+    for (const t of s.units)
+      if (t.side !== u.side && t.pos && u.pos && (adjacent(t.pos, u.pos) || sameCell(t.pos, u.pos)) && !canCapture(t, u))
+        other.push({ label: `Взяти в полон: ${t.callsign}`, title: `${content().rules.capture.ap} AP. Полоненого потім треба донести до зони евакуації`, disabled: !can, run: run({ type: 'capture', unitId: u.id, targetId: t.id }) });
     const pick = this.pickUpTarget(u);
     if (u.carrying) other.push({ label: 'Покласти пораненого', title: `${content().rules.actions.drop} AP`, disabled: !can, run: run({ type: 'drop', unitId: u.id }) });
-    else if (pick) other.push({ label: `Підняти: ${pick.callsign}`, title: `${content().rules.actions.pickUp} AP`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
+    else if (pick) other.push({ label: `${pick.status === 'captured' ? 'Вести полоненого' : 'Підняти'}: ${pick.callsign}`, title: `${content().rules.actions.pickUp} AP`, disabled: !can, run: run({ type: 'pickUp', unitId: u.id, targetId: pick.id }) });
     if (inZone(u.pos ?? { x: -1, y: -1, z: 0 }, s.scenario.evacZone))
-      other.push({ label: u.carrying ? 'Евакуювати пораненого' : 'Евакуюватися', title: `${content().rules.actions.evacuate} AP`, disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
+      other.push({ label: u.carrying ? (this.s.units.find((x) => x.id === u.carrying)?.status === 'captured' ? 'Передати полоненого в тил' : 'Евакуювати пораненого') : 'Евакуюватися', title: `${content().rules.actions.evacuate} AP`, disabled: !can, run: run({ type: 'evacuate', unitId: u.id }) });
     out.push({ id: 'turn', label: `Огляд: ${DIR8_NAMES[facingOf(u)]}`, title: 'Поворот безкоштовний (0 AP): натисніть і клацніть клітинку, куди дивитися', items: [], toggle: () => ((this.turnMode = !this.turnMode), this.refresh()), active: this.turnMode, disabled: !can });
     out.push({ id: 'other', label: 'Дії', title: 'Інші дії', items: other });
     return out;
@@ -1724,7 +1728,10 @@ export class Battle {
 
   private pickUpTarget(u: Unit): Unit | undefined {
     if (!u.pos) return undefined;
-    return this.s.units.find((t) => t.side === u.side && t.pos && (t.status === 'down' || t.status === 'dead') && (adjacent(t.pos, u.pos!) || sameCell(t.pos, u.pos!)));
+    // Поранені й загиблі свої або полонені противника поруч.
+    return this.s.units.find(
+      (t) => t.pos && ((t.side === u.side && (t.status === 'down' || t.status === 'dead')) || t.status === 'captured') && (adjacent(t.pos, u.pos!) || sameCell(t.pos, u.pos!)),
+    );
   }
 
 }

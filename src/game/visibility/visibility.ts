@@ -1,5 +1,5 @@
 import { dist2d, type Cell } from '@/core/grid';
-import { content } from '@/content';
+import { content, droneDef } from '@/content';
 import { groundHeight, objAt } from '@/game/maps/map';
 import { visionRange } from '@/game/units/derived';
 import { offAxis } from '@/game/units/facing';
@@ -9,7 +9,7 @@ import { isActive, onField, other, type Ctx, type MissionState } from '@/game/si
 import type { SideId, Stance, Unit, VehicleState } from '@/game/types';
 import { cellCenter, losIgnore, trace, type Point } from './los';
 import { crew, crewProxy, vehicleCenter, vehicles } from '@/game/vehicles';
-import { droneSees, drones } from '@/game/drones';
+import { dronePoint, droneSees, drones } from '@/game/drones';
 
 export function eyePoint(s: MissionState, cell: Cell, stance: Stance): Point {
   return cellCenter(cell, groundHeight(s.map, cell) + content().rules.vision.eyeHeight[stance]);
@@ -215,6 +215,28 @@ export function visibleCells(s: MissionState, side: SideId, zOf?: (x: number, y:
           if (!trace(m, eye, p, { skipStart: u.pos!, skipEnd: c, step: 0.25 }).blocked) put(key, kind);
         }
     if (o.vehicle) losIgnore.ids.delete(o.vehicle);
+  }
+  // Дрони сторони: огляд згори (тепловізор уночі — як ПНБ).
+  for (const d of drones(s)) {
+    if (d.destroyed || d.side !== side) continue;
+    const def = droneDef(d.defId);
+    let range = def.vision;
+    if (!def.thermal && night) range *= 0.5;
+    if (!def.thermal && s.scenario.weather === 'fog') range *= 0.6;
+    const R = Math.ceil(range);
+    const eye = dronePoint(s, d);
+    const kind: SeenBy = night && def.thermal ? 'nvg' : 'eye';
+    for (let y = Math.max(0, d.y - R); y <= Math.min(m.height - 1, d.y + R); y++)
+      for (let x = Math.max(0, d.x - R); x <= Math.min(m.width - 1, d.x + R); x++) {
+        if (Math.hypot(x - d.x, y - d.y) > range) continue;
+        const z = zOf ? zOf(x, y) : 0;
+        const key = `${x},${y},${z}`;
+        const prev = out.get(key);
+        if (prev && SEEN_RANK[prev] >= SEEN_RANK[kind]) continue;
+        const c = { x, y, z };
+        const p = cellCenter(c, groundHeight(m, c) + 0.3);
+        if (!trace(m, eye, p, { skipEnd: c, step: 0.25 }).blocked) put(key, kind);
+      }
   }
   return out;
 }

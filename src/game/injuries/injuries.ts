@@ -155,7 +155,7 @@ function dropCarried(ctx: Ctx, u: Unit): void {
   u.carrying = null;
 }
 
-function moraleEvent(ctx: Ctx, victim: Unit, kind: 'killed' | 'down', attacker?: Unit): void {
+export function moraleEvent(ctx: Ctx, victim: Unit, kind: 'killed' | 'down', attacker?: Unit): void {
   const M = content().rules.morale;
   for (const o of ctx.s.units) {
     if (o.status !== 'active' || o === victim) continue;

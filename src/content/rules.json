@@ -242,5 +242,10 @@
     "lightRadius": 3.5,
     "glareHitPenalty": 20,
     "glareVisionRange": 3
+  },
+  "capture": {
+    "ap": 2,
+    "moraleThreshold": 20,
+    "healthFraction": 0.5
   }
 }

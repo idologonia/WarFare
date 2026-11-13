@@ -175,7 +175,7 @@ export function droneDrop(ctx: Ctx, d: DroneState): string | null {
   const z = impactLevel(s, hit.x, hit.y);
   const land = { x: hit.x, y: hit.y, z };
   const at = cellCenter(land, groundHeight(s.map, land) + 0.15);
-  ctx.ev.push({ t: 'grenade', unitId: d.operatorId, from: dronePoint(s, d), to: at });
+  ctx.ev.push({ t: 'drop', droneId: d.id, from: dronePoint(s, d), to: at });
   const op = s.units.find((u) => u.id === d.operatorId);
   explode(ctx, land, at, (d.payload && def.drops_?.[d.payload]) || def.dropBlast, op ?? null);
   return null;

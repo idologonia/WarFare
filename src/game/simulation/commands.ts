@@ -22,6 +22,7 @@ export type Command =
   | { type: 'turn'; unitId: string; facing: number }
   | { type: 'droneLaunch'; unitId: string; index: number; payload?: DronePayload }
   | { type: 'toggleNvg'; unitId: string }
+  | { type: 'capture'; unitId: string; targetId: string }
   | { type: 'droneMove'; droneId: string; x: number; y: number }
   | { type: 'droneAttack'; droneId: string; cell: Cell }
   | { type: 'droneDrop'; droneId: string }

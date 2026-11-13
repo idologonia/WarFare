@@ -10,7 +10,7 @@ import type { MissionState } from '@/game/simulation/state';
 import type { ArmorDefinition, BackpackDefinition, BodyPart, MagazineInstance, MedicalDefinition, MissionResult, StackItem, Unit } from '@/game/types';
 import { btn, h, pct } from './dom';
 
-const STATUS: Record<string, string> = { active: 'У строю', down: 'Без свідомості', dead: 'Загинув', evacuated: 'Евакуйований', reserve: 'Резерв' };
+const STATUS: Record<string, string> = { active: 'У строю', down: 'Без свідомості', dead: 'Загинув', evacuated: 'Евакуйований', reserve: 'Резерв', captured: 'Полонений' };
 export const statusName = (s: string) => STATUS[s] ?? s;
 
 function partColor(u: Unit, part: BodyPart): string {
@@ -152,7 +152,7 @@ export function resultsBody(r: MissionResult, viewer: 'blue' | 'red'): HTMLEleme
   const headline = r.winner === null ? 'Нічия' : r.winner === viewer ? 'Перемога' : 'Поразка';
   const side = (k: 'blue' | 'red') => {
     const p = r.perSide[k];
-    return h('tr', {}, h('td', {}, sideName[k]), h('td', {}, String(p.killed)), h('td', {}, String(p.wounded)), h('td', {}, String(p.evacuated)), h('td', {}, String(p.leftOnField)), h('td', {}, String(p.roundsUsed)), h('td', {}, String(p.grenades)), h('td', {}, String(p.medsUsed)), h('td', {}, String(p.vehiclesLost ?? 0)));
+    return h('tr', {}, h('td', {}, sideName[k]), h('td', {}, String(p.killed)), h('td', {}, String(p.wounded)), h('td', {}, String(p.evacuated)), h('td', {}, String(p.leftOnField)), h('td', {}, String(p.roundsUsed)), h('td', {}, String(p.grenades)), h('td', {}, String(p.medsUsed)), h('td', {}, String(p.vehiclesLost ?? 0)), h('td', {}, String(p.captured ?? 0)));
   };
   const units = h(
     'table',
@@ -179,7 +179,7 @@ export function resultsBody(r: MissionResult, viewer: 'blue' | 'red'): HTMLEleme
     { class: 'col' },
     h('div', { class: 'title-logo', style: `font-size:2.2em;color:${headline === 'Перемога' ? 'var(--good)' : headline === 'Поразка' ? 'var(--bad)' : 'var(--accent)'}` }, headline),
     h('div', { class: 'muted' }, `Причина: ${reason}. Ходів: ${r.turns}.`),
-    h('table', {}, h('tr', {}, ...['Сторона', 'Загинуло', 'Поранено', 'Евакуйовано', 'Лишилось на полі', 'Набоїв', 'Гранат і пострілів', 'Медицина', 'Втрачено техніки'].map((t) => h('th', {}, t))), side('blue'), side('red')),
+    h('table', {}, h('tr', {}, ...['Сторона', 'Загинуло', 'Поранено', 'Евакуйовано', 'Лишилось на полі', 'Набоїв', 'Гранат і пострілів', 'Медицина', 'Втрачено техніки', 'У полоні'].map((t) => h('th', {}, t))), side('blue'), side('red')),
     h('h3', { style: 'margin-top:8px' }, 'Ефективність бійців'),
     units,
     h('p', { class: 'muted' }, 'Виконання окремих завдань з’явиться у статистиці разом із механікою об’єктів.'),

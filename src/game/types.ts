@@ -325,7 +325,7 @@ export interface Appearance {
   face: number;
 }
 
-export type UnitStatus = 'active' | 'down' | 'dead' | 'evacuated' | 'reserve';
+export type UnitStatus = 'active' | 'down' | 'dead' | 'evacuated' | 'reserve' | 'captured';
 
 export interface UnitMissionStats {
   shots: number;
@@ -372,6 +372,8 @@ export interface Unit {
   lightOn?: boolean;
   /** Напрямок погляду 0..7 (див. units/facing.ts). */
   facing?: number;
+  /** Полонений, евакуйований у тил (вибув із бою). */
+  prisoner?: boolean;
   /** Боєць із ростера (постійного загону) — id запису. */
   rosterId?: string;
   /** ПНБ відкинуто (не працює, але й не засвічується). */
@@ -535,6 +537,8 @@ export interface MissionResult {
       medsUsed: number;
       /** Знищена техніка цієї сторони. */
       vehiclesLost?: number;
+      /** Потрапило в полон (бійців цієї сторони). */
+      captured?: number;
     }
   >;
   units: { id: string; name: string; side: SideId; status: UnitStatus; stats: UnitMissionStats; health: number; injuries: number }[];

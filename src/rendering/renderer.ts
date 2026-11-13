@@ -115,8 +115,13 @@ export class Renderer {
       }
     }
     if (!this.engine) this.engine = new Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true }, true);
-    this.engine.setHardwareScalingLevel(this.gfx.renderScale / Math.min(2, window.devicePixelRatio || 1));
+    this.engine.setHardwareScalingLevel(this.gfx.renderScale / Math.min(1.5, window.devicePixelRatio || 1));
     const scene = (this.scene = new Scene(this.engine));
+    // Після втрати/відновлення відеоконтексту — заново завантажити згенеровані текстури (форма, поверхні).
+    this.engine.onContextRestoredObservable.add(() => {
+      for (const t of scene.textures) (t as { update?: (invertY?: boolean) => void }).update?.();
+      this.shadowsDirty = true;
+    });
     scene.skipPointerMovePicking = true;
     scene.autoClearDepthAndStencil = true;
     scene.clearColor = new Color4(0.07, 0.08, 0.1, 1);
@@ -139,7 +144,7 @@ export class Renderer {
       pp.bloomEnabled = true;
       pp.bloomThreshold = 0.82;
       pp.bloomWeight = 0.45;
-      pp.bloomKernel = 48;
+      pp.bloomKernel = 32;
       pp.bloomScale = 0.5;
       pp.sharpenEnabled = true;
       pp.sharpen.edgeAmount = 0.25;
@@ -185,7 +190,7 @@ export class Renderer {
       this.spinRotors();
       this.updateOrtho();
       if (this.selRing.isEnabled()) this.selRing.rotation.y += 0.02;
-      if (this.shadowGen && (this.shadowsDirty || this.anim.busy || this.camMoved())) {
+      if (this.shadowGen && (this.shadowsDirty || this.anim.busy)) {
         this.shadowGen.getShadowMap()!.resetRefreshCounter();
         this.shadowsDirty = false;
       }
@@ -208,7 +213,7 @@ export class Renderer {
     if (on && !this.shadowGen) {
       this.shadowGen = new ShadowGenerator(2048, this.light);
       this.shadowGen.usePercentageCloserFiltering = true;
-      this.shadowGen.filteringQuality = ShadowGenerator.QUALITY_HIGH;
+      this.shadowGen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
       this.shadowGen.bias = 0.002;
       this.shadowGen.darkness = 0.35;
       this.shadowGen.getShadowMap()!.refreshRate = 0; // RENDER_ONCE; оновлюємо вручну
@@ -339,6 +344,15 @@ export class Renderer {
     this.sync();
   }
 
+  /** Перебудувати моделі бійців (після зміни спорядження), не чіпаючи карту. */
+  refreshUnitModels(): void {
+    for (const u of this.units.values()) u.root.dispose();
+    this.units.clear();
+    this.beams.clear();
+    for (const u of this.state.units) this.ensureUnit(u);
+    this.sync();
+  }
+
   setState(state: MissionState): void {
     this.state = state;
   }
@@ -366,7 +380,7 @@ export class Renderer {
     this.syncDrones();
     for (const u of s.units) {
       const m = this.ensureUnit(u);
-      const visible = u.pos !== null && (u.side === this.viewSide || sideSees(s, this.viewSide, u.id) || u.status === 'dead') && u.pos.z <= this.viewLevel;
+      const visible = u.pos !== null && (u.side === this.viewSide || sideSees(s, this.viewSide, u.id) || u.status === 'dead' || u.status === 'captured') && u.pos.z <= this.viewLevel;
       const seenEnemyDead = u.side !== this.viewSide && u.status !== 'active' && !!s.contacts[this.viewSide][u.id];
       m.root.setEnabled(visible || (seenEnemyDead && u.pos !== null && u.pos.z <= this.viewLevel));
       if (!u.pos) continue;
@@ -509,7 +523,8 @@ export class Renderer {
     const key =
       this.viewSide + this.viewLevel + '|' +
       s.units.filter((u) => u.side === this.viewSide && u.pos && u.status === 'active').map((u) => `${u.pos!.x},${u.pos!.y},${u.pos!.z},${u.facing},${u.stance},${u.lightOn ? 1 : 0},${u.nvgUp ? 1 : 0}`).join(';') +
-      '|' + (s.vehicles ?? []).filter((v) => v.side === this.viewSide).map((v) => `${v.x},${v.y}`).join(';');
+      '|' + (s.vehicles ?? []).filter((v) => v.side === this.viewSide).map((v) => `${v.x},${v.y}`).join(';') +
+      '|' + (s.drones ?? []).filter((d) => d.side === this.viewSide && !d.destroyed).map((d) => `${d.x},${d.y},${d.alt ?? 'h'}`).join(';');
     if (!force && key === this.fogKey) return;
     this.fogKey = key;
     const m = s.map;
@@ -917,6 +932,9 @@ export class Renderer {
           sfx('throw', this.sdist(pointWorld(e.from)));
           await this.animateGrenade(e.from, e.to);
           break;
+        case 'drop':
+          await this.animateDrop(e.droneId, e.to);
+          break;
         case 'rocket':
           sfx('rocket', this.sdist(pointWorld(e.from)));
           await this.animateRocket(e.from, e.to);
@@ -1092,16 +1110,7 @@ export class Renderer {
   private scars: { p: Vector3; r: number }[] = [];
   /** Техніка, для якої вже прозвучав звук знищення. */
   private wrecked = new Set<string>();
-  private lastCam = '';
 
-  /** Камера зрушилась (тіні від спрямованого світла залежать від кадру). */
-  private camMoved(): boolean {
-    const c = this.camera;
-    const k = `${c.alpha.toFixed(3)},${c.beta.toFixed(3)},${c.target.x.toFixed(2)},${c.target.z.toFixed(2)},${(c.orthoTop ?? 0).toFixed(2)}`;
-    if (k === this.lastCam) return false;
-    this.lastCam = k;
-    return true;
-  }
 
   /** Вирва й кіптява від вибуху (лишаються на землі до кінця бою). */
   private addScar(p: Vector3, radius: number): void {
@@ -1202,6 +1211,28 @@ export class Renderer {
     });
     g.dispose();
     mat.dispose();
+  }
+
+  /** Скид: боєприпас відділяється з-під дрона й падає вертикально з прискоренням, злегка хитаючись. */
+  private async animateDrop(droneId: string, to: Point): Promise<void> {
+    const dm = this.droneModels.get(droneId);
+    const b = pointWorld(to);
+    const a = dm ? dm.root.position.add(new Vector3(0, -0.12, 0)) : new Vector3(b.x, b.y + 3, b.z);
+    const gb = new GeoBuilder();
+    gb.smooth = true;
+    gb.prism(0, 0, 0, 0.07, 0.07, 0.16, 10, [0.25, 0.3, 0.2], Math.PI / 2); // корпус
+    gb.prism(0, 0.1, 0, 0.09, 0.09, 0.05, 6, [0.85, 0.85, 0.82], Math.PI / 2); // стабілізатор
+    const shell = gb.build('drop', this.scene, this.sideMat());
+    shell.isPickable = false;
+    const fall = Math.max(0.3, a.y - b.y);
+    const ms = Math.min(900, 280 + Math.sqrt(fall) * 260);
+    sfx('drone', this.sdist(a) + 6);
+    await this.anim.tween(ms, (t) => {
+      const k = t * t; // прискорення вільного падіння
+      shell.position.set(a.x + (b.x - a.x) * t + Math.sin(t * 9) * 0.02, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * t);
+      shell.rotation.z = Math.sin(t * 7) * 0.12;
+    });
+    shell.dispose();
   }
 
   private async animateRocket(from: Point, to: Point): Promise<void> {

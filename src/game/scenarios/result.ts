@@ -9,12 +9,13 @@ export function computeResult(s: MissionState, winner: SideId | null, reason: Mi
     perSide[side] = {
       killed: us.filter((u) => u.status === 'dead' || (u.status === 'evacuated' && u.health <= 0)).length,
       wounded: us.filter((u) => u.health > 0 && u.injuries.length > 0).length,
-      evacuated: us.filter((u) => u.status === 'evacuated').length,
+      evacuated: us.filter((u) => u.status === 'evacuated' && !u.prisoner).length,
       leftOnField: us.filter((u) => (u.status === 'dead' || u.status === 'down') && (u.pos || u.carriedBy)).length,
       roundsUsed: us.reduce((a, u) => a + u.stats_mission.roundsUsed, 0),
       grenades: us.reduce((a, u) => a + u.stats_mission.grenades, 0),
       medsUsed: us.reduce((a, u) => a + u.stats_mission.medsUsed, 0),
       vehiclesLost: (s.vehicles ?? []).filter((v) => v.side === side && v.destroyed).length,
+      captured: us.filter((u) => u.prisoner || u.status === 'captured').length,
     };
   }
   return {

@@ -15,7 +15,7 @@ import { buildPath } from '@/game/maps/pathfinding';
 import { generateUnit } from '@/game/units/generator';
 import { computeApMax } from '@/game/units/derived';
 import { consume, createItem, findItem, findMedical, findReloadMagazine, helmetMount, placeInBackpack, pouchCapacity, primaryDef, swapMagazine } from '@/game/inventory/inventory';
-import { applyTreatment, canSelfApply, tickInjuries } from '@/game/injuries/injuries';
+import { applyTreatment, canSelfApply, moraleEvent, tickInjuries } from '@/game/injuries/injuries';
 import { tickFire, burnUnitsAt } from '@/game/combat/burn';
 import { canThrowTo, decaySmoke, resolveFire, resolveGrenade } from '@/game/combat/fire';
 import { fireApCost } from '@/game/combat/hit';
@@ -47,6 +47,20 @@ export interface MissionOptions {
   difficulty?: 'easy' | 'medium' | 'hard';
   /** Перевизначити фракції сторін (інакше — зі сценарію). */
   factions?: Partial<Record<SideId, string>>;
+}
+
+/**
+ * Чи може противник здатися: непритомний, тяжкопоранений або з дуже низькою мораллю / у паніці.
+ * Повертає причину відмови або null.
+ */
+export function canCapture(t: Unit, by: Unit): string | null {
+  const C = content().rules.capture;
+  if (t.side === by.side) return 'Це свій боєць';
+  if (t.status === 'down') return null;
+  if (t.status !== 'active' || t.inVehicle) return 'Не можна взяти в полон';
+  if (t.panicked || t.morale <= C.moraleThreshold) return null;
+  if (t.health <= t.stats.health * C.healthFraction && t.injuries.length) return null;
+  return 'Противник ще боєздатний — не здається';
 }
 
 /** Набір фракції: зброя й обвіс за класом, легша броня, ПНБ. */
@@ -638,11 +652,28 @@ export class Mission {
         return null;
       }
 
+      case 'capture': {
+        const t = unitById(s, cmd.targetId);
+        const why = canCapture(t, u);
+        if (why) return why;
+        if (!t.pos || !(adjacent(u.pos!, t.pos) || sameCell(u.pos!, t.pos))) return 'Потрібно підійти впритул';
+        const e = spend(R.capture.ap);
+        if (e) return e;
+        t.status = 'captured';
+        t.overwatch = 0;
+        t.panicked = false;
+        t.stance = 'crouched';
+        ctx.ev.push({ t: 'status', unitId: t.id, status: 'captured' });
+        float(ctx, t.id, 'Здався в полон', 'good');
+        moraleEvent(ctx, t, 'killed');
+        return null;
+      }
+
       case 'pickUp': {
         if (u.carrying) return 'Вже несе пораненого';
         const t = unitById(s, cmd.targetId);
-        if (t.side !== u.side) return 'Можна нести лише своїх';
-        if (t.status !== 'down' && t.status !== 'dead') return 'Боєць може йти сам';
+        if (t.side !== u.side && t.status !== 'captured') return 'Можна нести лише своїх або полонених';
+        if (t.status !== 'down' && t.status !== 'dead' && t.status !== 'captured') return 'Боєць може йти сам';
         if (!t.pos || !adjacent(u.pos!, t.pos) && !sameCell(u.pos!, t.pos)) return 'Потрібно підійти впритул';
         if (u.stance === 'prone') return 'Спершу підведіться';
         const e = spend(R.actions.pickUp);
@@ -741,6 +772,14 @@ export class Mission {
 
   private evacuateUnit(ctx: Ctx, t: Unit): void {
     const s = this.state;
+    if (t.status === 'captured') {
+      // Полонений переданий у тил.
+      t.status = 'evacuated';
+      t.prisoner = true;
+      t.pos = null;
+      ctx.ev.push({ t: 'evacuated', unitId: t.id });
+      return;
+    }
     const wasDead = t.status === 'dead';
     t.status = 'evacuated';
     t.pos = null;

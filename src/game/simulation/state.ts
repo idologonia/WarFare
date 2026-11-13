@@ -55,6 +55,8 @@ export type SimEvent =
   | { t: 'object'; cell: Cell; defId: string | null }
   | { t: 'grenade'; unitId: string; from: Point; to: Point }
   | { t: 'rocket'; unitId: string; from: Point; to: Point }
+  /** Скид боєприпасу з дрона: вільне падіння. */
+  | { t: 'drop'; droneId: string; from: Point; to: Point }
   | { t: 'smoke'; cells: Cell[] }
   | { t: 'sound'; kind: 'glass' | 'click' | 'fire' }
   | { t: 'fire'; cells: Cell[] }

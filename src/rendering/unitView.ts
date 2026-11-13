@@ -1,6 +1,6 @@
 import { itemDef } from '@/content';
 import type { Stance, Unit, WeaponDefinition, WeaponState } from '@/game/types';
-import { Color4, Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
+import { Mesh, TransformNode, type Scene, type StandardMaterial } from './babylon';
 import { GeoBuilder, hex, shade, type RGB } from './geo';
 import { buildWeaponGeo } from './weaponGeo';
 import type { UnitLook } from './uniform';
@@ -316,12 +316,8 @@ export function buildUnitModel(scene: Scene, mat: StandardMaterial, u: Unit, loo
   hit.visibility = 0;
   hit.metadata = { unitId: u.id, hitbox: true };
 
-  for (const m of meshes) {
-    // Контур лише на гострих гранях (округлі кінцівки без «сітки» ліній).
-    m.enableEdgesRendering(0.55);
-    m.edgesWidth = 1.6;
-    m.edgesColor = new Color4(0.04, 0.04, 0.05, 0.75);
-  }
+  // Контурні лінії вимкнено: дорогі на рендері, округлі форми й світло дають достатній силует.
+
 
   return { root, body, legL, legR, armL, armR, torso, weapon, meshes, pool, hit };
 }
@@ -351,6 +347,18 @@ export function applyPose(m: UnitModel, stance: Stance, ws: WeaponState, status:
     m.weapon.setEnabled(false);
     m.pool.setEnabled(status === 'dead');
     m.hit.scaling.set(1, 0.35, 1.2);
+    return;
+  }
+  if (status === 'captured') {
+    // Полонений: на колінах, руки за головою, без зброї.
+    hips.position.y = 0.27;
+    legL.rotation.x = -1.5;
+    legR.rotation.x = -1.5;
+    m.torso.rotation.x = 0.1;
+    armL.rotation.set(-2.6, 0, 0.9);
+    armR.rotation.set(-2.6, 0, -0.9);
+    m.weapon.setEnabled(false);
+    m.hit.scaling.set(1, 0.7, 1);
     return;
   }
   m.weapon.setEnabled(true);
